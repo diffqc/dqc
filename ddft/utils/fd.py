@@ -8,7 +8,7 @@ def finite_differences(fcn, args, iarg, eps=1e-6):
         dxs = torch.eye(nelmt) * eps
 
         loss0 = fcn(*args)
-        dlossdx = torch.empty(nelmt)
+        dlossdx = torch.empty(nelmt).to(args[iarg].dtype)
         for i in range(nelmt):
             newarg = args[iarg] + dxs[i,:].view(shape)
             newargs = [(args[j] if j != iarg else newarg) for j in range(len(args))]
