@@ -3,7 +3,7 @@
 
 import torch
 
-def get_K_matrix(n, dtype=torch.float, kspace=False, periodic=True):
+def get_K_matrix_1d(n, dtype=torch.float, kspace=False, periodic=True):
     if not kspace:
         if periodic:
             K0 = torch.eye(n, dtype=dtype)

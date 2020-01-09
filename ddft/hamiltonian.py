@@ -2,7 +2,7 @@
 # density or wavefunction
 
 import torch
-from ddft.utils.kinetics import get_K_matrix
+from ddft.utils.kinetics import get_K_matrix_1d
 
 class Hamilton1P1D(torch.autograd.Function):
     """
@@ -15,7 +15,7 @@ class Hamilton1P1D(torch.autograd.Function):
     * rgrid: torch.tensor (nbatch, nr)
         The spatial grid of the space. It is assumed that it has the regular
         spacing.
-    * extpot: torch.tensor (nbatch, nr)
+    * vext: torch.tensor (nbatch, nr)
         The external potential experienced by the particle.
     * iexc: torch.tensor int (nbatch,)
         The index of the excited state. Choose 0 or None for ground state.
@@ -33,11 +33,11 @@ class Hamilton1P1D(torch.autograd.Function):
     """
 
     @staticmethod
-    def forward(ctx, rgrid, extpot, iexc=None, return_wf=True):
+    def forward(ctx, rgrid, vext, iexc=None, return_wf=True):
         if type(iexc) == torch.Tensor and len(iexc.shape) == 1:
             iexc = iexc.unsqueeze(1)
 
-        wf_or_n, e = HamiltonNP1D.forward(ctx, rgrid, extpot, iexc, return_wf)
+        wf_or_n, e = HamiltonNP1D.forward(ctx, rgrid, vext, iexc, return_wf)
         if return_wf:
             return wf_or_n[:,:,0], e
         else:
@@ -60,7 +60,7 @@ class HamiltonNP1D(torch.autograd.Function):
     * rgrid: torch.tensor (nbatch, nr)
         The spatial grid of the space. It is assumed that it has the regular
         spacing.
-    * extpot: torch.tensor (nbatch, nr)
+    * vext: torch.tensor (nbatch, nr)
         The external potential experienced by the particle.
     * iexc: torch.tensor or int (nbatch, np)
         The indices of the excited state. Choose 0 or None for an electron in
@@ -80,7 +80,7 @@ class HamiltonNP1D(torch.autograd.Function):
     """
 
     @staticmethod
-    def forward(ctx, rgrid, extpot, iexc=None, return_wf=True):
+    def forward(ctx, rgrid, vext, iexc=None, return_wf=True):
         nb = rgrid.shape[0]
         nr = rgrid.shape[-1]
         dr = rgrid[:,1] - rgrid[:,0] # (nb, )
@@ -91,8 +91,8 @@ class HamiltonNP1D(torch.autograd.Function):
             iexc = torch.zeros((nb, 1), dtype=torch.long) + iexc
 
         # construct the hamiltonian
-        K = get_K_matrix(nr, dtype=rgrid.dtype, kspace=False, periodic=True).expand(nb, nr, nr) # (nb, nr, nr)
-        Vext = (torch.eye(nr, dtype=rgrid.dtype) * extpot).expand(nb, nr, nr)
+        K = get_K_matrix_1d(nr, dtype=rgrid.dtype, kspace=False, periodic=True).expand(nb, nr, nr) # (nb, nr, nr)
+        Vext = (torch.eye(nr, dtype=rgrid.dtype) * vext).expand(nb, nr, nr)
         H = (K / (dr*dr).unsqueeze(-1).unsqueeze(-1)) + Vext # (nb, nr, nr)
 
         # obtain the eigenvectors and eigenvalues
