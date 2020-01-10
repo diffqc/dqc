@@ -93,7 +93,7 @@ class BaseTransform(object):
         if type(a) in [int, float]:
             return IdentityTransform(self.shape, a)
         elif type(a) == torch.Tensor:
-            if a.numel() == 1:
+            if a.ndim <= 1:
                 return IdentityTransform(self.shape, a)
             elif len(a.shape) == 1 and a.shape[0] == self.shape[0]:
                 return IdentityTransform(self.shape, a)

@@ -58,3 +58,14 @@ def test_identity_2():
     assert torch.allclose(E(x), x*3)
     assert torch.allclose(E.T(x), x*3)
     assert torch.allclose(E.inv()(x), x/3.0, rtol=1e-6, atol=1e-8)
+
+def test_diag_1():
+    A = IdentityTransform((2, 5, 5), 3)
+    Adiag = torch.ones(2, 5) * 3
+    assert torch.allclose(A.diag(), Adiag, rtol=1e-6, atol=1e-8)
+
+def test_diag_2():
+    diag = torch.tensor([2.0, 3.0])
+    A = IdentityTransform((2, 5, 5), diag)
+    Adiag = torch.tensor([[2.0, 2.0, 2.0, 2.0, 2.0], [3.0, 3.0, 3.0, 3.0, 3.0]])
+    assert torch.allclose(A.diag(), Adiag, rtol=1e-6, atol=1e-8)

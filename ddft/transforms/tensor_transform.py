@@ -7,12 +7,27 @@ class IdentityTransform(SymmetricTransform):
         assert self._shape[1] == self._shape[2], "The identity transform must be a square matrix"
         self.val = val
 
+        # check the shape of val
+        if type(val) == torch.Tensor:
+            if self.val.ndim == 1:
+                assert self.val.shape[0] == self._shape[0], "The batch size must match"
+                self.val = self.val.unsqueeze(-1)
+            elif self.val.ndim == 0:
+                self.val = self.val.unsqueeze(-1).unsqueeze(-1)
+            else:
+                raise RuntimeError("The tensor val must be 1-dimension or 0-dimension")
+        elif type(val) in [int, float]:
+            self.val = torch.ones(self._shape[0], self._shape[1]) * 1.0 * self.val
+
     @property
     def shape(self):
         return self._shape
 
     def _forward(self, x):
         return x * self.val
+
+    def diag(self):
+        return self.val
 
 class MatrixTransform(BaseTransform):
     def __init__(self, A):
