@@ -1,5 +1,6 @@
 from abc import abstractmethod, abstractproperty
 import torch
+from ddft.utils.rootfinder import lbfgs
 
 class BaseTransform(object):
     """

@@ -4,6 +4,7 @@ from ddft.transforms.base_transform import BaseTransform, SymmetricTransform
 class IdentityTransform(SymmetricTransform):
     def __init__(self, shape, val=1):
         self._shape = shape
+        assert self._shape[1] == self._shape[2], "The identity transform must be a square matrix"
         self.val = val
 
     @property
