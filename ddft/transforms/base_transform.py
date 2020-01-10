@@ -42,6 +42,10 @@ class BaseTransform(object):
         """
         pass
 
+    @abstractproperty
+    def dtype(self):
+        pass
+
     def __call__(self, x):
         """
         Applying the transformation to `x`.
@@ -134,6 +138,10 @@ class TransposeTransform(BaseTransform):
         shape = self.a.shape
         return (shape[0], shape[2], shape[1])
 
+    @property
+    def dtype(self):
+        return self.a.dtype
+
 class InverseTransform(BaseTransform):
     def __init__(self, a, **options):
         self.a = a
@@ -163,6 +171,10 @@ class InverseTransform(BaseTransform):
         shape = self.a.shape
         return (shape[0], shape[2], shape[1])
 
+    @property
+    def dtype(self):
+        return self.a.dtype
+
 ######################## composite transforms ################################
 
 class AddTransform(BaseTransform):
@@ -171,6 +183,7 @@ class AddTransform(BaseTransform):
         self.b = b
 
         assert self.a.shape == self.b.shape, "Mismatch size of add transforms"
+        assert self.a.dtype == self.b.dtype, "Mismatch dtype of add transforms"
 
     def _forward(self, x):
         return self.a(x) + self.b(x)
@@ -186,12 +199,17 @@ class AddTransform(BaseTransform):
         shape = self.a.shape
         return (shape[0], shape[1], shape[2])
 
+    @property
+    def dtype(self):
+        return self.a.dtype
+
 class SubTransform(BaseTransform):
     def __init__(self, a, b):
         self.a = a
         self.b = b
 
         assert self.a.shape == self.b.shape, "Mismatch size of subtraction transforms"
+        assert self.a.dtype == self.b.dtype, "Mismatch dtype of sub transforms"
 
     def _forward(self, x):
         return self.a(x) - self.b(x)
@@ -207,6 +225,10 @@ class SubTransform(BaseTransform):
         shape = self.a.shape
         return (shape[0], shape[1], shape[2])
 
+    @property
+    def dtype(self):
+        return self.a.dtype
+
 class ConcatTransform(BaseTransform):
     def __init__(self, a, b):
         self.a = a
@@ -216,6 +238,7 @@ class ConcatTransform(BaseTransform):
         shapea = self.a.shape
         shapeb = self.b.shape
         assert shapea[-1] == shapeb[-2] and shapea[0] == shapeb[0], "Mismatch size of concatenated transforms"
+        assert self.a.dtype == self.b.dtype, "Mismatch dtype of concat transforms"
 
     def _forward(self, x):
         return self.a(self.b(x))
@@ -228,6 +251,10 @@ class ConcatTransform(BaseTransform):
         shapea = self.a.shape
         shapeb = self.b.shape
         return (shapea[0], shapea[1], shapeb[2])
+
+    @property
+    def dtype(self):
+        return self.a.dtype
 
 class NegTransform(BaseTransform):
     def __init__(self, a):
@@ -246,3 +273,7 @@ class NegTransform(BaseTransform):
     def shape(self):
         shape = self.a.shape
         return (shape[0], shape[1], shape[2])
+
+    @property
+    def dtype(self):
+        return self.a.dtype

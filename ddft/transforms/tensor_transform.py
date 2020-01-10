@@ -29,6 +29,10 @@ class IdentityTransform(SymmetricTransform):
     def diag(self):
         return self.val
 
+    @property
+    def dtype(self):
+        return self.val.dtype
+
 class MatrixTransform(BaseTransform):
     def __init__(self, A):
         self.A = A
@@ -45,3 +49,7 @@ class MatrixTransform(BaseTransform):
 
     def diag(self):
         return torch.diagonal(self.A, dim1=-2, dim2=-1)
+
+    @property
+    def dtype(self):
+        return self.A.dtype
