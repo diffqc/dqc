@@ -69,6 +69,25 @@ def broyden(f, x0, jinv0=1.0, **options):
     return x
 
 def lbfgs(f, x0, jinv0=1.0, **options):
+    """
+    Solve the root finder problem with L-BFGS method.
+
+    Arguments
+    ---------
+    * f: callable
+        Callable that takes params as the input and output nfeat-outputs.
+    * x0: torch.tensor (nbatch, nfeat)
+        Initial value of parameters to be put in the function, f.
+    * jinv0: float or torch.tensor (nbatch, nfeat, nfeat)
+        The initial inverse of the Jacobian. If float, it will be the diagonal.
+    * options: dict or None
+        Options of the function.
+
+    Returns
+    -------
+    * x: torch.tensor (nbatch, nfeat)
+        The x that approximate f(x) = 0.
+    """
     config = set_default_option({
         "max_niter": 20,
         "min_feps": 1e-6,
