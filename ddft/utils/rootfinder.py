@@ -1,6 +1,7 @@
 import torch
+from ddft.utils.misc import set_default_option
 
-def broyden(f, x0, jinv0=1.0, options=None):
+def broyden(f, x0, jinv0=1.0, **options):
     """
     Solve the root finder problem with Broyden's method.
 
@@ -21,16 +22,15 @@ def broyden(f, x0, jinv0=1.0, options=None):
         The x that approximate f(x) = 0.
     """
     # set up the default options
-    config = {
+    config = set_default_option({
         "max_niter": 20,
         "min_feps": 1e-6,
-    }
-    if options is None:
-        options = {}
-    config.update(options)
+        "verbose": False,
+    }, options)
 
     # pull out the options for fast access
     min_feps = config["min_feps"]
+    verbose = config["verbose"]
 
     # pull out the parameters of x0
     nbatch, nfeat = x0.shape
@@ -38,7 +38,7 @@ def broyden(f, x0, jinv0=1.0, options=None):
     dtype = x0.dtype
 
     # set up the initial jinv
-    jinv = _set_jinv0(jinv0)
+    jinv = _set_jinv0(jinv0, x0)
 
     # perform the Broyden iterations
     x = x0
@@ -61,21 +61,125 @@ def broyden(f, x0, jinv0=1.0, options=None):
         x = xnew
 
         # check the stopping condition
-        print(fx.abs().max())
+        if verbose:
+            print("Iter %3d: %.3e" % (i+1, fx.abs().max()))
         if torch.allclose(fx, torch.zeros_like(fx), atol=min_feps):
             break
 
     return x
 
-def lbfgs(f, x0, options=None):
-    pass
+def lbfgs(f, x0, jinv0=1.0, **options):
+    config = set_default_option({
+        "max_niter": 20,
+        "min_feps": 1e-6,
+        "max_memory": 10,
+        "alpha0": 1.0,
+        "verbose": False,
+    }, options)
 
-def _set_jinv0(jinv0):
+    # pull out the options for fast access
+    min_feps = config["min_feps"]
+    max_memory = config["max_memory"]
+    verbose = config["verbose"]
+
+    # set up the initial jinv and the memories
+    H0 = _set_jinv0_diag(jinv0, x0) # (nbatch, nfeat)
+    sk_history = []
+    yk_history = []
+    rk_history = []
+
+    def _apply_Vk(rk, sk, yk, grad):
+        # sk: (nbatch, nfeat)
+        # yk: (nbatch, nfeat)
+        # rk: (nbatch, 1)
+        return grad - (sk * grad).sum(dim=-1, keepdim=True) * rk * yk
+
+    def _apply_VkT(rk, sk, yk, grad):
+        # sk: (nbatch, nfeat)
+        # yk: (nbatch, nfeat)
+        # rk: (nbatch, 1)
+        return grad - (yk * grad).sum(dim=-1, keepdim=True) * rk * sk
+
+    def _apply_Hk(H0, sk_hist, yk_hist, rk_hist, gk):
+        # H0: (nbatch, nfeat)
+        # sk: (nbatch, nfeat)
+        # yk: (nbatch, nfeat)
+        # rk: (nbatch, 1)
+        # gk: (nbatch, nfeat)
+        nhist = len(sk_hist)
+        if nhist == 0:
+            return H0 * gk
+
+        k = nhist - 1
+        rk = rk_hist[k]
+        sk = sk_hist[k]
+        yk = yk_hist[k]
+
+        # get the last term (rk * sk * sk.T)
+        rksksk = (sk * gk).sum(dim=-1, keepdim=True) * rk * sk
+
+        # calculate the V_(k-1)
+        grad = gk
+        grad = _apply_Vk(rk_hist[k], sk_hist[k], yk_hist[k], grad)
+        grad = _apply_Hk(H0, sk_hist[:k], yk_hist[:k], rk_hist[:k], grad)
+        grad = _apply_VkT(rk_hist[k], sk_hist[k], yk_hist[k], grad)
+        return grad + rksksk
+
+    # TODO: apply the proper line search
+    def _line_search(xk, alphakold, dk):
+        xknew = xk + alphakold * dk
+        return xknew, alphakold
+
+    # perform the main iteration
+    xk = x0
+    gk = f(xk)
+    alphakold = config["alpha0"]
+    for k in range(config["max_niter"]):
+        dk = -_apply_Hk(H0, sk_history, yk_history, rk_history, gk)
+        xknew, alphak = _line_search(xk, alphakold, dk)
+        gknew = f(xknew)
+
+        # store the history
+        sk = xknew - xk # (nbatch, nfeat)
+        yk = gknew - gk
+        inv_rhok = 1.0 / (sk * yk).sum(dim=-1, keepdim=True) # (nbatch, 1)
+        sk_history.append(sk)
+        yk_history.append(yk)
+        rk_history.append(inv_rhok)
+        if len(sk_history) > max_memory:
+            sk_history = sk_history[-max_memory:]
+            yk_history = yk_history[-max_memory:]
+            rk_history = rk_history[-max_memory:]
+
+        # update for the next iteration
+        xk = xknew
+        alphakold = alphak
+        gk = gknew
+
+        # check the stopping condition
+        if verbose:
+            print("Iter %3d: %.3e" % (k+1, gk.abs().max()))
+        if torch.allclose(gk, torch.zeros_like(gk), atol=min_feps):
+            break
+
+    return xk
+
+def _set_jinv0(jinv0, x0):
+    nbatch, nfeat = x0.shape
+    dtype = x0.dtype
+    device = x0.device
     if type(jinv0) == torch.Tensor:
         jinv = jinv0
     else:
         jinv = torch.eye(nfeat).unsqueeze(0).repeat(nbatch, 1, 1).to(dtype).to(device)
-        jinv = jinv + jinv0
+        jinv = jinv * jinv0
+    return jinv
+
+def _set_jinv0_diag(jinv0, x0):
+    if type(jinv0) == torch.Tensor:
+        jinv = jinv0
+    else:
+        jinv = torch.zeros_like(x0).to(x0.device) + jinv0
     return jinv
 
 if __name__ == "__main__":
@@ -92,7 +196,8 @@ if __name__ == "__main__":
 
     x0 = torch.zeros_like(xtrue)
     jinv0 = 1.0
-    x = broyden(f, x0, jinv0)
+    x = lbfgs(f, x0, jinv0, verbose=True)
+    # x = broyden(f, x0, jinv0, verbose=True)
 
     print(A)
     print(x)
