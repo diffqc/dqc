@@ -34,6 +34,7 @@ def davidson(A, neig, **options):
     nbatch, na, na = A.shape
     # TODO: device and dtype?
     V = torch.eye(na, nguess).unsqueeze(0).repeat(nbatch, 1, 1) # (nb,na,nguess)
+    V = V.to(A.dtype)
     dA = A.diag() # (nbatch, na)
 
     prev_eigvals = None
@@ -56,7 +57,6 @@ def davidson(A, neig, **options):
             ritz[:,:,i] = f * (AVphi - lmbdaVphi) # (nbatch, na)
 
         # add the ritz vectors to the guess vectors
-        print(ritz.norm(dim=1))
         ritz = ritz / ritz.norm(dim=1, keepdim=True) # (nbatch, na)
         V = torch.cat((V, ritz), dim=-1)
 
