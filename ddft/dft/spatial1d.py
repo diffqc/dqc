@@ -85,7 +85,7 @@ class _DFT1DForward(torch.autograd.Function):
             new_density = (wf * wf).sum(dim=-1) # (nbatch, nr)
             new_density = new_density / new_density.sum() * density.sum()
 
-            return new_density - density
+            return density - new_density
 
         # perform the rootfinder
         density = lbfgs(loss, density0, max_niter=40, verbose=True)
