@@ -1,5 +1,6 @@
 import torch
 from ddft.utils.misc import set_default_option
+from ddft.utils.linesearch import line_search
 
 def selfconsistent(f, x0, jinv0=1.0, **options):
     """
@@ -153,6 +154,7 @@ def lbfgs(f, x0, jinv0=1.0, **options):
         "min_feps": 1e-6,
         "max_memory": 10,
         "alpha0": 1.0,
+        "linesearch": False,
         "verbose": False,
     }, options)
 
@@ -160,6 +162,8 @@ def lbfgs(f, x0, jinv0=1.0, **options):
     min_feps = config["min_feps"]
     max_memory = config["max_memory"]
     verbose = config["verbose"]
+    linesearch = config["linesearch"]
+    alpha = config["alpha0"]
 
     # set up the initial jinv and the memories
     H0 = _set_jinv0_diag(jinv0, x0) # (nbatch, nfeat)
@@ -204,19 +208,19 @@ def lbfgs(f, x0, jinv0=1.0, **options):
         grad = _apply_VkT(rk_hist[k], sk_hist[k], yk_hist[k], grad)
         return grad + rksksk
 
-    # TODO: apply the proper line search
-    def _line_search(xk, alphakold, dk):
-        xknew = xk + alphakold * dk
-        return xknew, alphakold
+    def _line_search(xk, gk, dk, g):
+        if linesearch:
+            dx, dg, nit = line_search(dk, xk, gk, g)
+            return xk + dx, gk + dg
+        else:
+            return xk + alpha*dk, g(xk + alpha*dk)
 
     # perform the main iteration
     xk = x0
     gk = f(xk)
-    alphakold = config["alpha0"]
     for k in range(config["max_niter"]):
         dk = -_apply_Hk(H0, sk_history, yk_history, rk_history, gk)
-        xknew, alphak = _line_search(xk, alphakold, dk)
-        gknew = f(xknew)
+        xknew, gknew = _line_search(xk, gk, dk, f)
 
         # store the history
         sk = xknew - xk # (nbatch, nfeat)
@@ -232,7 +236,7 @@ def lbfgs(f, x0, jinv0=1.0, **options):
 
         # update for the next iteration
         xk = xknew
-        alphakold = alphak
+        # alphakold = alphak
         gk = gknew
 
         # check the stopping condition
