@@ -74,15 +74,18 @@ class _DFT1DForward(torch.autograd.Function):
         verbose = config["verbose"]
 
         # specify the default initial density
+        nr = vext.shape[1]
+        np = iexc.shape[1]
+        length = rgrid.max(dim=-1, keepdim=True)[0] - rgrid.min(dim=-1, keepdim=True)[0] # (nbatch, 1)
+        density_val = np / length
         if density0 is None:
-            nr = vext.shape[1]
-            np = iexc.shape[1]
-            density_val = np / nr
             density0 = torch.zeros_like(vext, device=vext.device) + density_val
 
         # perform the KS iterations
         density = density0
         stop_reason = "max_niter"
+        mult = density_val * nr / np
+        sqrtmult = mult**0.5
         for i in range(config["max_niter"]):
             # calculate the potential for non-interacting particles
             vks = vks_model(density) # (nbatch, nr)
@@ -91,6 +94,7 @@ class _DFT1DForward(torch.autograd.Function):
             # solving the KS single particle equation
             wf, e, H = HamiltonNP1D.apply(rgrid, vext_tot, iexc,
                 True, True) # return wf and hamiltonian
+            wf = wf * sqrtmult
             new_density = (wf * wf).sum(dim=-1)
 
             # check for convergence
