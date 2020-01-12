@@ -1,6 +1,66 @@
 import torch
 from ddft.utils.misc import set_default_option
 
+def selfconsistent(f, x0, jinv0=1.0, **options):
+    """
+    Solve the root finder problem with Broyden's method.
+
+    Arguments
+    ---------
+    * f: callable
+        Callable that takes params as the input and output nfeat-outputs.
+    * x0: torch.tensor (nbatch, nfeat)
+        Initial value of parameters to be put in the function, f.
+    * jinv0: float or torch.tensor (nbatch, nfeat, nfeat)
+        The initial inverse of the Jacobian. If float, it will be the diagonal.
+    * options: dict or None
+        Options of the function.
+
+    Returns
+    -------
+    * x: torch.tensor (nbatch, nfeat)
+        The x that approximate f(x) = 0.
+    """
+    # set up the default options
+    config = set_default_option({
+        "max_niter": 20,
+        "min_feps": 1e-6,
+        "verbose": False,
+    }, options)
+
+    # pull out the options for fast access
+    min_feps = config["min_feps"]
+    verbose = config["verbose"]
+
+    # pull out the parameters of x0
+    nbatch, nfeat = x0.shape
+    device = x0.device
+    dtype = x0.dtype
+
+    # set up the initial jinv
+    jinv = _set_jinv0(jinv0, x0)
+
+    # perform the Broyden iterations
+    x = x0
+    fx = f(x0) # (nbatch, nfeat)
+    for i in range(config["max_niter"]):
+        dxnew = -torch.bmm(jinv, fx.unsqueeze(-1)) # (nbatch, nfeat, 1)
+        xnew = x + dxnew.squeeze(-1) # (nbatch, nfeat)
+        fxnew = f(xnew)
+        dfnew = fxnew - fx
+
+        # update variables for the next iteration
+        fx = fxnew
+        x = xnew
+
+        # check the stopping condition
+        if verbose:
+            print("Iter %3d: %.3e" % (i+1, fx.abs().max()))
+        if torch.allclose(fx, torch.zeros_like(fx), atol=min_feps):
+            break
+
+    return x
+
 def broyden(f, x0, jinv0=1.0, **options):
     """
     Solve the root finder problem with Broyden's method.
