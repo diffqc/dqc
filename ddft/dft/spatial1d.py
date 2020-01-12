@@ -235,7 +235,7 @@ if __name__ == "__main__":
     vext = (rgrid * rgrid).requires_grad_()
     iexc = torch.tensor([0, 0, 1, 1, 2, 2, 3, 3, 4]).to(inttype)
 
-    a = torch.tensor([9.0]).to(dtype).requires_grad_()
+    a = torch.tensor([4.4]).to(dtype).requires_grad_()
     p = torch.tensor([0.3]).to(dtype).requires_grad_()
     vks_model = VKSSimpleModel(a, p)
     density = _DFT1DForward.apply(rgrid.unsqueeze(0),
