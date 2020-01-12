@@ -216,6 +216,46 @@ class _Hamiltonian1D(SymmetricTransform):
     def dtype(self):
         return self.vext.dtype
 
+class _G1D(SymmetricTransform):
+    """
+    (dg / dv)^T where g is n_out.
+    (dg / dv) = sum_b [diag(wf_b) * A_b^{-1} * diag(wf_b)]
+    """
+    def __init__(self, wf, e, H):
+        # wf: (nbatch, nr, nparticles)
+        # e: (nbatch, nparticles)
+        # H: transformation of (nbatch, nr, nr)
+        self.wf = wf
+        self.e = e
+        self.H = H
+
+        # obtain the transformation for each particle
+        self.nparticles = e.shape[-1]
+        self.Ainvs = [(-(self.H - e[:,i])).inv() for i in range(self.nparticles)]
+
+    def _forward(self, x):
+        # x is (nbatch, nr)
+        ys = None
+        for b in range(self.nparticles):
+            wfb = wf[:,:,b]
+            wfx = wfb * x # (nbatch, nr)
+            wfx = orthogonalize(wfx, wfb)
+            y = wfb * self.Ainvs(wfx)
+
+            if ys is None:
+                ys = y
+            else:
+                ys = ys + y
+        return ys
+
+    @property
+    def shape(self):
+        return self.H.shape
+
+    @property
+    def dtype(self):
+        return self.H.dtype
+
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
 
