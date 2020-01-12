@@ -246,7 +246,7 @@ class _G1D(SymmetricTransform):
                 ys = y
             else:
                 ys = ys + y
-        return ys
+        return 2 * ys
 
     @property
     def shape(self):
