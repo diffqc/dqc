@@ -2,7 +2,7 @@ import torch
 from ddft.transforms.base_transform import BaseTransform, SymmetricTransform
 
 class IdentityTransform(SymmetricTransform):
-    def __init__(self, shape, val=1):
+    def __init__(self, shape, val=1, dtype=None):
         self._shape = shape
         assert self._shape[1] == self._shape[2], "The identity transform must be a square matrix"
         self.val = val
@@ -18,6 +18,8 @@ class IdentityTransform(SymmetricTransform):
                 raise RuntimeError("The tensor val must be 1-dimension or 0-dimension")
         elif type(val) in [int, float]:
             self.val = torch.ones(self._shape[0], self._shape[1]) * 1.0 * self.val
+            if dtype is not None:
+                self.val = self.val.to(dtype)
 
     @property
     def shape(self):

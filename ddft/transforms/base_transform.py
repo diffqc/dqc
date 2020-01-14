@@ -95,7 +95,7 @@ class BaseTransform(object):
         from ddft.transforms.tensor_transform import IdentityTransform
 
         if type(a) in [int, float]:
-            return IdentityTransform(self.shape, a)
+            return IdentityTransform(self.shape, a, dtype=self.dtype)
         elif type(a) == torch.Tensor:
             if a.ndim <= 1:
                 return IdentityTransform(self.shape, a)
