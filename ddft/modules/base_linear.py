@@ -1,4 +1,4 @@
-from abc import staticmethod, staticproperty
+from abc import abstractmethod, abstractproperty
 import torch
 
 class BaseLinearModule(torch.nn.Module):
@@ -7,7 +7,7 @@ class BaseLinearModule(torch.nn.Module):
     Linear module is a module that can be expressed as a matrix of size
         (nrows, ncols).
     """
-    @staticmethod
+    @abstractmethod
     def forward(self, x, *params):
         """
         Calculate the operation of the transformation with `x` where
@@ -28,7 +28,7 @@ class BaseLinearModule(torch.nn.Module):
         """
         pass
 
-    @staticproperty
+    @abstractproperty
     def shape(self):
         """
         Returns (nrows, ncols)
