@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 
 """
 This file is from https://github.com/locuslab/deq/blob/master/DEQModel/modules/broyden.py
