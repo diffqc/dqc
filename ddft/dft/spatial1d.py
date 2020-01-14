@@ -1,8 +1,30 @@
 import torch
 from ddft.transforms.base_transform import SymmetricTransform
+from ddft.transforms.ntransform import NTransform
 from ddft.utils.tensor import roll_1
 from ddft.utils.rootfinder import lbfgs, broyden
 from ddft.utils.eigpairs import davidson
+from ddft.utils.orthogonalize import orthogonalize
+
+class DFT1D(torch.nn.Module):
+    def __init__(self, model, options=None):
+        super(DFT1D, self).__init__()
+        self.model = model
+        self.options = options
+
+    def forward(self, rgrid, vext, iexc, density0=None):
+        # vext: (nbatch, nr)
+
+        density, wf, e = _DFT1DForward.apply(
+            rgrid, vext, self.model, iexc, density0, self.options)
+
+        # propagate through the backward to construct the meaningful backward
+        # graph
+        if self.training:
+            vks = self.model(density)
+            density = _DFT1DBackward.apply(density, wf, e,
+                rgrid, iexc, vext, vks, self.model, self.options)
+        return density
 
 class _DFT1DForward(torch.autograd.Function):
     """
@@ -63,7 +85,7 @@ class _DFT1DForward(torch.autograd.Function):
         stop_reason = "max_niter"
         neig = iexc.max() + 1
 
-        def loss(density):
+        def loss(density, return_all=False):
             # calculate the potential for non-interacting particles
             vks = vks_model(density) # (nbatch, nr)
             vext_tot = vext + vks
@@ -81,26 +103,34 @@ class _DFT1DForward(torch.autograd.Function):
             iexc_expand = iexc.unsqueeze(1).expand(-1, nr, -1)
             wf = torch.gather(eigvecs, dim=2, index=iexc_expand) # (nbatch, nr, np)
 
+            mult = (density.sum(-1) / (wf*wf).sum(dim=-1).sum(dim=-1))**0.5 # (nbatch)
+            wf = wf * mult.unsqueeze(-1).unsqueeze(-1)
+
             # calculate the density and normalize so that the sum is equal to density
             new_density = (wf * wf).sum(dim=-1) # (nbatch, nr)
             new_density = new_density / new_density.sum() * density.sum()
 
-            return density - new_density
+            if return_all:
+                return density, wf, e
+            else:
+                return density - new_density
 
         # perform the rootfinder
-        density = lbfgs(loss, density0, max_niter=40, verbose=True)
+        density = lbfgs(loss, density0, max_niter=40, verbose=False)
+        density, wf, e = loss(density, return_all=True)
 
-        return density
+        return density, wf, e
 
     @staticmethod
-    def backward(ctx, grad_density, grad_wf, grad_e, grad_H):
+    def backward(ctx, grad_density, grad_wf, grad_e):
         return (None, None, None, None, None, None)
 
 class _DFT1DBackward(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, density, wf, e, H, rgrid, vext, vks, model_vks, options=None):
+    def forward(ctx, density, wf, e, rgrid, iexc, vext, vks, model_vks, options=None):
         config = _get_default_options(options)
         ctx.config = config
+        H = _Hamiltonian1D(rgrid, vext + vks, iexc)
 
         # save for backward purposes
         ctx.density = density
@@ -124,45 +154,19 @@ class _DFT1DBackward(torch.autograd.Function):
         config = ctx.config
         verbose = config["verbose"]
 
-        density_temp = density.detach().clone().requires_grad_()
-        with torch.enable_grad():
-            vks_temp = model_vks(density_temp) # (nbatch, nr)
+        # prepare the transformation
+        N = NTransform(model_vks, density)
+        G = _G1D(wf, e, H)
+        back_transform = -G * (N*G - 1.0).inv()
 
-        def _N(grad):
-            # grad will be (nbatch, nr)
-            res, = torch.autograd.grad(vks_temp, (density_temp,),
-                grad_outputs=grad,
-                retain_graph=True)
-            return res
-
-        def _G(grad):
-            return _apply_G(wf, e, H, grad_wf_or_n=grad, is_grad_wf=False)
-
-        grad_accum = _G(grad_density)
-        dgrad = grad_accum
-        for i in range(config["max_niter"]):
-            # apply N and G then accummulate the gradient
-            dgrad = _G(_N(dgrad)) # (nbatch, nr)
-            grad_accum = grad_accum + dgrad
-
-            # calculate the relative residual of dgrad
-            resid = dgrad.abs().max(dim=-1)[0]
-            grad_mag = grad_accum.abs().max(dim=-1)[0]
-            rresid = resid / grad_mag
-            if verbose:
-                print("Iter %3d: %.3e | %.3e | %.3e" % \
-                     (i+1, resid, grad_mag, rresid))
-
-            # check the stopping condition
-            if torch.all(rresid < config["max_reps"]):
-                break
-
-        grad_vext = grad_accum
-        grad_vks = grad_accum
+        # calculate the gradient
+        grad_v = back_transform(grad_density)
+        grad_vext = grad_v
+        grad_vks = grad_v
 
         return (grad_density,
-            None, None, None, # wf, e, H
-            None, # rgrid
+            None, None, # wf, e
+            None, None, # rgrid, iexc
             grad_vext, grad_vks,
             None, None # model_vks, options
             )
@@ -219,7 +223,7 @@ class _Hamiltonian1D(SymmetricTransform):
 class _G1D(SymmetricTransform):
     """
     (dg / dv)^T where g is n_out.
-    (dg / dv) = sum_b [diag(wf_b) * A_b^{-1} * diag(wf_b)]
+    (dg / dv) = sum_b [2 * diag(wf_b) * A_b^{-1} * diag(wf_b)]
     """
     def __init__(self, wf, e, H):
         # wf: (nbatch, nr, nparticles)
@@ -231,16 +235,21 @@ class _G1D(SymmetricTransform):
 
         # obtain the transformation for each particle
         self.nparticles = e.shape[-1]
-        self.Ainvs = [(-(self.H - e[:,i])).inv() for i in range(self.nparticles)]
+        self.As = [(-(H - e[:,b])) for b in range(self.nparticles)]
+        self.Ainvs = [(-(H - e[:,b])).inv() for b in range(self.nparticles)]
 
     def _forward(self, x):
         # x is (nbatch, nr)
+        wfxs = self.wf * x.unsqueeze(-1) # (nbatch, nr, nparticles)
+        wfxs = orthogonalize(wfxs, self.wf, dim=1) # (nbatch, nr, nparticles)
         ys = None
         for b in range(self.nparticles):
-            wfb = wf[:,:,b]
-            wfx = wfb * x # (nbatch, nr)
-            wfx = orthogonalize(wfx, wfb)
-            y = wfb * self.Ainvs(wfx)
+            wfb = self.wf[:,:,b]
+            wfx = wfxs[:,:,b]
+            Abx = self.Ainvs[b](wfx) # (nbatch, nr)
+            Abx = orthogonalize(Abx, wfb, dim=-1)
+
+            y = wfb * Abx
 
             if ys is None:
                 ys = y
@@ -257,6 +266,71 @@ class _G1D(SymmetricTransform):
         return self.H.dtype
 
 if __name__ == "__main__":
+    import matplotlib.pyplot as plt
+    from ddft.utils.fd import finite_differences
+
+    class VKSSimpleModel(torch.nn.Module):
+        def __init__(self, a, p):
+            super(VKSSimpleModel, self).__init__()
+            self.a = torch.nn.Parameter(a)
+            self.p = torch.nn.Parameter(p)
+
+        def forward(self, density):
+            return self.a * density**self.p
+
+    # set up
+    dtype = torch.float64
+    inttype = torch.long
+
+    def getloss(rgrid, vext, iexc, a, p):
+        vks_model = VKSSimpleModel(a, p)
+        return getloss2(rgrid, vext, iexc, vks_model)
+
+    def getloss2(rgrid, vext, iexc, vks_model):
+        dft1d = DFT1D(vks_model)
+        density = dft1d(rgrid.unsqueeze(0), vext.unsqueeze(0), iexc.unsqueeze(0))
+        return (density**4).sum()
+
+
+    rgrid = torch.linspace(-2, 2, 101).to(dtype)
+    vext = (rgrid * rgrid).requires_grad_()
+    iexc = torch.tensor([0, 0, 1, 1, 2, 2, 3, 3, 4]).to(inttype)
+    a = torch.tensor([1.0]).to(dtype).requires_grad_()
+    p = torch.tensor([0.3]).to(dtype).requires_grad_()
+
+    # calculate gradient with backprop
+    vks_model = VKSSimpleModel(a, p)
+    loss = getloss2(rgrid, vext, iexc, vks_model)
+    loss.backward()
+    vext_grad = vext.grad.data
+    a_grad = vks_model.a.grad.data
+    p_grad = vks_model.p.grad.data
+
+    # calculate gradient with finite_differences
+    vext_fd = finite_differences(getloss, (rgrid, vext, iexc, a, p), 1,
+                eps=1e-4)
+    a_fd = finite_differences(getloss, (rgrid, vext, iexc, a, p), 3,
+                eps=1e-4)
+    p_fd = finite_differences(getloss, (rgrid, vext, iexc, a, p), 4,
+                eps=1e-4)
+    print("Grad of vext:")
+    print(vext_grad)
+    print(vext_fd)
+    print(vext_grad / vext_fd)
+
+    print("Grad of a:")
+    print(a_grad)
+    print(a_fd)
+    print(a_grad / a_fd)
+
+    print("Grad of p:")
+    print(p_grad)
+    print(p_fd)
+    print(p_grad / p_fd)
+    raise RuntimeError
+
+
+
     import matplotlib.pyplot as plt
 
     class VKSSimpleModel(torch.nn.Module):
@@ -275,7 +349,7 @@ if __name__ == "__main__":
     vext = (rgrid * rgrid).requires_grad_()
     iexc = torch.tensor([0, 0, 1, 1, 2, 2, 3, 3, 4]).to(inttype)
 
-    a = torch.tensor([4.4]).to(dtype).requires_grad_()
+    a = torch.tensor([1.0]).to(dtype).requires_grad_()
     p = torch.tensor([0.3]).to(dtype).requires_grad_()
     vks_model = VKSSimpleModel(a, p)
     density = _DFT1DForward.apply(rgrid.unsqueeze(0),
