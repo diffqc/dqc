@@ -1,7 +1,7 @@
-def orthogonalize(self, a, b):
+def orthogonalize(a, b, dim=-1):
     """
     Orthogonalize a with respect to b.
-    Shape of a & b: (nbatch, nfeat)
+    The orthogonalization is done such that (a*b).sum(dim=dim) is equal to 0
     """
-    proj = (a * b).sum(dim=-1) / (b * b).sum(dim=-1)
-    return a - proj.unsqueeze(-1) * b
+    proj = (a * b).sum(dim=dim, keepdim=True) / (b * b).sum(dim=dim, keepdim=True)
+    return a - proj * b
