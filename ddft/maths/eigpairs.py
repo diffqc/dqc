@@ -74,6 +74,11 @@ def davidson(A, neig, params, **options):
                 stop_reason = "min_eps"
                 break
 
+        # stop if V has become a full-rank matrix
+        if V.shape[-1] == na:
+            stop_reason = "full_rank"
+            break
+
         # calculate the parameters for the next iteration
         prev_eigvals = eigvalT[:,:neig].data
 
