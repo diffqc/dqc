@@ -1,6 +1,6 @@
 import torch
 from ddft.utils.misc import set_default_option
-from ddft.utils.linesearch import line_search
+from ddft.maths.linesearch import line_search
 
 def selfconsistent(f, x0, jinv0=1.0, **options):
     """
