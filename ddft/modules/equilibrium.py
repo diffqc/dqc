@@ -1,6 +1,6 @@
 import torch
 from ddft.utils.misc import set_default_option
-from ddft.utils.rootfinder import lbfgs
+from ddft.maths.rootfinder import lbfgs
 
 class EquilibriumModule(torch.nn.Module):
     """
