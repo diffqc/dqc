@@ -80,7 +80,7 @@ if __name__ == "__main__":
     dtype = torch.float64
     nr = 101
     rgrid = torch.linspace(-2, 2, nr).to(dtype)
-    nlowest = nr - 1 # make the iterative method only performed once
+    nlowest = 4
     forward_options = {
         "verbose": False
     }
@@ -88,14 +88,13 @@ if __name__ == "__main__":
         "verbose": False
     }
     eigen_options = {
+        "method": "exacteig",
         "verbose": False
     }
     a = torch.tensor([1.0]).to(dtype)
     p = torch.tensor([0.3333]).to(dtype)
     vext = (rgrid * rgrid).unsqueeze(0).requires_grad_() # (nbatch, nr)
-    focc = torch.zeros((1, nlowest))
-    focc[:,:4] = torch.tensor([[2.0, 2.0, 2.0, 1.0]])
-    focc.requires_grad_()
+    focc = torch.tensor([[2.0, 2.0, 2.0, 1.0]]).requires_grad_() # (nbatch, nlowest)
 
     def getloss(a, p, vext, focc, return_model=False):
         # set up the modules
@@ -130,7 +129,7 @@ if __name__ == "__main__":
     a_fd = finite_differences(getloss, (a, p, vext, focc), 0, eps=1e-6)
     p_fd = finite_differences(getloss, (a, p, vext, focc), 1, eps=1e-6)
     vext_fd = finite_differences(getloss, (a, p, vext, focc), 2, eps=1e-6)
-    focc_fd = finite_differences(getloss, (a, p, vext, focc), 3, eps=1e-6)
+    focc_fd = finite_differences(getloss, (a, p, vext, focc), 3, eps=1e-5)
 
     print("a gradients:")
     print(a_grad)

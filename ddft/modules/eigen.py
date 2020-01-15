@@ -1,6 +1,7 @@
 import torch
 from ddft.modules.base_linear import BaseLinearModule
-from ddft.maths.eigpairs import davidson
+from ddft.maths.eigpairs import davidson, exacteig
+from ddft.utils.misc import set_default_option
 
 class EigenModule(torch.nn.Module):
     """
@@ -32,14 +33,25 @@ class EigenModule(torch.nn.Module):
 
         self.linmodule = linmodule
         self.nlowest = nlowest
-        self.options = options
+        self.options = set_default_option({
+            "method": "davidson",
+        }, options)
 
         # check type
         if not isinstance(self.linmodule, BaseLinearModule):
             raise TypeError("The linmodule argument must be instance of BaseLinearModule")
 
     def forward(self, *params):
-        eigvals, eigvecs = davidson(self.linmodule, self.nlowest,
+        # choose the algorithm
+        method = self.options["method"].lower()
+        if method == "davidson":
+            fcn = davidson
+        elif method == "exacteig":
+            fcn = exacteig
+        else:
+            raise RuntimeError("Unknown eigen method: %s" % method)
+
+        eigvals, eigvecs = fcn(self.linmodule, self.nlowest,
             params, **self.options)
         return eigvals, eigvecs
 

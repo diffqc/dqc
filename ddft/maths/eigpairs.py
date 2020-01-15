@@ -45,17 +45,9 @@ def davidson(A, neig, params, **options):
     eps_cond = config["eps_cond"]
 
     # get the shape of the transformation
-    na, nc = A.shape
+    na = _check_and_get_shape(A)
     nbatch = params[0].shape[0]
-    A_params = list(A.parameters())
-    if len(A_params) == 0:
-        p = params[0]
-    else:
-        p = A_params[0]
-    dtype = p.dtype
-    device = p.device
-    if na != nc:
-        raise TypeError("The linear transformation of davidson method must be a square matrix")
+    dtype, device = _get_dtype_device(params, A)
 
     # set up the initial guess
     V = torch.eye(na, nguess).unsqueeze(0).repeat(nbatch, 1, 1).to(dtype).to(device) # (nbatch,na,nguess)
@@ -112,3 +104,53 @@ def davidson(A, neig, params, **options):
     eigvals = eigvalT[:,:neig]
     eigvecs = eigvecA[:,:,:neig]
     return eigvals, eigvecs
+
+def exacteig(A, neig, params, **options):
+    """
+    The exact method to obtain the `neig` lowest eigenvalues and eigenvectors.
+    This function is written so that the backpropagation can be done.
+
+    Arguments
+    ---------
+    * A: BaseLinearModule instance
+        The linear module object on which the eigenpairs are constructed.
+    * neig: int
+        The number of eigenpairs to be retrieved.
+    * params: list of differentiable torch.tensor
+        List of differentiable torch.tensor to be put to A.forward(x,*params).
+        Each of params must have shape of (nbatch,...)
+    * **options:
+        The algorithm options.
+
+    Returns
+    -------
+    * eigvals: torch.tensor (nbatch, neig)
+    * eigvecs: torch.tensor (nbatch, na, neig)
+        The `neig` smallest eigenpairs
+    """
+    na = _check_and_get_shape(A)
+    nbatch = params[0].shape[0]
+    dtype, device = _get_dtype_device(params, A)
+    V = torch.eye(na).unsqueeze(0).expand(nbatch,-1,-1).to(dtype).to(device)
+
+    # obtain the full matrix of A
+    Amatrix = A(V, *params)
+    evals, evecs = torch.symeig(Amatrix, eigenvectors=True)
+
+    return evals[:,:neig], evecs[:,:,:neig]
+
+def _get_dtype_device(params, A):
+    A_params = list(A.parameters())
+    if len(A_params) == 0:
+        p = params[0]
+    else:
+        p = A_params[0]
+    dtype = p.dtype
+    device = p.device
+    return dtype, device
+
+def _check_and_get_shape(A):
+    na, nc = A.shape
+    if na != nc:
+        raise TypeError("The linear transformation of davidson method must be a square matrix")
+    return na
