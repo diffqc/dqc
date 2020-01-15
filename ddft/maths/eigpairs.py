@@ -102,6 +102,10 @@ def davidson(A, neig, params, **options):
         if Va.shape[-1] > na:
             Va = Va[:,:,-na:]
 
+        # R^{-T} is needed for the backpropagation, so small det(R) will cause
+        # numerical instability. So we need to choose ritz that are
+        # perpendicular to the current columns of V
+
         # orthogonalize the new columns of V
         Q, R = torch.qr(Va) # V: (nbatch, na, nguess), R: (nbatch, nguess, nguess)
         V = Q
