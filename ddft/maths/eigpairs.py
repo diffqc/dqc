@@ -33,17 +33,25 @@ def davidson(A, neig, params, **options):
         "max_niter": 10*neig,
         "nguess": neig+1,
         "min_eps": 1e-6,
+        "verbose": False,
+        "eps_cond": 1e-6,
     }, options)
 
     # get some of the options
     nguess = config["nguess"]
     max_niter = config["max_niter"]
     min_eps = config["min_eps"]
+    verbose = config["verbose"]
+    eps_cond = config["eps_cond"]
 
     # get the shape of the transformation
     na, nc = A.shape
     nbatch = params[0].shape[0]
-    p = list(A.parameters())[0]
+    A_params = list(A.parameters())
+    if len(A_params) == 0:
+        p = params[0]
+    else:
+        p = A_params[0]
     dtype = p.dtype
     device = p.device
     if na != nc:
@@ -68,6 +76,8 @@ def davidson(A, neig, params, **options):
         # check the convergence
         if prev_eigvals is not None:
             dev = (eigvalT[:,:neig].data - prev_eigvals).abs().max()
+            if verbose:
+                print("Iter %3d (guess size: %d): %.3e" % (m, eigvecA.shape[-1], dev))
             if dev < min_eps:
                 stop_reason = "min_eps"
                 break
@@ -78,7 +88,11 @@ def davidson(A, neig, params, **options):
         nj = eigvalT.shape[1]
         ritz_list = []
         for i in range(nj):
-            f = 1. / (dA - eigvalT[:,i:i+1]) # (nbatch, na)
+            # precondition the inverse diagonal
+            finv = dA - eigvalT[:,i:i+1]
+            finv[finv.abs() < eps_cond] = eps_cond
+            f = 1. / finv # (nbatch, na)
+
             AVphi = A(eigvecA[:,:,i], *params) # (nbatch, na)
             lmbdaVphi = eigvalT[:,i:i+1] * eigvecA[:,:,i] # (nbatch, na)
             r = f * (AVphi - lmbdaVphi) # (nbatch, na)
