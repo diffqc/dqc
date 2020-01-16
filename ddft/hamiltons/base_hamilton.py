@@ -25,12 +25,14 @@ class BaseHamilton(BaseLinearModule):
         pass
 
     @abstractmethod
-    def kinetics_diag(self, *params):
+    def kinetics_diag(self, nbatch, *params):
         """
         Returns the diagonal of the kinetics part of the Hamiltonian.
 
         Arguments
         ---------
+        * nbatch: int
+            The number of batch of the kinetics matrix to be returned
         * *params: list of torch.tensor (nbatch, ...)
             List of parameters that specifies the kinetics of the Hamiltonian.
         """
@@ -64,8 +66,10 @@ class BaseHamilton(BaseLinearModule):
         pass
 
     def diag(self, vext, *params):
-        return vext + self.kinetics_diag(*params)
+        nbatch = vext.shape[0]
+        return vext + self.kinetics_diag(nbatch, *params)
 
+    @property
     def shape(self):
         """
         Returns the matrix shape of the Hamiltonian.

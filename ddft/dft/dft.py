@@ -1,57 +1,71 @@
 import torch
-import numpy as np
-from ddft.modules.base_linear import BaseLinearModule
-from ddft.dft.spatial1d import HamiltonSpatial1D
 from ddft.modules.eigen import EigenModule
-from ddft.modules.equilibrium import EquilibriumModule
 from ddft.utils.misc import set_default_option
 
-class HamiltonPW1D(HamiltonSpatial1D):
-    def __init__(self, rgrid):
-        super(HamiltonPW1D, self).__init__(rgrid)
+class DFT(torch.nn.Module):
+    def __init__(self, H_model, vks_model, nlowest, **eigen_options):
+        super(DFT, self).__init__()
+        eigen_options = set_default_option({
+            "v_init": "randn",
+        }, eigen_options)
+        self.H_model = H_model
+        self.vks_model = vks_model
+        self.eigen_model = EigenModule(H_model, nlowest, **eigen_options)
 
-        # construct the r-grid and q-grid
-        N = len(rgrid)
-        dr = rgrid[1] - rgrid[0]
-        boxsize = rgrid[-1] - rgrid[0]
-        dq = 2*np.pi / boxsize
-        Nhalf = (N // 2) + 1
-        offset = (N + 1) % 2
-        qgrid_half = torch.arange(Nhalf)
-        self.qgrid = qgrid_half
-        # self.qgrid = torch.cat((qgrid_half[1:].flip(0)[offset:], qgrid_half)) # (nr,)
-        self.q2 = self.qgrid*self.qgrid
+    def forward(self, density, vext, focc):
+        # density: (nbatch, nr)
+        # vext: (nbatch, nr)
+        # focc: (nbatch, nlowest)
 
-        # initialize the spatial Hamiltonian
-        super(HamiltonPW1D, self).__init__(rgrid)
+        # calculate the total potential experienced by Kohn-Sham particles
+        vks = self.vks_model(density) # (nbatch, nr)
+        vext_tot = vext + vks
 
-    def kinetics(self, wf):
-        # wf: (nbatch, nr, ncols)
-        # wf consists of points in the real space
+        # compute the eigenpairs
+        # evals: (nbatch, nlowest), evecs: (nbatch, nr, nlowest)
+        eigvals, eigvecs = self.eigen_model(vext_tot)
 
-        # perform the operation in q-space, so FT the wf first
-        wfT = wf.transpose(-2, -1) # (nbatch, ncols, nr)
-        coeff = torch.rfft(wfT, signal_ndim=1) # (nbatch, ncols, nr, 2)
+        # normalize the norm of density
+        eigvec_dens = (eigvecs*eigvecs) # (nbatch, nr, nlowest)
+        eigvec_dens = self.H_model.getdens(eigvec_dens)
+        dens = eigvec_dens * focc.unsqueeze(1) # (nbatch, nr, nlowest)
+        new_density = dens.sum(dim=-1) # (nbatch, nr)
 
-        # multiply with |q|^2 and IFT transform it back
-        q2 = self.q2.unsqueeze(-1).expand(-1,2) # (nr, 2)
-        coeffq2 = coeff * q2
-        kin = torch.irfft(coeffq2, signal_ndim=1) # (nbatch, ncols, nr)
+        return new_density
 
-        # revert to the original shape
-        return kin.transpose(-2, -1) # (nbatch, nr, ncols)
+def _get_uniform_density(rgrid, nels):
+    # rgrid: (nr,)
+    # nels: (nbatch,)
+    nbatch = nels.shape[0]
+    nr = rgrid.shape[0]
+
+    nels = nels.unsqueeze(-1) # (nbatch, 1)
+    dr = rgrid[1] - rgrid[0]
+    density_val = nels / dr / nr # (nbatch, 1)
+    density = torch.zeros((nbatch, nr)).to(rgrid.dtype).to(rgrid.device) + density_val
+
+    return density
 
 if __name__ == "__main__":
     import time
     import matplotlib.pyplot as plt
     from ddft.utils.fd import finite_differences
-    from ddft.dft.spatial1d import VKS1, _get_uniform_density
-    from ddft.dft.dft1d import DFT1D
+    from ddft.hamiltons.hspatial1d import HamiltonSpatial1D
+    from ddft.hamiltons.hpw1d import HamiltonPW1D
+    from ddft.modules.equilibrium import EquilibriumModule
+
+    class VKS1(torch.nn.Module):
+        def __init__(self, a, p):
+            super(VKS1, self).__init__()
+            self.a = torch.nn.Parameter(a)
+            self.p = torch.nn.Parameter(p)
+
+        def forward(self, density):
+            vks = self.a * density.abs()**self.p
+            return vks
 
     dtype = torch.float64
     nr = 101
-    boxsize = 4
-    max_energy = (nr * np.pi / boxsize)**2 * 0.5
     rgrid = torch.linspace(-2, 2, nr).to(dtype)
     nlowest = 4
     forward_options = {
@@ -62,7 +76,7 @@ if __name__ == "__main__":
         "verbose": False
     }
     eigen_options = {
-        "method": "davidson",
+        "method": "exacteig",
         "verbose": False
     }
     a = torch.tensor([3.0]).to(dtype)
@@ -72,16 +86,18 @@ if __name__ == "__main__":
 
     def getloss(a, p, vext, focc, return_model=False):
         # set up the modules
+        # H_model = HamiltonSpatial1D(rgrid)
         H_model = HamiltonPW1D(rgrid)
         vks_model = VKS1(a, p)
-        dft_model = DFT1D(H_model, vks_model, nlowest,
+        dft_model = DFT(H_model, vks_model, nlowest,
             **eigen_options)
         scf_model = EquilibriumModule(dft_model,
             forward_options=forward_options,
             backward_options=backward_options)
 
         # calculate the density
-        density0 = _get_uniform_density(rgrid, focc)
+        nels = focc.sum(-1)
+        density0 = _get_uniform_density(rgrid, nels)
         density = scf_model(density0, vext, focc)
 
         # calculate the defined loss function
