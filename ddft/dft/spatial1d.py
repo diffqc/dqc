@@ -49,6 +49,9 @@ class VKS1(torch.nn.Module):
 class DFTSpatial1D(torch.nn.Module):
     def __init__(self, rgrid, H_model, vks_model, nlowest, **eigen_options):
         super(DFTSpatial1D, self).__init__()
+        eigen_options = set_default_option({
+            "v_init": "randn",
+        }, eigen_options)
         self.vks_model = vks_model
         self.eigen_model = EigenModule(H_model, nlowest, **eigen_options)
         self.dr = rgrid[1] - rgrid[0]
@@ -88,7 +91,7 @@ if __name__ == "__main__":
         "verbose": False
     }
     eigen_options = {
-        "method": "exacteig",
+        "method": "davidson",
         "verbose": False
     }
     a = torch.tensor([1.0]).to(dtype)

@@ -35,6 +35,7 @@ def davidson(A, neig, params, **options):
         "min_eps": 1e-6,
         "verbose": False,
         "eps_cond": 1e-6,
+        "v_init": "randn",
     }, options)
 
     # get some of the options
@@ -50,7 +51,8 @@ def davidson(A, neig, params, **options):
     dtype, device = _get_dtype_device(params, A)
 
     # set up the initial guess
-    V = torch.eye(na, nguess).unsqueeze(0).repeat(nbatch, 1, 1).to(dtype).to(device) # (nbatch,na,nguess)
+    V = _set_initial_v(config["v_init"].lower(), nbatch, na, nguess) # (nbatch,na,nguess)
+    V = V.to(dtype).to(device)
     dA = A.diag(*params) # (nbatch, na)
 
     prev_eigvals = None
@@ -163,3 +165,20 @@ def _check_and_get_shape(A):
     if na != nc:
         raise TypeError("The linear transformation of davidson method must be a square matrix")
     return na
+
+def _set_initial_v(vinit_type, nbatch, na, nguess):
+    ortho = False
+    if vinit_type == "eye":
+        V = torch.eye(na, nguess).unsqueeze(0).repeat(nbatch,1,1)
+        ortho = True
+    elif vinit_type == "randn":
+        V = torch.randn(nbatch, na, nguess)
+    elif vinit_type == "random" or vinit_type == "rand":
+        V = torch.rand(nbatch, na, nguess)
+    else:
+        raise ValueError("Unknown v_init type: %s" % vinit_type)
+
+    # orthogonalize V
+    if not ortho:
+        V, R = torch.qr(V)
+    return V
