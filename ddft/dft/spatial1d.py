@@ -2,7 +2,7 @@ import torch
 from ddft.modules.base_linear import BaseLinearModule
 from ddft.modules.eigen import EigenModule
 from ddft.modules.equilibrium import EquilibriumModule
-from ddft.utils.misc import get_uniform_density
+from ddft.utils.misc import set_default_option
 
 class HamiltonSpatial1D(BaseLinearModule):
     def __init__(self, rgrid):
@@ -76,7 +76,21 @@ class DFTSpatial1D(torch.nn.Module):
 
         return new_density
 
+def _get_uniform_density(rgrid, focc):
+    # rgrid: (nr,)
+    # focc: (nbatch, nlowest)
+    nbatch = focc.shape[0]
+    nr = rgrid.shape[0]
+
+    nels = focc.sum(dim=-1, keepdim=True) # (nbatch, 1)
+    dr = rgrid[1] - rgrid[0]
+    density_val = nels / dr / nr # (nbatch, 1)
+    density = torch.zeros((nbatch, nr)).to(rgrid.dtype).to(rgrid.device) + density_val
+
+    return density
+
 if __name__ == "__main__":
+    import time
     import matplotlib.pyplot as plt
     from ddft.utils.fd import finite_differences
 
@@ -110,7 +124,7 @@ if __name__ == "__main__":
             backward_options=backward_options)
 
         # calculate the density
-        density0 = get_uniform_density(rgrid, focc)
+        density0 = _get_uniform_density(rgrid, focc)
         density = scf_model(density0, vext, focc)
 
         # calculate the defined loss function
@@ -119,6 +133,7 @@ if __name__ == "__main__":
             return loss
         else:
             return loss, scf_model
+
 
     loss, scf_model = getloss(a, p, vext, focc, return_model=True)
     loss.backward()
@@ -161,7 +176,7 @@ if __name__ == "__main__":
     # dft_model2 = DFTSpatial1D(rgrid, H_model, vks_model2, nlowest)
     # scf_model2 = EquilibriumModule(dft_model2, forward_options=forward_options)
     #
-    # density0 = get_uniform_density(rgrid, focc) # (nbatch, nr)
+    # density0 = _get_uniform_density(rgrid, focc) # (nbatch, nr)
     # density = scf_model(density0, vext, focc)
     #
     # density2 = scf_model2(density0, vext, focc)
