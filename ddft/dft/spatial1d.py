@@ -3,12 +3,14 @@ from ddft.modules.base_linear import BaseLinearModule
 from ddft.modules.eigen import EigenModule
 from ddft.modules.equilibrium import EquilibriumModule
 from ddft.utils.misc import set_default_option
+from ddft.dft.dft1d import DFT1D
 
 class HamiltonSpatial1D(BaseLinearModule):
     def __init__(self, rgrid):
         super(HamiltonSpatial1D, self).__init__()
         self.rgrid = rgrid # (nr,)
-        self.inv_dr2 = 1.0 / (self.rgrid[1] - self.rgrid[0])**2
+        self.inv_dr = 1.0 / (self.rgrid[1] - self.rgrid[0])
+        self.inv_dr2 = self.inv_dr**2
         self._shape = (self.rgrid.shape[0], self.rgrid.shape[0])
 
     def forward(self, wf, vext):
@@ -21,7 +23,7 @@ class HamiltonSpatial1D(BaseLinearModule):
             wf = wf.unsqueeze(-1)
 
         nbatch = wf.shape[0]
-        kinetics = (wf - (torch.roll(wf,1,dims=1) + torch.roll(wf,-1,dims=1)) * 0.5) * self.inv_dr2 # (nbatch, nr, ncols)
+        kinetics = self.kinetics(wf)
         extpot = vext.unsqueeze(-1) * wf
         h = kinetics + extpot
 
@@ -29,12 +31,18 @@ class HamiltonSpatial1D(BaseLinearModule):
             h = h.squeeze(-1)
         return h
 
+    def kinetics(self, wf):
+        return (wf - (torch.roll(wf,1,dims=1) + torch.roll(wf,-1,dims=1)) * 0.5) * self.inv_dr2 # (nbatch, nr, ncols)
+
     @property
     def shape(self):
         return self._shape
 
     def diag(self, vext):
         return self.inv_dr2 + vext
+
+    def sumwf2(self):
+        return self.inv_dr
 
 class VKS1(torch.nn.Module):
     def __init__(self, a, p):
@@ -45,36 +53,6 @@ class VKS1(torch.nn.Module):
     def forward(self, density):
         vks = self.a * density.abs()**self.p
         return vks
-
-class DFTSpatial1D(torch.nn.Module):
-    def __init__(self, rgrid, H_model, vks_model, nlowest, **eigen_options):
-        super(DFTSpatial1D, self).__init__()
-        eigen_options = set_default_option({
-            "v_init": "randn",
-        }, eigen_options)
-        self.vks_model = vks_model
-        self.eigen_model = EigenModule(H_model, nlowest, **eigen_options)
-        self.dr = rgrid[1] - rgrid[0]
-
-    def forward(self, density, vext, focc):
-        # density: (nbatch, nr)
-        # vext: (nbatch, nr)
-        # focc: (nbatch, nlowest)
-
-        # calculate the total potential experienced by Kohn-Sham particles
-        vks = self.vks_model(density) # (nbatch, nr)
-        vext_tot = vext + vks
-
-        # compute the eigenpairs
-        # evals: (nbatch, nlowest), evecs: (nbatch, nr, nlowest)
-        eigvals, eigvecs = self.eigen_model(vext_tot)
-
-        # normalize the norm of density
-        eigvec_dens = (eigvecs*eigvecs) / self.dr # (nbatch, nr, nlowest)
-        dens = eigvec_dens * focc.unsqueeze(1) # (nbatch, nr, nlowest)
-        new_density = dens.sum(dim=-1) # (nbatch, nr)
-
-        return new_density
 
 def _get_uniform_density(rgrid, focc):
     # rgrid: (nr,)
@@ -106,7 +84,7 @@ if __name__ == "__main__":
         "verbose": False
     }
     eigen_options = {
-        "method": "davidson",
+        "method": "exacteig",
         "verbose": False
     }
     a = torch.tensor([3.0]).to(dtype)
@@ -118,7 +96,7 @@ if __name__ == "__main__":
         # set up the modules
         H_model = HamiltonSpatial1D(rgrid)
         vks_model = VKS1(a, p)
-        dft_model = DFTSpatial1D(rgrid, H_model, vks_model, nlowest,
+        dft_model = DFT1D(H_model, vks_model, nlowest,
             **eigen_options)
         scf_model = EquilibriumModule(dft_model,
             forward_options=forward_options,
