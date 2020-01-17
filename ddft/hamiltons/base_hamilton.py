@@ -39,21 +39,6 @@ class BaseHamilton(BaseLinearModule):
         """
         pass
 
-    @abstractproperty
-    def rgrid(self):
-        """
-        Returns a tensor which specifies the spatial grid of vext and wf.
-        The shape is (nr, ndim) or (nr,) for ndim == 1.
-        """
-        pass
-
-    @abstractproperty
-    def boxshape(self):
-        """
-        Returns the box shape.
-        """
-        pass
-
     @abstractmethod
     def getdens(self, eigvec2):
         """
@@ -81,10 +66,22 @@ class BaseHamilton(BaseLinearModule):
         """
         pass
 
+    @abstractproperty
+    def shape(self):
+        """
+        Returns the matrix shape of the Hamiltonian.
+        """
+        return
+
+    ######################## good-to-implement methods ########################
     def diag(self, vext, *params):
+        """
+        Returns the diagonal of the matrix for each batch.
+        """
         nbatch = vext.shape[0]
         return vext + self.kinetics_diag(nbatch, *params)
 
+    ########################### implemented methods ###########################
     def flattensig(self, sig, dim=-1):
         """
         Flatten the signal whose shape is (...,*boxshape,...) into
@@ -135,16 +132,6 @@ class BaseHamilton(BaseLinearModule):
         newshape = shapel + [*self.boxshape] + shaper
         return sig.view(*newshape)
 
-    @property
-    def shape(self):
-        """
-        Returns the matrix shape of the Hamiltonian.
-        """
-        if not hasattr(self, "_shape"):
-            nr = len(self.rgrid)
-            self._shape = (nr, nr)
-        return self._shape
-
     def forward(self, wf, vext, *params):
         """
         Compute the Hamiltonian of a wavefunction and external potential.
@@ -156,7 +143,9 @@ class BaseHamilton(BaseLinearModule):
         * wf: torch.tensor (nbatch, nr) or (nbatch, nr, ncols)
             The wavefunction in spatial domain
         * vext: torch.tensor (nbatch, nr)
-            The external potential in spatial domain
+            The external potential in spatial domain. This should be the total
+            potential the non-interacting particles feel
+            (i.e. xc, Hartree, and external).
         * *params: list of torch.tensor (nbatch, ...)
             List of parameters that specifies the kinetics part.
 

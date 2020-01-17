@@ -22,8 +22,9 @@ class DifferentialModule(torch.nn.Module):
         with torch.enable_grad():
             y = self.model(xinp) # (nbatch,1^n)
             ysum = y.sum()
+        grad_enabled = torch.is_grad_enabled()
         dx = torch.autograd.grad(ysum, (xinp,),
-            retain_graph=True, create_graph=True)[0]
+            create_graph=grad_enabled)[0]
         return dx # (same shape as x)
 
 class AddModule(torch.nn.Module):

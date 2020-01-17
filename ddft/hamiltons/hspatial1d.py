@@ -11,14 +11,7 @@ class HamiltonSpatial1D(BaseHamilton):
         nr = len(rgrid)
         self.Kdiag = torch.ones(nr).to(rgrid.dtype).to(rgrid.device)
         self._boxshape = (nr,)
-
-    @property
-    def rgrid(self):
-        return self._rgrid
-
-    @property
-    def boxshape(self):
-        return self._boxshape
+        self._shape = (nr,nr)
 
     def kinetics(self, wf):
         return (wf - (torch.roll(wf,1,dims=1) + torch.roll(wf,-1,dims=1)) * 0.5) * self.inv_dr2 # (nbatch, nr, ncols)
@@ -31,3 +24,7 @@ class HamiltonSpatial1D(BaseHamilton):
 
     def integralbox(self, p, dim=-1):
         return p.sum(dim=dim) * self.dr
+
+    @property
+    def shape(self):
+        return self._shape
