@@ -13,21 +13,16 @@ class HamiltonPlaneWave(BaseHamilton):
         self.qgrid = self.space.qgrid # (ns)
         self.q2 = (self.qgrid*self.qgrid).expand(-1,2) # (ns,2)
 
-        self._rgrid = rgrid
-        self._boxshape = boxshape
-        self.ndim = len(boxshape)
+        rgrid = self.space.rgrid
+        boxshape = self.space.boxshape
+        self.ndim = self.space.ndim
         nr = rgrid.shape[0]
+        self._shape = (nr, nr)
 
         # get the pixel size
         self.pixsize = rgrid[1,:] - rgrid[0,:] # (ndim,)
         self.dr3 = torch.prod(self.pixsize)
         self.inv_dr3 = 1.0 / self.dr3
-
-        # check the shape
-        if torch.prod(boxshape) != nr:
-            msg = "The product of boxshape elements must be equal to the "\
-                  "first dimension of rgrid"
-            raise ValueError(msg)
 
         # prepare the diagonal part of kinetics
         self.Kdiag = torch.ones(nr).to(rgrid.dtype).to(rgrid.device) * self.ndim # (nr,)
@@ -55,3 +50,7 @@ class HamiltonPlaneWave(BaseHamilton):
 
     def integralbox(self, p, dim=-1):
         return p.sum(dim=dim) * self.dr3
+
+    @property
+    def shape(self):
+        return self._shape

@@ -14,7 +14,7 @@ class QSpace(BaseSpace):
         self._rgrid = rgrid
         self._boxshape = boxshape
         self._qgrid, self._qboxshape = _construct_qgrid(rgrid, boxshape)
-        self.nr, self.ndim = self._rgrid.shape
+        self.nr = self._rgrid.shape[0]
 
     @property
     def rgrid(self):

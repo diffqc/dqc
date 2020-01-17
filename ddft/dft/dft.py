@@ -106,8 +106,9 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
     from ddft.utils.fd import finite_differences
     from ddft.hamiltons.hspatial1d import HamiltonSpatial1D
-    from ddft.hamiltons.hpw1d import HamiltonPW1D
+    from ddft.hamiltons.hamiltonpw import HamiltonPlaneWave
     from ddft.modules.equilibrium import EquilibriumModule
+    from ddft.spaces.qspace import QSpace
 
     class EKS1(torch.nn.Module):
         def __init__(self, a, p):
@@ -141,8 +142,8 @@ if __name__ == "__main__":
 
     def getloss(a, p, vext, focc, return_model=False):
         # set up the modules
-        # H_model = HamiltonSpatial1D(rgrid)
-        H_model = HamiltonPW1D(rgrid)
+        qspace = QSpace(rgrid.unsqueeze(-1), (len(rgrid),))
+        H_model = HamiltonPlaneWave(qspace)
         eks_model = EKS1(a, p)
         dft_model = DFT(H_model, eks_model, nlowest,
             **eigen_options)
