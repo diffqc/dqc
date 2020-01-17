@@ -79,15 +79,13 @@ class DFT(torch.nn.Module):
         # calculates the Kohn-Sham energy
         eks_density = self.eks_model(density) # energy density (nbatch, nr)
         Eks = self.H_model.integralbox(eks_density, dim=-1) # (nbatch,)
-        # print(eigvals[0][1:] - eigvals[0][:-1])
 
         # calculate the individual non-interacting particles energy
         sum_eigvals = (eigvals * focc).sum(dim=-1) # (nbatch,)
         vks_integral = self.H_model.integralbox(vks*density, dim=-1)
-        vext_integral = self.H_model.integralbox(vext*density, dim=-1)
 
         # compute the interacting particles energy
-        Etot = sum_eigvals - vks_integral + vext_integral + Eks
+        Etot = sum_eigvals - vks_integral + Eks
         return Etot
 
 def _get_uniform_density(rgrid, nels):
@@ -136,7 +134,7 @@ if __name__ == "__main__":
         "method": "exacteig",
         "verbose": False
     }
-    a = torch.tensor([0.0]).to(dtype)
+    a = torch.tensor([1.0]).to(dtype)
     p = torch.tensor([1.3333]).to(dtype)
     vext = (rgrid * rgrid).unsqueeze(0).requires_grad_() # (nbatch, nr)
     focc = torch.tensor([[2.0, 2.0, 2.0, 1.0]]).requires_grad_() # (nbatch, nlowest)
