@@ -2,14 +2,14 @@ import torch
 import numpy as np
 from ddft.hamiltons.base_hamilton import BaseHamilton
 
-class HamiltonPW3D(BaseHamilton):
-    def __init__(self, rgrid, boxshape):
-        # rgrid is (nr,3), ordered by (x, y, z)
-        # boxshape (3,) = (nx, ny, nz)
-        super(HamiltonPW3D, self).__init__()
+class HamiltonPlaneWave(BaseHamilton):
+    def __init__(self, space):
+        # rgrid is (nr,ndim), ordered by (x, y, z)
+        # boxshape (ndim,) = (nx, ny, nz)
+        super(HamiltonPlaneWave, self).__init__()
 
         # set up the space
-        self.space = QSpace(rgrid, boxshape)
+        self.space = space
         self.qgrid = self.space.qgrid # (ns)
         self.q2 = (self.qgrid*self.qgrid).expand(-1,2) # (ns,2)
 
@@ -19,7 +19,7 @@ class HamiltonPW3D(BaseHamilton):
         nr = rgrid.shape[0]
 
         # get the pixel size
-        self.pixsize = rgrid[1,:] - rgrid[0,:] # (3,)
+        self.pixsize = rgrid[1,:] - rgrid[0,:] # (ndim,)
         self.dr3 = torch.prod(self.pixsize)
         self.inv_dr3 = 1.0 / self.dr3
 
@@ -39,8 +39,6 @@ class HamiltonPW3D(BaseHamilton):
         # perform the operation in q-space, so FT the wf first
         wfT = wf.transpose(-2, -1) # (nbatch, ncols, nr)
         coeff = self.space.transformsig(wfT, dim=-1) # (nbatch, ncols, ns, 2)
-        # wfT = self.boxifysig(wfT, dim=-1) # (nbatch, ncols, nx, ny, nz)
-        # coeff = torch.rfft(wfT, signal_ndim=3) # (nbatch, ncols, nx, ny, nz, 2)
 
         # multiply with |q|^2 and IFT transform it back
         coeffq2 = coeff * self.q2 # (nbatch, ncols, ns, 2)
