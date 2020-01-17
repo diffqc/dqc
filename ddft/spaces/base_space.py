@@ -138,3 +138,7 @@ class BaseSpace(object):
         shaper = [sigshape[i] for i in range(dim+1, ndim)]
         newshape = shapel + [*boxshape] + shaper
         return sig.view(*newshape)
+
+    @property
+    def ndim(self):
+        return self.rgrid.shape[1]
