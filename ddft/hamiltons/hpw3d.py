@@ -8,13 +8,14 @@ class HamiltonPW3D(BaseHamilton):
         # boxshape (3,) = (nx, ny, nz)
         super(HamiltonPW3D, self).__init__()
         self._rgrid = rgrid
-        self.boxshape = boxshape
+        self._boxshape = boxshape
         self.ndim = 3
         nr = rgrid.shape[0]
 
         # get the pixel size
         self.pixsize = rgrid[1,:] - rgrid[0,:] # (3,)
-        self.sum_dens = 1.0 / torch.prod(self.pixsize)
+        self.dr3 = torch.prod(self.pixsize)
+        self.inv_dr3 = 1.0 / self.dr3
 
         # check the shape
         if torch.prod(boxshape) != nr:
@@ -38,14 +39,13 @@ class HamiltonPW3D(BaseHamilton):
 
         # perform the operation in q-space, so FT the wf first
         wfT = wf.transpose(-2, -1) # (nbatch, ncols, nr)
-        wfT = wfT.view(wfT.shape[0], wfT.shape[1],
-            self.boxshape[0], self.boxshape[1], self.boxshape[2]) # (nbatch, ncols, nx, ny, nz)
+        wfT = self.boxifysig(wfT, dim=-1) # (nbatch, ncols, nx, ny, nz)
         coeff = torch.rfft(wfT, signal_ndim=3) # (nbatch, ncols, nx, ny, nz, 2)
 
         # multiply with |q|^2 and IFT transform it back
         coeffq2 = coeff * self.qhalf2_mag # (nbatch, ncols, nx, ny, nz, 2)
         kin = torch.irfft(coeffq2, signal_ndim=3) # (nbatch, ncols, nx, ny, nz)
-        kin = kin.view(kin.shape[0], kin.shape[1], -1) # (nbatch, ncols, nr)
+        kin = self.flattensig(kin, dim=-1) # (nbatch, ncols, nr)
 
         # revert to the original shape
         return kin.transpose(-2, -1) # (nbatch, nr, ncols)
@@ -54,11 +54,18 @@ class HamiltonPW3D(BaseHamilton):
     def rgrid(self):
         return self._rgrid
 
+    @property
+    def boxshape(self):
+        return self._boxshape
+
     def kinetics_diag(self, nbatch):
         return self.Kdiag.unsqueeze(0).expand(nbatch,-1) # (nbatch, nr)
 
     def getdens(self, eigvec2):
-        return eigvec2 * self.sum_dens
+        return eigvec2 * self.inv_dr3
+
+    def integralbox(self, p):
+        return p.sum() * self.dr3
 
 def _construct_qgrid(rgrid, boxshape):
     # rgrid: (nr, 3)

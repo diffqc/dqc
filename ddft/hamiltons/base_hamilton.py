@@ -1,4 +1,5 @@
 from abc import abstractmethod, abstractproperty
+from functools import reduce
 import torch
 from ddft.modules.base_linear import BaseLinearModule
 
@@ -38,11 +39,18 @@ class BaseHamilton(BaseLinearModule):
         """
         pass
 
-    @abstractmethod
+    @abstractproperty
     def rgrid(self):
         """
         Returns a tensor which specifies the spatial grid of vext and wf.
         The shape is (nr, ndim) or (nr,) for ndim == 1.
+        """
+        pass
+
+    @abstractproperty
+    def boxshape(self):
+        """
+        Returns the box shape.
         """
         pass
 
@@ -65,9 +73,67 @@ class BaseHamilton(BaseLinearModule):
         """
         pass
 
+    @abstractmethod
+    def integralbox(self, p):
+        """
+        Perform integral p(r) dr where p is tensor with shape (nbatch,nr)
+        describing the value in the box.
+        """
+        pass
+
     def diag(self, vext, *params):
         nbatch = vext.shape[0]
         return vext + self.kinetics_diag(nbatch, *params)
+
+    def flattensig(self, sig, dim=-1):
+        """
+        Flatten the signal whose shape is (...,*boxshape,...) into
+        (...,nr,...).
+
+        Arguments
+        ---------
+        * sig: torch.tensor
+            The signal to be flatten
+        * dim: int
+            The dimension position where the `nr` will be located at the output.
+        """
+        ndim = sig.ndim
+        boxshape = self.boxshape
+        nboxshape = len(boxshape)
+        nr = reduce(lambda x,y: x*y, boxshape)
+
+        # get the dim into starting dim
+        if dim < 0:
+            dim = ndim + dim - (nboxshape - 1)
+
+        sigshape = sig.shape
+        shapel = [sigshape[i] for i in range(dim)]
+        shaper = [sigshape[i] for i in range(dim+nboxshape, ndim)]
+        newshape = shapel + [nr] + shaper
+        return sig.view(*newshape)
+
+    def boxifysig(self, sig, dim=-1):
+        """
+        Shape the signal into box shape, i.e. transform from (...,nr,...) into
+        (...,*boxshape,...)
+
+        Arguments
+        ---------
+        * sig: torch.tensor
+            The signal to be boxify
+        * dim: int
+            The dimension where the `nr` is located.
+        """
+        # make dim positive
+        ndim = sig.ndim
+        if dim < 0:
+            dim = ndim + dim
+
+        sigshape = sig.shape
+        shapel = [sigshape[i] for i in range(dim)]
+        shaper = [sigshape[i] for i in range(dim+1, ndim)]
+        newshape = shapel + [*self.boxshape] + shaper
+        return sig.view(*newshape)
 
     @property
     def shape(self):
