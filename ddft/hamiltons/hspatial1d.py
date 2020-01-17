@@ -29,5 +29,5 @@ class HamiltonSpatial1D(BaseHamilton):
     def getdens(self, eigvec2):
         return eigvec2 * self.inv_dr
 
-    def integralbox(self, p):
-        return p.sum() * self.dr
+    def integralbox(self, p, dim=-1):
+        return p.sum(dim=dim) * self.dr

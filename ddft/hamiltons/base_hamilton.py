@@ -74,7 +74,7 @@ class BaseHamilton(BaseLinearModule):
         pass
 
     @abstractmethod
-    def integralbox(self, p):
+    def integralbox(self, p, dim=-1):
         """
         Perform integral p(r) dr where p is tensor with shape (nbatch,nr)
         describing the value in the box.

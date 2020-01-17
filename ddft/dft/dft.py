@@ -1,15 +1,49 @@
 import torch
 from ddft.modules.eigen import EigenModule
+from ddft.modules.calcarith import DifferentialModule
 from ddft.utils.misc import set_default_option
 
 class DFT(torch.nn.Module):
-    def __init__(self, H_model, vks_model, nlowest, **eigen_options):
+    """
+    Perform one forward pass of the DFT self-consistent field approach.
+
+    Class arguments
+    ---------------
+    * H_model: BaseHamilton
+        Hamiltonian transformation.
+    * eks_model: torch.nn.Module
+        Model that calculates the energy density of the Kohn-Sham energy, given
+        the density. The total Kohn-Sham energy is
+        integral(eks_model(density) * dr)
+    * nlowest: int
+        Indicates how many Kohn-Sham particles to be retrieved with the lowest
+        energies during the diagonalization process.
+    * **eigen_options: kwargs
+        The options to be passed to the diagonalization algorithm.
+
+    Forward arguments
+    -----------------
+    * density: torch.tensor (nbatch, nr)
+        The density in the spatial grid.
+    * vext: torch.tensor (nbatch, nr)
+        The external potential (excluding the Kohn-Sham potential).
+    * focc: torch.tensor (nbatch, nlowest)
+        The occupation factor of the Kohn-Sham orbitals.
+
+    Forward returns
+    ---------------
+    * new_density: torch.tensor (nbatch, nr)
+        The new density calculated by one forward pass of the self-consistent
+        field calculation.
+    """
+    def __init__(self, H_model, eks_model, nlowest, **eigen_options):
         super(DFT, self).__init__()
         eigen_options = set_default_option({
             "v_init": "randn",
         }, eigen_options)
         self.H_model = H_model
-        self.vks_model = vks_model
+        self.eks_model = eks_model
+        self.vks_model = DifferentialModule(eks_model)
         self.eigen_model = EigenModule(H_model, nlowest, **eigen_options)
 
     def forward(self, density, vext, focc):
@@ -33,6 +67,29 @@ class DFT(torch.nn.Module):
 
         return new_density
 
+    def energy(self, density, vext, focc):
+        # calculate the total potential experienced by Kohn-Sham particles
+        vks = self.vks_model(density) # (nbatch, nr)
+        vext_tot = vext + vks
+
+        # compute the eigenpairs
+        # evals: (nbatch, nlowest), evecs: (nbatch, nr, nlowest)
+        eigvals, eigvecs = self.eigen_model(vext_tot)
+
+        # calculates the Kohn-Sham energy
+        eks_density = self.eks_model(density) # energy density (nbatch, nr)
+        Eks = self.H_model.integralbox(eks_density, dim=-1) # (nbatch,)
+        # print(eigvals[0][1:] - eigvals[0][:-1])
+
+        # calculate the individual non-interacting particles energy
+        sum_eigvals = (eigvals * focc).sum(dim=-1) # (nbatch,)
+        vks_integral = self.H_model.integralbox(vks*density, dim=-1)
+        vext_integral = self.H_model.integralbox(vext*density, dim=-1)
+
+        # compute the interacting particles energy
+        Etot = sum_eigvals - vks_integral + vext_integral + Eks
+        return Etot
+
 def _get_uniform_density(rgrid, nels):
     # rgrid: (nr,)
     # nels: (nbatch,)
@@ -54,9 +111,9 @@ if __name__ == "__main__":
     from ddft.hamiltons.hpw1d import HamiltonPW1D
     from ddft.modules.equilibrium import EquilibriumModule
 
-    class VKS1(torch.nn.Module):
+    class EKS1(torch.nn.Module):
         def __init__(self, a, p):
-            super(VKS1, self).__init__()
+            super(EKS1, self).__init__()
             self.a = torch.nn.Parameter(a)
             self.p = torch.nn.Parameter(p)
 
@@ -79,8 +136,8 @@ if __name__ == "__main__":
         "method": "exacteig",
         "verbose": False
     }
-    a = torch.tensor([3.0]).to(dtype)
-    p = torch.tensor([0.3333]).to(dtype)
+    a = torch.tensor([0.0]).to(dtype)
+    p = torch.tensor([1.3333]).to(dtype)
     vext = (rgrid * rgrid).unsqueeze(0).requires_grad_() # (nbatch, nr)
     focc = torch.tensor([[2.0, 2.0, 2.0, 1.0]]).requires_grad_() # (nbatch, nlowest)
 
@@ -88,8 +145,8 @@ if __name__ == "__main__":
         # set up the modules
         # H_model = HamiltonSpatial1D(rgrid)
         H_model = HamiltonPW1D(rgrid)
-        vks_model = VKS1(a, p)
-        dft_model = DFT(H_model, vks_model, nlowest,
+        eks_model = EKS1(a, p)
+        dft_model = DFT(H_model, eks_model, nlowest,
             **eigen_options)
         scf_model = EquilibriumModule(dft_model,
             forward_options=forward_options,
@@ -99,9 +156,10 @@ if __name__ == "__main__":
         nels = focc.sum(-1)
         density0 = _get_uniform_density(rgrid, nels)
         density = scf_model(density0, vext, focc)
+        energy = dft_model.energy(density, vext, focc)
 
         # calculate the defined loss function
-        loss = (density*density).sum()
+        loss = (density*density).sum() + (energy*energy).sum()
         if not return_model:
             return loss
         else:

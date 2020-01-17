@@ -3,8 +3,8 @@ import torch
 
 class DifferentialModule(torch.nn.Module):
     """
-    Differential module calculates d(output)/d(input) where `output` is a value
-    per batch and input is a batched tensor of any size.
+    Differential module calculates d(sum(output))/d(input) where `input` is
+    a batched tensor of any size.
 
     In DFT context, the differential module can be used to obtain the Kohn-Sham
     potential from a model that calculates the Kohn-Sham energy.
@@ -14,10 +14,16 @@ class DifferentialModule(torch.nn.Module):
         self.model = model
 
     def forward(self, x):
-        y = self.model(x) # (nbatch,1^n)
-        ysum = y.sum()
-        dx = torch.autograd.grad(ysum, (x,),
-            retain_graph=True, create_graph=True)
+        if x.requires_grad:
+            xinp = x
+        else:
+            xinp = x.clone().requires_grad_()
+
+        with torch.enable_grad():
+            y = self.model(xinp) # (nbatch,1^n)
+            ysum = y.sum()
+        dx = torch.autograd.grad(ysum, (xinp,),
+            retain_graph=True, create_graph=True)[0]
         return dx # (same shape as x)
 
 class AddModule(torch.nn.Module):

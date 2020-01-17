@@ -64,8 +64,8 @@ class HamiltonPW3D(BaseHamilton):
     def getdens(self, eigvec2):
         return eigvec2 * self.inv_dr3
 
-    def integralbox(self, p):
-        return p.sum() * self.dr3
+    def integralbox(self, p, dim=-1):
+        return p.sum(dim=dim) * self.dr3
 
 def _construct_qgrid(rgrid, boxshape):
     # rgrid: (nr, 3)
