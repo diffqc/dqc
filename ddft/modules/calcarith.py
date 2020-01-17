@@ -1,3 +1,4 @@
+from functools import reduce
 import torch
 
 class DifferentialModule(torch.nn.Module):
@@ -18,3 +19,20 @@ class DifferentialModule(torch.nn.Module):
         dx = torch.autograd.grad(ysum, (x,),
             retain_graph=True, create_graph=True)
         return dx # (same shape as x)
+
+class AddModule(torch.nn.Module):
+    def __init__(self, *models):
+        super(AddModule, self).__init__()
+        self.models = models
+
+    def forward(self, x):
+        xs = [m(x) for m in self.models]
+        return reduce(lambda x,y: x+y, xs)
+
+class NegModule(torch.nn.Module):
+    def __init__(self, model):
+        super(NegModule, self).__init__()
+        self.model = model
+
+    def forward(self, x):
+        return -self.model(x)
