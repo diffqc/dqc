@@ -30,7 +30,7 @@ def davidson(A, neig, params, **options):
         The `neig` smallest eigenpairs
     """
     config = set_default_option({
-        "max_niter": 10*neig,
+        "max_niter": 40,
         "nguess": neig+1,
         "min_eps": 1e-6,
         "verbose": False,

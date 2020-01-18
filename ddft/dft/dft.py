@@ -121,9 +121,13 @@ if __name__ == "__main__":
             return vks
 
     dtype = torch.float64
-    nr = 101
-    rgrid = torch.linspace(-2, 2, nr).to(dtype)
-    nlowest = 4
+    ndim = 3
+    boxshape = [51, 51, 51]
+    boxsizes = [10.0, 10.0, 10.0]
+    rgrids = [torch.linspace(-boxsize/2., boxsize/2., nx).to(dtype) for (boxsize,nx) in zip(boxsizes,boxshape)]
+    rgrids = torch.meshgrid(*rgrids) # (nx,ny,nz)
+    rgrid = torch.cat([rgrid.unsqueeze(-1) for rgrid in rgrids], dim=-1).view(-1,ndim) # (nr,3)
+    nlowest = 1
     forward_options = {
         "verbose": False,
         "linesearch": False,
@@ -132,17 +136,20 @@ if __name__ == "__main__":
         "verbose": False
     }
     eigen_options = {
-        "method": "exacteig",
-        "verbose": False
+        "method": "davidson",
+        "verbose": True
     }
-    a = torch.tensor([1.0]).to(dtype)
+    a = torch.tensor([0.0]).to(dtype)
     p = torch.tensor([1.3333]).to(dtype)
-    vext = (rgrid * rgrid).unsqueeze(0).requires_grad_() # (nbatch, nr)
-    focc = torch.tensor([[2.0, 2.0, 2.0, 1.0]]).requires_grad_() # (nbatch, nlowest)
+    rgrid_norm = rgrid.norm(dim=-1)
+    vext = -1./rgrid_norm
+    vext[rgrid_norm < 1e-7] = -1.0/1e-7
+    vext = vext.unsqueeze(0).requires_grad_()
+    focc = torch.tensor([[1.0]]).requires_grad_() # (nbatch, nlowest)
 
     def getloss(a, p, vext, focc, return_model=False):
         # set up the modules
-        qspace = QSpace(rgrid.unsqueeze(-1), (len(rgrid),))
+        qspace = QSpace(rgrid, boxshape)
         H_model = HamiltonPlaneWave(qspace)
         eks_model = EKS1(a, p)
         dft_model = DFT(H_model, eks_model, nlowest,
@@ -153,9 +160,10 @@ if __name__ == "__main__":
 
         # calculate the density
         nels = focc.sum(-1)
-        density0 = _get_uniform_density(rgrid, nels)
+        density0 = torch.zeros_like(vext).to(vext.device) # _get_uniform_density(rgrid, nels)
         density = scf_model(density0, vext, focc)
         energy = dft_model.energy(density, vext, focc)
+        # print(energy)
 
         # calculate the defined loss function
         loss = (density*density).sum() + (energy*energy).sum()
