@@ -13,19 +13,26 @@ class HamiltonPlaneWave(BaseHamilton):
         self.qgrid = self.space.qgrid # (ns,ndim)
         self.q2 = (self.qgrid*self.qgrid).sum(dim=-1,keepdim=True).expand(-1,2) # (ns,2)
 
-        rgrid = self.space.rgrid
-        boxshape = self.space.boxshape
+        rgrid = self.space.rgrid # (nr, ndim)
+        boxshape = self.space.boxshape # (nx,ny,nz)
         self.ndim = self.space.ndim
-        nr = rgrid.shape[0]
+        nr, ndim = rgrid.shape
         self._shape = (nr, nr)
 
         # get the pixel size
-        self.pixsize = rgrid[1,:] - rgrid[0,:] # (ndim,)
+        idx = 0
+        allshape = (*boxshape, rgrid.shape[-1])
+        m = 1
+        for i in range(ndim,0,-1):
+            m *= allshape[i]
+            idx += m
+        self.pixsize = rgrid[idx,:] - rgrid[0,:] # (ndim,)
         self.dr3 = torch.prod(self.pixsize)
         self.inv_dr3 = 1.0 / self.dr3
 
         # prepare the diagonal part of kinetics
-        self.Kdiag = torch.ones(nr).to(rgrid.dtype).to(rgrid.device) * self.ndim # (nr,)
+        self.Kdiag = torch.ones(nr).to(rgrid.dtype).to(rgrid.device) *\
+            (1./self.pixsize**2).sum() # (nr,)
 
     def kinetics(self, wf):
         # wf: (nbatch, nr, ncols)
@@ -36,7 +43,7 @@ class HamiltonPlaneWave(BaseHamilton):
         coeff = self.space.transformsig(wfT, dim=-1) # (nbatch, ncols, ns, 2)
 
         # multiply with |q|^2 and IFT transform it back
-        coeffq2 = -coeff * self.q2 # (nbatch, ncols, ns, 2)
+        coeffq2 = coeff * self.q2 # (nbatch, ncols, ns, 2)
         kin = self.space.invtransformsig(coeffq2, dim=-2) # (nbatch, ncols, nr)
 
         # revert to the original shape
