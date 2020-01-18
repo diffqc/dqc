@@ -46,7 +46,7 @@ class QSpace(BaseSpace):
             sig = sig.transpose(dim, -1)
 
         sigbox = self.boxifysig(sig, dim=-1) # (...,...,nx,ny,nz)
-        sigftbox = torch.rfft(sigbox, signal_ndim=3) # (...,nx/2,ny/2,nz/2,2)
+        sigftbox = torch.rfft(sigbox, signal_ndim=3, onesided=False, normalized=True) # (...,nx/2,ny/2,nz/2,2)
         sigft = self.flattensig(sigftbox, dim=-2, qdom=True) # (...,nr/8,2)
 
         if transposed:
@@ -68,7 +68,7 @@ class QSpace(BaseSpace):
             tsig = tsig.transpose(dim, -2) # (...,ns,2)
 
         tsigbox = self.boxifysig(tsig, dim=-2, qdom=True) #(...,nx/2,ny/2,nz/2,2)
-        sigbox = torch.irfft(tsigbox, signal_ndim=3) # (...,nx,ny,nz)
+        sigbox = torch.irfft(tsigbox, signal_ndim=3, onesided=False, normalized=True) # (...,nx,ny,nz)
         sig = self.flattensig(sigbox, dim=-1)
 
         if transposed:
@@ -79,23 +79,27 @@ def _construct_qgrid_1(xgrid):
     N = len(xgrid)
     dr = xgrid[1] - xgrid[0]
     boxsize = xgrid[-1] - xgrid[0]
-    dq = 2*np.pi / boxsize
+    dq = 2*np.pi / (N * dr)
     Nhalf = (N // 2) + 1
     offset = (N + 1) % 2
-    qgrid_half = torch.arange(Nhalf).to(xgrid.dtype).to(xgrid.device)
-    return qgrid_half
+    qgrid_lhalf = torch.arange(Nhalf)
+    qgrid_rhalf = -torch.arange(Nhalf-offset-1,0,-1)
+    qgrid = torch.cat((qgrid_lhalf, qgrid_rhalf))
+    qgrid = qgrid.to(xgrid.dtype).to(xgrid.device) * dq
+    return qgrid
 
 def _construct_qgrid(rgrid, boxshape):
     # rgrid: (nr, ndim)
     # boxshape = (nx, ny, nz) for 3D
 
     nr, ndim = rgrid.shape
-    rshape = torch.LongTensor(rgrid.shape)
     rgrid = rgrid.view(*boxshape, ndim) # (nx, ny, nz, ndim)
     qgrids = []
     newboxshape = []
+    spacing = nr * ndim
     for i in range(ndim):
-        index = torch.arange(rgrid.shape[i]) * torch.prod(rshape[i:]) + i
+        spacing = spacing // boxshape[i]
+        index = torch.arange(rgrid.shape[i]) * spacing + i
         xgrid = torch.take(rgrid, index=index)
         qgrid = _construct_qgrid_1(xgrid) # (nx,)
         qshape = [qgrid.shape[0] if i==j else 1 for j in range(ndim)] # =(1,ny,1)

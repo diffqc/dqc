@@ -10,8 +10,8 @@ class HamiltonPlaneWave(BaseHamilton):
 
         # set up the space
         self.space = space
-        self.qgrid = self.space.qgrid # (ns)
-        self.q2 = (self.qgrid*self.qgrid).expand(-1,2) # (ns,2)
+        self.qgrid = self.space.qgrid # (ns,ndim)
+        self.q2 = (self.qgrid*self.qgrid).sum(dim=-1,keepdim=True).expand(-1,2) # (ns,2)
 
         rgrid = self.space.rgrid
         boxshape = self.space.boxshape
@@ -36,7 +36,7 @@ class HamiltonPlaneWave(BaseHamilton):
         coeff = self.space.transformsig(wfT, dim=-1) # (nbatch, ncols, ns, 2)
 
         # multiply with |q|^2 and IFT transform it back
-        coeffq2 = coeff * self.q2 # (nbatch, ncols, ns, 2)
+        coeffq2 = -coeff * self.q2 # (nbatch, ncols, ns, 2)
         kin = self.space.invtransformsig(coeffq2, dim=-2) # (nbatch, ncols, nr)
 
         # revert to the original shape
