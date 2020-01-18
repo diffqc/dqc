@@ -22,7 +22,7 @@ def test_dft1d_1():
 
     dtype = torch.float64
     nr = 101
-    rgrid = torch.linspace(-2, 2, nr).to(dtype)
+    rgrid = torch.linspace(-5, 5, nr).to(dtype)
     nlowest = 4
     forward_options = {
         "verbose": False,
@@ -37,7 +37,7 @@ def test_dft1d_1():
     }
     a = torch.tensor([1.0]).to(dtype)
     p = torch.tensor([1.3333]).to(dtype)
-    vext = (rgrid * rgrid).unsqueeze(0).requires_grad_() # (nbatch, nr)
+    vext = (rgrid * rgrid * 0.5).unsqueeze(0).requires_grad_() # (nbatch, nr)
     focc = torch.tensor([[2.0, 2.0, 2.0, 1.0]]).requires_grad_() # (nbatch, nlowest)
 
     def getloss(a, p, vext, focc, return_model=False):
