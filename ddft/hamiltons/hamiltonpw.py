@@ -43,7 +43,7 @@ class HamiltonPlaneWave(BaseHamilton):
         coeff = self.space.transformsig(wfT, dim=-1) # (nbatch, ncols, ns, 2)
 
         # multiply with |q|^2 and IFT transform it back
-        coeffq2 = coeff * self.q2 # (nbatch, ncols, ns, 2)
+        coeffq2 = coeff * self.q2 * 0.5 # (nbatch, ncols, ns, 2)
         kin = self.space.invtransformsig(coeffq2, dim=-2) # (nbatch, ncols, nr)
 
         # revert to the original shape
