@@ -1,6 +1,6 @@
 import torch
 from ddft.modules.base_linear import BaseLinearModule
-from ddft.maths.eigpairs import davidson, exacteig
+from ddft.maths.eigpairs import davidson, exacteig, lanczos
 from ddft.utils.misc import set_default_option
 
 class EigenModule(torch.nn.Module):
@@ -48,6 +48,8 @@ class EigenModule(torch.nn.Module):
             fcn = davidson
         elif method == "exacteig":
             fcn = exacteig
+        elif method == "lanczos":
+            fcn = lanczos
         else:
             raise RuntimeError("Unknown eigen method: %s" % method)
 
