@@ -122,12 +122,12 @@ if __name__ == "__main__":
 
     dtype = torch.float64
     ndim = 3
-    boxshape = [51, 51, 51]
-    boxsizes = [10.0, 10.0, 10.0]
+    boxshape = [51, 51, 51][:ndim]
+    boxsizes = [10.0, 10.0, 10.0][:ndim]
     rgrids = [torch.linspace(-boxsize/2., boxsize/2., nx).to(dtype) for (boxsize,nx) in zip(boxsizes,boxshape)]
     rgrids = torch.meshgrid(*rgrids) # (nx,ny,nz)
     rgrid = torch.cat([rgrid.unsqueeze(-1) for rgrid in rgrids], dim=-1).view(-1,ndim) # (nr,3)
-    nlowest = 1
+    nlowest = 4
     forward_options = {
         "verbose": False,
         "linesearch": False,
@@ -137,15 +137,16 @@ if __name__ == "__main__":
     }
     eigen_options = {
         "method": "davidson",
+        "max_addition": 1,
         "verbose": True
     }
     a = torch.tensor([0.0]).to(dtype)
     p = torch.tensor([1.3333]).to(dtype)
-    rgrid_norm = rgrid.norm(dim=-1)
-    vext = -1./rgrid_norm
-    vext[rgrid_norm < 1e-7] = -1.0/1e-7
+    rgrid_norm = (rgrid-0.012313).norm(dim=-1)
+    vext = -1./(rgrid_norm + 1e-3)
+    # vext = rgrid_norm**2 * 0.5
     vext = vext.unsqueeze(0).requires_grad_()
-    focc = torch.tensor([[1.0]]).requires_grad_() # (nbatch, nlowest)
+    focc = torch.tensor([[1.0, 0.0, 0.0, 0.0]]).requires_grad_() # (nbatch, nlowest)
 
     def getloss(a, p, vext, focc, return_model=False):
         # set up the modules
@@ -163,7 +164,11 @@ if __name__ == "__main__":
         density0 = torch.zeros_like(vext).to(vext.device) # _get_uniform_density(rgrid, nels)
         density = scf_model(density0, vext, focc)
         energy = dft_model.energy(density, vext, focc)
+
         # print(energy)
+        # plt.plot(vext.view(-1).detach().numpy())
+        # plt.plot(density.view(-1).detach().numpy())
+        # plt.show()
 
         # calculate the defined loss function
         loss = (density*density).sum() + (energy*energy).sum()

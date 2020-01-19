@@ -30,12 +30,13 @@ def davidson(A, neig, params, **options):
         The `neig` smallest eigenpairs
     """
     config = set_default_option({
-        "max_niter": 40,
+        "max_niter": 120,
         "nguess": neig+1,
         "min_eps": 1e-6,
         "verbose": False,
         "eps_cond": 1e-6,
         "v_init": "randn",
+        "max_addition": 9e99,
     }, options)
 
     # get some of the options
@@ -44,6 +45,7 @@ def davidson(A, neig, params, **options):
     min_eps = config["min_eps"]
     verbose = config["verbose"]
     eps_cond = config["eps_cond"]
+    max_addition = config["max_addition"]
 
     # get the shape of the transformation
     na = _check_and_get_shape(A)
@@ -59,6 +61,9 @@ def davidson(A, neig, params, **options):
     stop_reason = "max_niter"
     for m in range(nguess, max_niter, nguess):
         VT = V.transpose(-2, -1)
+        # Can be optimized by saving AV from the previous iteration and only
+        # operate AV for the new V. This works because the old V has already
+        # been orthogonalized, so it will stay the same
         AV = A(V, *params) # (nbatch, na, nguess)
         T = torch.bmm(VT, AV) # (nbatch, nguess, nguess)
 
@@ -86,7 +91,8 @@ def davidson(A, neig, params, **options):
 
         nj = eigvalT.shape[1]
         ritz_list = []
-        for i in range(nj):
+        nadd = min(nj, max_addition)
+        for i in range(nadd):
             # precondition the inverse diagonal
             finv = dA - eigvalT[:,i:i+1]
             finv[finv.abs() < eps_cond] = eps_cond
