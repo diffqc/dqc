@@ -110,7 +110,7 @@ def davidson(A, neig, params, **options):
         "verbose": False,
         "eps_cond": 1e-6,
         "v_init": "randn",
-        "max_addition": 9e99,
+        "max_addition": neig,
     }, options)
 
     # get some of the options
