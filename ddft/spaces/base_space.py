@@ -14,7 +14,7 @@ class BaseSpace(object):
     def rgrid(self):
         """
         Returns a tensor which specifies the spatial grid of the signal.
-        The shape is (nr,ndim) or (nr,ndim,2) for complex grid.
+        The shape is (nr,ndim).
         """
         pass
 
@@ -22,7 +22,7 @@ class BaseSpace(object):
     def qgrid(self):
         """
         Returns a tensor specifying the grid on transformed domain.
-        The shape is (ns,ndim) or (ns,ndim,2) for complex grid.
+        The shape is (ns,ndim).
         """
         pass
 
@@ -49,7 +49,7 @@ class BaseSpace(object):
 
         Arguments
         ---------
-        * sig: torch.tensor (...,nr,...) or (...,nr,...,2) for complex
+        * sig: torch.tensor (...,nr,...)
             The signal to be transformed from spatial domain to the other
             domain.
         * dim: int
@@ -57,7 +57,7 @@ class BaseSpace(object):
 
         Returns
         -------
-        * tsig: torch.tensor (...,ns,...) or (...,ns,...,2) for complex
+        * tsig: torch.tensor (...,ns,...)
             The transformed signal.
         """
         pass
@@ -72,14 +72,14 @@ class BaseSpace(object):
 
         Arguments
         ---------
-        * tsig: torch.tensor (...,ns,...) or (...,ns,...,2) for complex
+        * tsig: torch.tensor (...,ns,...)
             The signal in the transformed domain.
         * dim: int
             The dimension where the signal ns is located.
 
         Returns
         -------
-        * sig: torch.tensor (...,nr,...) or (...,nr,...,2) for complex
+        * sig: torch.tensor (...,nr,...)
             The signal in the spatial domain.
         """
         pass

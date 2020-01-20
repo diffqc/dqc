@@ -60,8 +60,7 @@ class DFT(torch.nn.Module):
         eigvals, eigvecs = self.eigen_model(vext_tot)
 
         # normalize the norm of density
-        eigvec_dens = (eigvecs*eigvecs) # (nbatch, nr, nlowest)
-        eigvec_dens = self.H_model.getdens(eigvec_dens)
+        eigvec_dens = self.H_model.getdens(eigvecs) # (nbatch, nr, nlowest)
         dens = eigvec_dens * focc.unsqueeze(1) # (nbatch, nr, nlowest)
         new_density = dens.sum(dim=-1) # (nbatch, nr)
 
@@ -121,7 +120,7 @@ if __name__ == "__main__":
             return vks
 
     dtype = torch.float64
-    ndim = 3
+    ndim = 1
     boxshape = [51, 51, 51][:ndim]
     boxsizes = [10.0, 10.0, 10.0][:ndim]
     rgrids = [torch.linspace(-boxsize/2., boxsize/2., nx).to(dtype) for (boxsize,nx) in zip(boxsizes,boxshape)]
@@ -136,15 +135,15 @@ if __name__ == "__main__":
         "verbose": False
     }
     eigen_options = {
-        "method": "davidson",
-        "max_addition": 1,
+        "method": "exacteig",
+        "max_addition": 4,
         "verbose": True
     }
     a = torch.tensor([0.0]).to(dtype)
     p = torch.tensor([1.3333]).to(dtype)
-    rgrid_norm = (rgrid-0.012313).norm(dim=-1)
-    vext = -1./(rgrid_norm + 1e-3)
-    # vext = rgrid_norm**2 * 0.5
+    rgrid_norm = (rgrid).norm(dim=-1)
+    # vext = -1./(rgrid_norm + 1e-3)
+    vext = rgrid_norm**2 * 0.5
     vext = vext.unsqueeze(0).requires_grad_()
     focc = torch.tensor([[1.0, 0.0, 0.0, 0.0]]).requires_grad_() # (nbatch, nlowest)
 

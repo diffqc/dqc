@@ -11,13 +11,13 @@ class HamiltonPlaneWave(BaseHamilton):
         # set up the space
         self.space = space
         self.qgrid = self.space.qgrid # (ns,ndim)
-        self.q2 = (self.qgrid*self.qgrid).sum(dim=-1,keepdim=True).expand(-1,2) # (ns,2)
+        self.q2 = (self.qgrid*self.qgrid).sum(dim=-1, keepdim=True) # (ns,1)
 
         rgrid = self.space.rgrid # (nr, ndim)
         boxshape = self.space.boxshape # (nx,ny,nz)
         self.ndim = self.space.ndim
-        nr, ndim = rgrid.shape
-        self._shape = (nr, nr)
+        ns, ndim = self.qgrid.shape
+        self._shape = (ns, ns)
 
         # get the pixel size
         idx = 0
@@ -30,30 +30,52 @@ class HamiltonPlaneWave(BaseHamilton):
         self.dr3 = torch.prod(self.pixsize)
         self.inv_dr3 = 1.0 / self.dr3
 
-        # prepare the diagonal part of kinetics
-        self.Kdiag = torch.ones(nr).to(rgrid.dtype).to(rgrid.device) *\
-            (1./self.pixsize**2).sum() # (nr,)
+    def apply(self, wf, vext, *params):
+        # wf: (nbatch, ns, ncols)
+        # vext: (nbatch, nr)
 
-    def kinetics(self, wf):
-        # wf: (nbatch, nr, ncols)
-        # wf consists of points in the real space
+        # the kinetics part is just multiply wf with q^2
+        kin = 0.5 * wf * self.q2 # (nbatch, ns, ncols)
 
-        # perform the operation in q-space, so FT the wf first
-        wfT = wf.transpose(-2, -1) # (nbatch, ncols, nr)
-        coeff = self.space.transformsig(wfT, dim=-1) # (nbatch, ncols, ns, 2)
+        # the potential part is element-wise multiplication in spatial domain
+        # so we need to transform wf to spatial domain first
+        wfbox = self.space.boxifysig(wf.transpose(-2,-1), dim=-1, qdom=True) # (nbatch, ncols, *qboxshape)
+        wfrbox = torch.ifft(wfbox, signal_ndim=self.ndim) # (nbatch, ncols, *boxshape, 2)
+        wfr = self.space.flattensig(wfrbox, dim=-2) # (nbatch, ncols, nr, 2)
+        potr = wfr * vext.unsqueeze(1).unsqueeze(-1) # (nbatch, ncols, nr, 2)
+        potrbox = self.space.boxifysig(potr, dim=-2) # (nbatch, ncols, *boxshape, 2)
+        potbox = torch.fft(potrbox, signal_ndim=self.ndim) # (nbatch, ncols, *qboxshape)
+        pot = self.space.flattensig(potbox, dim=-1, qdom=True).transpose(-1, -2) # (nbatch, ns, ncols)
 
-        # multiply with |q|^2 and IFT transform it back
-        coeffq2 = coeff * self.q2 * 0.5 # (nbatch, ncols, ns, 2)
-        kin = self.space.invtransformsig(coeffq2, dim=-2) # (nbatch, ncols, nr)
+        # wfr = self.space.invtransformsig(wf, dim=1) # (nbatch, nr, ncols)
+        # potr = wfr * vext.unsqueeze(-1) # (nbatch, nr, ncols)
+        # pot = self.space.transformsig(potr, dim=1) # (nbatch, ns, ncols)
 
-        # revert to the original shape
-        return kin.transpose(-2, -1) # (nbatch, nr, ncols)
+        h = kin+pot # (nbatch, ns, ncols)
+        return h
 
-    def kinetics_diag(self, nbatch):
-        return self.Kdiag.unsqueeze(0).expand(nbatch,-1) # (nbatch, nr)
+    def diag(self, vext):
+        # vext: (nbatch, nr)
+        nbatch, nr = vext.shape
 
-    def getdens(self, eigvec2):
-        return eigvec2 * self.inv_dr3
+        # the diagonal from kinetics part: self.q2
+        kin = self.q2.squeeze(-1).unsqueeze(0).expand(nbatch,-1) # (nbatch, ns)
+        ns = kin.shape[1]
+
+        # diagonal from potential part: sum(vext) / sqrt(N)
+        sumvext = vext.sum(dim=-1, keepdim=True) / np.sqrt(nr * 1.0) # (nbatch,1)
+        sumvext = sumvext.expand(-1,ns)
+
+        return kin + sumvext
+
+    def getdens(self, eigvecs):
+        # eigvecs: (nbatch, ns, nlowest)
+        ev = self.space.boxifysig(eigvecs.transpose(-2,-1), dim=-1, qdom=True) # (nbatch, nlowest, *qboxshape)
+        evr = torch.ifft(ev, signal_ndim=self.ndim) # (nbatch, nlowest, *boxshape, 2)
+        densbox = (evr*evr).sum(dim=-1) # (nbatch, nlowest, *boxshape)
+        densflat = self.space.flattensig(densbox, dim=-1).transpose(-2,-1) # (nbatch, nr, nlowest)
+        sumdens = self.integralbox(densflat, dim=1).unsqueeze(1) # (nbatch, 1, nlowest)
+        return densflat / sumdens
 
     def integralbox(self, p, dim=-1):
         return p.sum(dim=dim) * self.dr3

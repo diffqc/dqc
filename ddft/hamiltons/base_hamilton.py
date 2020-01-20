@@ -5,56 +5,49 @@ from ddft.modules.base_linear import BaseLinearModule
 
 class BaseHamilton(BaseLinearModule):
     @abstractmethod
-    def kinetics(self, wf, *params):
+    def apply(self, wf, vext, *params):
         """
-        Compute the kinetics part of the Hamiltonian given the wavefunction, wf.
+        Compute the Hamiltonian of a wavefunction in the chosen domain
+        and external potential in the spatial domain.
+        The wf is located in the chosen domain of the Hamiltonian (having the
+        same shape as qgrid) and vext in the spatial domain (rgrid).
 
         Arguments
         ---------
-        * wf: torch.tensor (nbatch, nr, ncols)
-            The wavefunction with length `nr` each. The value in the tensor
-            indicates the value of wavefunction in the spatial grid given in
-            self.rgrid.
+        * wf: torch.tensor (nbatch, ns, ncols)
+            The wavefunction in the chosen domain
+        * vext: torch.tensor (nbatch, nr)
+            The external potential in spatial domain. This should be the total
+            potential the non-interacting particles feel
+            (i.e. xc, Hartree, and external).
         * *params: list of torch.tensor (nbatch, ...)
             List of parameters that specifies the kinetics part.
 
         Returns
         -------
-        * k: torch.tensor (nbatch, nr, ncols)
-            The kinetics part of the Hamiltonian
+        * h: torch.tensor (nbatch, ns, ncols)
+            The calculated Hamiltonian
         """
         pass
 
     @abstractmethod
-    def kinetics_diag(self, nbatch, *params):
+    def getdens(self, eigvec):
         """
-        Returns the diagonal of the kinetics part of the Hamiltonian.
-
-        Arguments
-        ---------
-        * nbatch: int
-            The number of batch of the kinetics matrix to be returned
-        * *params: list of torch.tensor (nbatch, ...)
-            List of parameters that specifies the kinetics of the Hamiltonian.
-        """
-        pass
-
-    @abstractmethod
-    def getdens(self, eigvec2):
-        """
-        Calculate the density given the square of eigenvectors.
+        Calculate the density given the of eigenvectors in the chosen domain.
         The density returned should fulfill integral{density * dr} = 1.
 
         Arguments
         ---------
-        * eigvec2: torch.tensor (nbatch, nr, neig)
-            The eigenvectors arranged in dimension 1 (i.e. nr). It is assumed
-            that eigvec2.sum(dim=1) == 1
+        * eigvec: torch.tensor (nbatch, ns, neig)
+            The eigenvectors arranged in dimension 1 (i.e. ns). It is assumed
+            that eigvec.sum(dim=1) == 1.
+            The eigenvectors are in the chosen domain.
 
         Returns
         -------
         * density: torch.tensor (nbatch, nr, neig)
             The density where the integral over the space should be equal to 1.
+            The density is in the spatial domain.
         """
         pass
 
@@ -73,13 +66,13 @@ class BaseHamilton(BaseLinearModule):
         """
         return
 
-    ######################## good-to-implement methods ########################
+    @abstractmethod
     def diag(self, vext, *params):
         """
         Returns the diagonal of the matrix for each batch.
+        The return shape: (nbatch, ns)
         """
-        nbatch = vext.shape[0]
-        return vext + self.kinetics_diag(nbatch, *params)
+        pass
 
     ########################### implemented methods ###########################
     def flattensig(self, sig, dim=-1):
@@ -133,27 +126,6 @@ class BaseHamilton(BaseLinearModule):
         return sig.view(*newshape)
 
     def forward(self, wf, vext, *params):
-        """
-        Compute the Hamiltonian of a wavefunction and external potential.
-        The wf and vext should be located at the spatial grid specified in
-        self.rgrid.
-
-        Arguments
-        ---------
-        * wf: torch.tensor (nbatch, nr) or (nbatch, nr, ncols)
-            The wavefunction in spatial domain
-        * vext: torch.tensor (nbatch, nr)
-            The external potential in spatial domain. This should be the total
-            potential the non-interacting particles feel
-            (i.e. xc, Hartree, and external).
-        * *params: list of torch.tensor (nbatch, ...)
-            List of parameters that specifies the kinetics part.
-
-        Returns
-        -------
-        * h: torch.tensor (nbatch, nr) or (nbatch, nr, ncols)
-            The calculated Hamiltonian
-        """
         # wf: (nbatch, nr) or (nbatch, nr, ncols)
         # vext: (nbatch, nr)
 
@@ -162,10 +134,7 @@ class BaseHamilton(BaseLinearModule):
         if wfndim == 2:
             wf = wf.unsqueeze(-1)
 
-        nbatch = wf.shape[0]
-        kinetics = self.kinetics(wf, *params)
-        extpot = vext.unsqueeze(-1) * wf
-        h = kinetics + extpot
+        h = self.apply(wf, vext, *params)
 
         if wfndim == 2:
             h = h.squeeze(-1)
