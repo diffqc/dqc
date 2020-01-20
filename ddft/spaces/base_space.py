@@ -41,7 +41,7 @@ class BaseSpace(object):
         pass
 
     @abstractmethod
-    def transformsig(self, sig, dim=-1):
+    def transformsig(self, sig, dim=-1, rcomplex=False):
         """
         If the Hamiltonian works in non-spatial domain, then this method
         should transform signal from spatial to the intended domain.
@@ -49,11 +49,13 @@ class BaseSpace(object):
 
         Arguments
         ---------
-        * sig: torch.tensor (...,nr,...)
+        * sig: torch.tensor (...,nr,...) or (...,nr,2,...) for complex
             The signal to be transformed from spatial domain to the other
             domain.
         * dim: int
             The dimension where the signal nr is located.
+        * rcomplex: bool
+            If True, then sig is regarded as a complex tensor.
 
         Returns
         -------
@@ -63,7 +65,7 @@ class BaseSpace(object):
         pass
 
     @abstractmethod
-    def invtransformsig(self, tsig, dim=-1):
+    def invtransformsig(self, tsig, dim=-1, rcomplex=False):
         """
         If the Hamiltonian works in non-spatial domain, then this method
         should transform signal from the Hamiltonian domain to the spatial
@@ -76,10 +78,12 @@ class BaseSpace(object):
             The signal in the transformed domain.
         * dim: int
             The dimension where the signal ns is located.
+        * rcomplex: bool
+            If True, then the output signal is regarded as a complex tensor.
 
         Returns
         -------
-        * sig: torch.tensor (...,nr,...)
+        * sig: torch.tensor (...,nr,...) or (...,nr,2,...)
             The signal in the spatial domain.
         """
         pass

@@ -39,17 +39,9 @@ class HamiltonPlaneWave(BaseHamilton):
 
         # the potential part is element-wise multiplication in spatial domain
         # so we need to transform wf to spatial domain first
-        wfbox = self.space.boxifysig(wf.transpose(-2,-1), dim=-1, qdom=True) # (nbatch, ncols, *qboxshape)
-        wfrbox = torch.ifft(wfbox, signal_ndim=self.ndim) # (nbatch, ncols, *boxshape, 2)
-        wfr = self.space.flattensig(wfrbox, dim=-2) # (nbatch, ncols, nr, 2)
-        potr = wfr * vext.unsqueeze(1).unsqueeze(-1) # (nbatch, ncols, nr, 2)
-        potrbox = self.space.boxifysig(potr, dim=-2) # (nbatch, ncols, *boxshape, 2)
-        potbox = torch.fft(potrbox, signal_ndim=self.ndim) # (nbatch, ncols, *qboxshape)
-        pot = self.space.flattensig(potbox, dim=-1, qdom=True).transpose(-1, -2) # (nbatch, ns, ncols)
-
-        # wfr = self.space.invtransformsig(wf, dim=1) # (nbatch, nr, ncols)
-        # potr = wfr * vext.unsqueeze(-1) # (nbatch, nr, ncols)
-        # pot = self.space.transformsig(potr, dim=1) # (nbatch, ns, ncols)
+        wfr = self.space.invtransformsig(wf, dim=1, rcomplex=True) # (nbatch, nr, 2, ncols)
+        potr = wfr * vext.unsqueeze(-1).unsqueeze(-1) # (nbatch, nr, 2, ncols)
+        pot = self.space.transformsig(potr, dim=1, rcomplex=True) # (nbatch, ns, ncols)
 
         h = kin+pot # (nbatch, ns, ncols)
         return h
@@ -70,10 +62,8 @@ class HamiltonPlaneWave(BaseHamilton):
 
     def getdens(self, eigvecs):
         # eigvecs: (nbatch, ns, nlowest)
-        ev = self.space.boxifysig(eigvecs.transpose(-2,-1), dim=-1, qdom=True) # (nbatch, nlowest, *qboxshape)
-        evr = torch.ifft(ev, signal_ndim=self.ndim) # (nbatch, nlowest, *boxshape, 2)
-        densbox = (evr*evr).sum(dim=-1) # (nbatch, nlowest, *boxshape)
-        densflat = self.space.flattensig(densbox, dim=-1).transpose(-2,-1) # (nbatch, nr, nlowest)
+        evr = self.space.invtransformsig(eigvecs, dim=1, rcomplex=True) # (nbatch, nr, 2, nlowest)
+        densflat = (evr*evr).sum(dim=-2) # (nbatch, nr, nlowest)
         sumdens = self.integralbox(densflat, dim=1).unsqueeze(1) # (nbatch, 1, nlowest)
         return densflat / sumdens
 

@@ -34,21 +34,29 @@ class QSpace(BaseSpace):
     def qboxshape(self):
         return self._qboxshape
 
-    def transformsig(self, sig, dim=-1):
-        # sig: (...,nr,...)
+    def transformsig(self, sig, dim=-1, rcomplex=False):
+        # sig: (...,nr,...) or (...,nr,2,...)
 
         # normalize the dim
         ndim = sig.ndim
         if dim < 0:
             dim = ndim + dim
 
+        if rcomplex:
+            sig = sig.view(*sig.shape[:dim], self.nr*2, *sig.shape[dim+2:]) # (...,nr*2,...)
+
         # put the nr at dim=-1
         transposed = (dim != ndim-1)
         if transposed:
             sig = sig.transpose(dim, -1)
 
-        sigbox = self.boxifysig(sig, dim=-1) # (...,...,nx,ny,nz)
-        sigftbox = torch.rfft(sigbox, signal_ndim=3, onesided=False, normalized=True) # (...,nx,ny,nz,2)
+        if rcomplex:
+            sig = sig.view(*sig.shape[:-1], self.nr, 2) # (...,nr,2)
+            sigbox = self.boxifysig(sig, dim=-2) # (...,nx,ny,nz,2)
+            sigftbox = torch.fft(sigbox, signal_ndim=self.ndim, normalized=True) # (...,nx,ny,nz,2)
+        else:
+            sigbox = self.boxifysig(sig, dim=-1) # (...,...,nx,ny,nz)
+            sigftbox = torch.rfft(sigbox, signal_ndim=self.ndim, onesided=False, normalized=True) # (...,nx,ny,nz,2)
         sigft = self.flattensig(sigftbox, dim=-1, qdom=True) # (...,ns)
 
         if transposed:
@@ -56,8 +64,9 @@ class QSpace(BaseSpace):
 
         return sigft # (...,ns,...)
 
-    def invtransformsig(self, tsig, dim=-1):
+    def invtransformsig(self, tsig, dim=-1, rcomplex=False):
         # tsig: (...,ns,...)
+        # return: (...,nr,...) or (...,nr,2,...) if rcomplex
 
         # normalize the dim
         ndim = tsig.ndim
@@ -70,12 +79,20 @@ class QSpace(BaseSpace):
             tsig = tsig.transpose(dim, -1) # (...,ns)
 
         tsigbox = self.boxifysig(tsig, dim=-1, qdom=True) #(...,nx,ny,nz,2)
-        sigbox = torch.irfft(tsigbox, signal_ndim=3, onesided=False, normalized=True) # (...,nx,ny,nz)
-        sig = self.flattensig(sigbox, dim=-1) # (...,nr)
+        if rcomplex:
+            sigbox = torch.ifft(tsigbox, signal_ndim=self.ndim, normalized=True) # (...,nx,ny,nz,2)
+            sig = self.flattensig(sigbox, dim=-2) # (...,nr,2)
+            sig = sig.view(*sig.shape[:-2], self.nr*2) # (...,nr*2)
+        else:
+            sigbox = torch.irfft(tsigbox, signal_ndim=self.ndim, onesided=False, normalized=True) # (...,nx,ny,nz)
+            sig = self.flattensig(sigbox, dim=-1) # (...,nr)
 
         if transposed:
             sig = sig.transpose(dim,-1)
-        return sig # (...,nr,...)
+
+        if rcomplex:
+            sig = sig.view(*sig.shape[:dim], self.nr, 2, *sig.shape[dim+1:])
+        return sig # (...,nr,...) or (...,nr,2,...)
 
 def _construct_qgrid_1(xgrid, full=False):
     N = len(xgrid)
