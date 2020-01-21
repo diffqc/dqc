@@ -44,3 +44,7 @@ class BaseLinearModule(torch.nn.Module):
         msg = "The .diag() method is unimplemented for class %s" % \
               (self.__class__.__name__)
         raise RuntimeError(msg)
+
+    @property
+    def iscomplex(self):
+        return False

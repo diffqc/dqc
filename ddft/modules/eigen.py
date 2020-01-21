@@ -1,5 +1,6 @@
 import torch
 from ddft.modules.base_linear import BaseLinearModule
+from ddft.modules.complex import RealModule, add_zero_imag
 from ddft.maths.eigpairs import davidson, exacteig, lanczos
 from ddft.utils.misc import set_default_option
 
@@ -27,11 +28,20 @@ class EigenModule(torch.nn.Module):
     * eigvals: (nbatch, nlowest)
     * eigvecs: (nbatch, na, nlowest)
         The eigenvalues and eigenvectors of linear transformation module.
+
+    Note
+    ----
+    * If the linear module is a complex operator, then this module only perform
+    eigendecomposition on the real part to remove the degeneracy due to the
+    complex representation.
     """
     def __init__(self, linmodule, nlowest, **options):
         super(EigenModule, self).__init__()
 
-        self.linmodule = linmodule
+        self.module_iscomplex = linmodule.iscomplex
+        if self.module_iscomplex:
+            self.linmodule = RealModule(linmodule)
+            self.complex_linmodule = linmodule
         self.nlowest = nlowest
         self.options = set_default_option({
             "method": "davidson",
@@ -53,8 +63,15 @@ class EigenModule(torch.nn.Module):
         else:
             raise RuntimeError("Unknown eigen method: %s" % method)
 
+        # eigvals: (nbatch, nlowest)
+        # eigvecs: (nbatch, nr, nlowest)
         eigvals, eigvecs = fcn(self.linmodule, self.nlowest,
             params, **self.options)
+
+        if self.module_iscomplex:
+            # add the complex part as all zeros
+            eigvecs = add_zero_imag(eigvecs, dim=1)
+
         return eigvals, eigvecs
 
 if __name__ == "__main__":

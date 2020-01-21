@@ -73,3 +73,7 @@ class HamiltonPlaneWave(BaseHamilton):
     @property
     def shape(self):
         return self._shape
+
+    @property
+    def iscomplex(self):
+        return True
