@@ -46,10 +46,7 @@ def add_zero_imag(x, dim=1):
     d = dim+1
     xzero = torch.zeros_like(x).to(x.device)
     y = torch.cat((x.unsqueeze(d), xzero.unsqueeze(d)), dim=d) # (nbatch, ns//2, 2)
-    if x.ndim == 2:
-        y = y.view(y.shape[0], -1)
-    elif x.ndim == 3:
-        y = y.view(y.shape[0], -1, y.shape[-1])
+    y = y.view(*y.shape[:dim], -1, *y.shape[dim+2:])
     return y
 
 def get_real_part(y, dim=1):
