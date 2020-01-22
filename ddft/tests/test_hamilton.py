@@ -21,6 +21,9 @@ def setup_hamilton(nx, ndim, boxsize, nfreq=1.0, sin=True):
     wf = torch.sum(wf, dim=-1, keepdim=True) # (1,nr,1)
     wfq = space.transformsig(wf, dim=1) # (1,ns,1)
 
+    # assert torch.allclose(space.invtransformsig(wfq, dim=1), wf, atol=1e-5)
+    # assert torch.allclose(space.transformsig(space.invtransformsig(wfq, dim=1), dim=1), wfq, atol=1e-5)
+
     h = HamiltonPlaneWave(space)
     return wf, wfq, h, space
 
@@ -44,7 +47,7 @@ def compare_hamilton_pw_vext(nx, ndim, boxsize=4.0, nfreq=1.0, sin=True):
     hq = h(wfq, vext) # (1,ns,1)
     hr = space.invtransformsig(hq, dim=1) # (1,nr,1)
 
-    kin = wf*(2*np.pi*nfreq)**2/2.0
+    kin = wf*(2*np.pi*nfreq)**2/2.0 # 1/2 * omega^2 * wf
     vext_wf = hr-kin
     vext_wf2 = vext.unsqueeze(-1)*wf
     torch.allclose(vext_wf, vext_wf2, atol=1e-4)

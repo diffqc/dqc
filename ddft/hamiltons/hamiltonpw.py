@@ -39,9 +39,9 @@ class HamiltonPlaneWave(BaseHamilton):
 
         # the potential part is element-wise multiplication in spatial domain
         # so we need to transform wf to spatial domain first
-        wfr = self.space.invtransformsig(wf, dim=1, rcomplex=True) # (nbatch, nr, 2, ncols)
-        potr = wfr * vext.unsqueeze(-1).unsqueeze(-1) # (nbatch, nr, 2, ncols)
-        pot = self.space.transformsig(potr, dim=1, rcomplex=True) # (nbatch, ns, ncols)
+        wfr = self.space.invtransformsig(wf, dim=1) # (nbatch, nr, ncols)
+        potr = wfr * vext.unsqueeze(-1) # (nbatch, nr, ncols)
+        pot = self.space.transformsig(potr, dim=1) # (nbatch, ns, ncols)
 
         h = kin+pot # (nbatch, ns, ncols)
         return h
@@ -62,8 +62,8 @@ class HamiltonPlaneWave(BaseHamilton):
 
     def getdens(self, eigvecs):
         # eigvecs: (nbatch, ns, nlowest)
-        evr = self.space.invtransformsig(eigvecs, dim=1, rcomplex=True) # (nbatch, nr, 2, nlowest)
-        densflat = (evr*evr).sum(dim=-2) # (nbatch, nr, nlowest)
+        evr = self.space.invtransformsig(eigvecs, dim=1) # (nbatch, nr, nlowest)
+        densflat = (evr*evr) # (nbatch, nr, nlowest)
         sumdens = self.integralbox(densflat, dim=1).unsqueeze(1) # (nbatch, 1, nlowest)
         return densflat / sumdens
 
@@ -73,7 +73,3 @@ class HamiltonPlaneWave(BaseHamilton):
     @property
     def shape(self):
         return self._shape
-
-    @property
-    def iscomplex(self):
-        return True

@@ -38,10 +38,9 @@ class EigenModule(torch.nn.Module):
     def __init__(self, linmodule, nlowest, **options):
         super(EigenModule, self).__init__()
 
-        self.module_iscomplex = linmodule.iscomplex
-        if self.module_iscomplex:
-            self.linmodule = RealModule(linmodule)
-            self.complex_linmodule = linmodule
+        if linmodule.iscomplex:
+            raise ValueError("The EigenModule cannot handle complex module (yet).")
+        self.linmodule = linmodule
         self.nlowest = nlowest
         self.options = set_default_option({
             "method": "davidson",
@@ -67,10 +66,6 @@ class EigenModule(torch.nn.Module):
         # eigvecs: (nbatch, nr, nlowest)
         eigvals, eigvecs = fcn(self.linmodule, self.nlowest,
             params, **self.options)
-
-        if self.module_iscomplex:
-            # add the complex part as all zeros
-            eigvecs = add_zero_imag(eigvecs, dim=1)
 
         return eigvals, eigvecs
 
