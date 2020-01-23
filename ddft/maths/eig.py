@@ -53,10 +53,9 @@ class eig(torch.autograd.Function):
 
         # calculate the contribution from grad_evecs
 
-        # With U^-1 * dLdU, it seems to match better than UT * dLdU. Why?
-        # j = 5
-        # B = Hmevals_inv * torch.bmm(UT, dLdU)
-        B = Hmevals_inv * torch.solve(dLdU, U)[0]
+        # orthogonalizing the dLdU first before applying the other operations
+        dLdU_ortho = dLdU - (dLdU * U).sum(dim=-2, keepdim=True) * U
+        B = Hmevals_inv * torch.bmm(UT, dLdU_ortho)
         A = torch.bmm(B, UT)
         # A = torch.bmm(B, torch.inverse(U))
         # Ucontrib = torch.bmm(U, A)
