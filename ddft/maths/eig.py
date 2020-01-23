@@ -15,10 +15,17 @@ class eig(torch.autograd.Function):
         evals = torch.empty(A.shape[0], A.shape[-1]).to(A.dtype).to(A.device)
         for i in range(nbatch):
             evalue, evec = torch.eig(A[i], eigenvectors=True)
-            evecs[i] = evec
-            evals[i] = evalue[:,0]
+
+            # check if the eigenvalues contain complex numbers
             if not torch.allclose(evalue[:,1], torch.zeros_like(evalue[:,1])):
                 raise ValueError("The eigenvalues contain complex numbers")
+
+            # sort eigenvalues from lowest to highest
+            evalue, idxsort = torch.sort(evalue[:,0], dim=-1) # idxsort (na,)
+            evec = torch.index_select(evec, dim=-1, index=idxsort)
+
+            evecs[i] = evec
+            evals[i] = evalue
 
         # reshape the results
         evecs = evecs.view(*Ashape)

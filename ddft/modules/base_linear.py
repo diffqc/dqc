@@ -48,3 +48,7 @@ class BaseLinearModule(torch.nn.Module):
     @property
     def iscomplex(self):
         return False
+
+    @property
+    def issymmetric(self):
+        return True

@@ -123,7 +123,7 @@ if __name__ == "__main__":
     ndim = 1
     boxshape = [51, 51, 51][:ndim]
     boxsizes = [10.0, 10.0, 10.0][:ndim]
-    rgrids = [torch.linspace(-boxsize/2., boxsize/2., nx).to(dtype) for (boxsize,nx) in zip(boxsizes,boxshape)]
+    rgrids = [torch.linspace(-boxsize/2., boxsize/2., nx+1)[:-1].to(dtype) for (boxsize,nx) in zip(boxsizes,boxshape)]
     rgrids = torch.meshgrid(*rgrids) # (nx,ny,nz)
     rgrid = torch.cat([rgrid.unsqueeze(-1) for rgrid in rgrids], dim=-1).view(-1,ndim) # (nr,3)
     nlowest = 4

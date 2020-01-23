@@ -1,5 +1,6 @@
 import torch
 from ddft.utils.misc import set_default_option
+from ddft.maths.eig import eig
 
 """
 This file contains methods to obtain eigenpairs of a linear transformation
@@ -226,7 +227,10 @@ def exacteig(A, neig, params, **options):
 
     # obtain the full matrix of A
     Amatrix = A(V, *params)
-    evals, evecs = torch.symeig(Amatrix, eigenvectors=True)
+    if A.issymmetric:
+        evals, evecs = torch.symeig(Amatrix, eigenvectors=True)
+    else:
+        evals, evecs = eig.apply(Amatrix)
 
     return evals[:,:neig], evecs[:,:,:neig]
 
