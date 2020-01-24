@@ -30,7 +30,7 @@ class BaseHamilton(BaseLinearModule):
         """
         pass
 
-    def applyH(self, wfr, vext, *params):
+    def applyT(self, wfr, vext, *params):
         raise RuntimeError("The tranposed function for class %s is not implemented." %\
             (self.__class__.__name__))
 
@@ -151,7 +151,7 @@ class BaseHamilton(BaseLinearModule):
             wfndim = wf.ndim
             if wfndim == 2:
                 wf = wf.unsqueeze(-1)
-            hT = self.applyH(wf, vext, *params)
+            hT = self.applyT(wf, vext, *params)
             if wfndim == 2:
                 hT = hT.squeeze(-1)
             return hT

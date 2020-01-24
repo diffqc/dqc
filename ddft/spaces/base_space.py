@@ -41,7 +41,7 @@ class BaseSpace(object):
         pass
 
     @abstractmethod
-    def transformsig(self, sig, dim=-1, rcomplex=False):
+    def transformsig(self, sig, dim=-1):
         """
         If the Hamiltonian works in non-spatial domain, then this method
         should transform signal from spatial to the intended domain.
@@ -54,8 +54,6 @@ class BaseSpace(object):
             domain.
         * dim: int
             The dimension where the signal nr is located.
-        * rcomplex: bool
-            If True, then sig is regarded as a complex tensor.
 
         Returns
         -------
@@ -65,7 +63,7 @@ class BaseSpace(object):
         pass
 
     @abstractmethod
-    def invtransformsig(self, tsig, dim=-1, rcomplex=False):
+    def invtransformsig(self, tsig, dim=-1):
         """
         If the Hamiltonian works in non-spatial domain, then this method
         should transform signal from the Hamiltonian domain to the spatial
@@ -78,8 +76,6 @@ class BaseSpace(object):
             The signal in the transformed domain.
         * dim: int
             The dimension where the signal ns is located.
-        * rcomplex: bool
-            If True, then the output signal is regarded as a complex tensor.
 
         Returns
         -------
@@ -88,10 +84,10 @@ class BaseSpace(object):
         """
         pass
 
-    def Htransform(self, tsig, dim=-1, rcomplex=False):
+    def Ttransform(self, tsig, dim=-1):
         """
-        Apply the Hermitian transformation to the signal in the given dimension.
-        If the transform is not unitary, then this method should be implemented.
+        Apply the transposed transformation to the signal in the given dimension.
+        If the transform is not orthogonal, then this method should be implemented.
 
         Arguments
         ---------
@@ -99,8 +95,6 @@ class BaseSpace(object):
             The signal in the transformed domain.
         * dim: int
             The dimension where the signal ns is located.
-        * rcomplex: bool
-            If True, then the output signal is regarded as a complex tensor.
 
         Returns
         -------
@@ -108,17 +102,17 @@ class BaseSpace(object):
             The signal in the spatial domain.
         """
         if self.isorthogonal:
-            return self.invtransformsig(tsig, dim, rcomplex)
+            return self.invtransformsig(tsig, dim)
         else:
-            msg = "The Htransform for non-unitary transform %s has not been implemented." %\
+            msg = "The Ttransform for non-orthogonal transform %s has not been implemented." %\
                    (self.__class__.__name__)
             raise RuntimeError(msg)
 
-    def invHtransform(self, sig, dim=-1, rcomplex=False):
+    def invTtransform(self, sig, dim=-1):
         """
-        Apply the inverse Hermitian transformation to the signal in the given
+        Apply the inverse transposed transformation to the signal in the given
         dimension.
-        If the transform is not unitary, then this method should be implemented.
+        If the transform is not orthogonal, then this method should be implemented.
 
         Arguments
         ---------
@@ -126,8 +120,6 @@ class BaseSpace(object):
             The signal in the spatial domain.
         * dim: int
             The dimension where the signal ns is located.
-        * rcomplex: bool
-            If True, then the output signal is regarded as a complex tensor.
 
         Returns
         -------
@@ -135,9 +127,9 @@ class BaseSpace(object):
             The signal in the transformed domain.
         """
         if self.isorthogonal:
-            return self.transformsig(sig, dim, rcomplex)
+            return self.transformsig(sig, dim)
         else:
-            msg = "The invHtransform for non-unitary transform %s has not been implemented." %\
+            msg = "The invTtransform for non-orthogonal transform %s has not been implemented." %\
                    (self.__class__.__name__)
             raise RuntimeError(msg)
 

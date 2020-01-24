@@ -42,7 +42,7 @@ class QSpace(BaseSpace):
     def qboxshape(self):
         return self._qboxshape
 
-    def transformsig(self, sig, dim=-1, rcomplex=False):
+    def transformsig(self, sig, dim=-1):
         # sig: (...,nr,...)
 
         # normalize the dim (bring the dim to -1)
@@ -64,7 +64,7 @@ class QSpace(BaseSpace):
 
         return sigft # (...,ns,...)
 
-    def invtransformsig(self, tsig, dim=-1, rcomplex=False):
+    def invtransformsig(self, tsig, dim=-1):
         # tsig: (...,ns,...)
         # return: (...,nr,...)
 
@@ -82,8 +82,8 @@ class QSpace(BaseSpace):
             sig = sig.transpose(dim,-1)
         return sig # (...,nr,...)
 
-    def Htransformsig(self, tsig, dim=-1, rcomplex=False):
-        # the Htransformsig of qspace is equal to invtransformsig, but with the
+    def Ttransformsig(self, tsig, dim=-1):
+        # the Ttransformsig of qspace is equal to invtransformsig, but with the
         # non-redundant input signal is halved.
         # tsig : (...,ns,...)
         # return: (...,nr,...)
@@ -93,21 +93,21 @@ class QSpace(BaseSpace):
 
         # halving the middle input signal to invtransformsig
         tsig_half = tsig * self.halv
-        sig = self.invtransformsig(tsig, dim, rcomplex)
+        sig = self.invtransformsig(tsig, dim)
 
         if transposed:
             sig = sig.transpose(dim, -1)
         return sig
 
-    def invHtransformsig(self, sig, dim=-1, rcomplex=False):
-        # the invHtransformsig of qspace is equal to transformsig, but double the
+    def invTtransformsig(self, sig, dim=-1):
+        # the invTtransformsig of qspace is equal to transformsig, but double the
         # middle of output signal
 
         # bring the dim to -1
         sig, transposed = _normalize_dim(sig, dim, -1)
 
         # double the output signal
-        tsig_half = self.transformsig(sig, dim, rcomplex)
+        tsig_half = self.transformsig(sig, dim)
         tsig = tsig_half / self.halv
 
         if transposed:
