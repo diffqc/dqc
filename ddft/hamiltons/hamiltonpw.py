@@ -56,7 +56,7 @@ class HamiltonPlaneWave(BaseHamilton):
         # the potential part is just the hermitian of the forward part
         wfr = self.space.Ttransformsig(wf, dim=1)
         potr = wfr * vext.unsqueeze(-1)
-        pot = self.space.invTtransform(potr, dim=1)
+        pot = self.space.invTtransformsig(potr, dim=1)
 
         hH = kin + pot
         return hH
