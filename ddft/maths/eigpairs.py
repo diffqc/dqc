@@ -1,6 +1,7 @@
 import torch
 from ddft.utils.misc import set_default_option
 from ddft.maths.eig import eig
+from ddft.utils.ortho import orthogonalize, biorthogonalize
 
 """
 This file contains methods to obtain eigenpairs of a linear transformation
@@ -132,6 +133,7 @@ def davidson(A, neig, params, **options):
     V = V.to(dtype).to(device)
     dA = A.diag(*params) # (nbatch, na)
     nsym = not A.issymmetric
+    # nsym = False
     if nsym:
         Vbar = V.clone()
 
@@ -191,39 +193,50 @@ def davidson(A, neig, params, **options):
             AVphi = A(eigvecA[:,:,i], *params) # (nbatch, na)
             lmbdaVphi = eigvalT[:,i:i+1] * eigvecA[:,:,i] # (nbatch, na)
             r = f * (AVphi - lmbdaVphi) # (nbatch, na)
-            ritz_list.append(r.unsqueeze(-1))
+            r = r.unsqueeze(-1)
 
             if nsym:
                 AVphibar = A.T(eigvecAbar[:,:,i], *params)
                 lmbdaVphibar = eigvalT[:,i:i+1] * eigvecAbar[:,:,i]
-                rbar = f * (AVphibar - lmbdaVphibar)
-                ritzbar_list.append(rbar.unsqueeze(-1))
+                rbar = f * (AVphibar - lmbdaVphibar) # (nbatch, na)
+                rbar = rbar.unsqueeze(-1)
 
-        # add the ritz vectors to the guess vectors
-        ritz = torch.cat(ritz_list, dim=-1)
-        ritz = ritz / ritz.norm(dim=1, keepdim=True) # (nbatch, na, nguess)
-        Va = torch.cat((V, ritz), dim=-1)
-        if Va.shape[-1] > na:
-            Va = Va[:,:,-na:]
+            # orthogonalize and bi-orthogonalize
+            if nsym:
+                r = biorthogonalize(V, Vbar, r)
+                rbar = biorthogonalize(Vbar, V, rbar)
+            else:
+                r = orthogonalize(V, r)
+            V = torch.cat((V, r), dim=-1)
+            if nsym:
+                Vbar = torch.cat((Vbar, rbar), dim=-1)
+
+
+        # # add the ritz vectors to the guess vectors
+        # ritz = torch.cat(ritz_list, dim=-1)
+        # ritz = ritz / ritz.norm(dim=1, keepdim=True) # (nbatch, na, nguess)
+        # Va = torch.cat((V, ritz), dim=-1)
+        if V.shape[-1] > na:
+            V = V[:,:,-na:]
 
         if nsym:
-            ritzbar = torch.cat(ritzbar_list, dim=-1)
-            ritzbar = ritzbar / ritzbar.norm(dim=1, keepdim=True)
-            Vabar = torch.cat((Vbar, ritzbar), dim=-1)
-            if Vabar.shape[-1] > na:
-                Vabar = Vabar[:,:,-na:]
+            # ritzbar = torch.cat(ritzbar_list, dim=-1)
+            # ritzbar = ritzbar / ritzbar.norm(dim=1, keepdim=True)
+            # Vabar = torch.cat((Vbar, ritzbar), dim=-1)
+            if Vbar.shape[-1] > na:
+                Vbar = Vbar[:,:,-na:]
 
         # R^{-T} is needed for the backpropagation, so small det(R) will cause
         # numerical instability. So we need to choose ritz that are
         # perpendicular to the current columns of V
 
-        # orthogonalize the new columns of V
-        # bi-orthogonalize?
-        Q, R = torch.qr(Va) # V: (nbatch, na, nguess), R: (nbatch, nguess, nguess)
-        V = Q
-        if nsym:
-            Qbar, Rbar = torch.qr(Vabar) # V: (nbatch, na, nguess), R: (nbatch, nguess, nguess)
-            Vbar = Qbar
+        # # orthogonalize the new columns of V
+        # # bi-orthogonalize?
+        # Q, R = torch.qr(Va) # V: (nbatch, na, nguess), R: (nbatch, nguess, nguess)
+        # V = Q
+        # if nsym:
+        #     Qbar, Rbar = torch.qr(Vabar) # V: (nbatch, na, nguess), R: (nbatch, nguess, nguess)
+        #     Vbar = Qbar
 
     eigvals = eigvalT[:,:neig]
     eigvecs = eigvecA[:,:,:neig]
