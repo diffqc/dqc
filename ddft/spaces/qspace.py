@@ -19,6 +19,13 @@ class QSpace(BaseSpace):
         self._qgrid, self._qboxshape = self._construct_qgrid(rgrid, boxshape)
         self.nr = self._rgrid.shape[0]
 
+        # halving signal for H transforms and inv H transforms
+        self.halv = torch.ones(self._qgrid.shape[0]).to(rgrid.dtype).to(rgrid.device)
+        if self.is_even:
+            self.halv[2:-1] = 0.5
+        else:
+            self.halv[2:] = 0.5
+
     @property
     def rgrid(self):
         return self._rgrid
@@ -38,15 +45,8 @@ class QSpace(BaseSpace):
     def transformsig(self, sig, dim=-1, rcomplex=False):
         # sig: (...,nr,...)
 
-        # normalize the dim
-        ndim = sig.ndim
-        if dim < 0:
-            dim = ndim + dim
-
-        # put the nr at dim=-1
-        transposed = (dim != ndim-1)
-        if transposed:
-            sig = sig.transpose(dim, -1)
+        # normalize the dim (bring the dim to -1)
+        sig, transposed = _normalize_dim(sig, dim, -1)
 
         sigbox = self.boxifysig(sig, dim=-1) # (...,...,nx,ny,nz)
         sigftbox = torch.rfft(sigbox, signal_ndim=self.ndim, onesided=True,
@@ -68,15 +68,8 @@ class QSpace(BaseSpace):
         # tsig: (...,ns,...)
         # return: (...,nr,...)
 
-        # normalize the dim
-        ndim = tsig.ndim
-        if dim < 0:
-            dim = ndim + dim
-
-        # put the nr at dim=-1
-        transposed = (dim != ndim-1)
-        if transposed:
-            tsig = tsig.transpose(dim, -1) # (...,ns)
+        # normalize the dim (bring the dim to -1)
+        tsig, transposed = _normalize_dim(tsig, dim, -1)
 
         tsigbox = self.boxifysig(tsig, dim=-1, qdom=True) #(...,nx,ny,nz)
         # add the redundancy
@@ -88,6 +81,42 @@ class QSpace(BaseSpace):
         if transposed:
             sig = sig.transpose(dim,-1)
         return sig # (...,nr,...)
+
+    def Htransformsig(self, tsig, dim=-1, rcomplex=False):
+        # the Htransformsig of qspace is equal to invtransformsig, but with the
+        # non-redundant input signal is halved.
+        # tsig : (...,ns,...)
+        # return: (...,nr,...)
+
+        # bring the dim to -1
+        tsig, transposed = _normalize_dim(tsig, dim, -1) # tsig: (...,ns)
+
+        # halving the middle input signal to invtransformsig
+        tsig_half = tsig * self.halv
+        sig = self.invtransformsig(tsig, dim, rcomplex)
+
+        if transposed:
+            sig = sig.transpose(dim, -1)
+        return sig
+
+    def invHtransformsig(self, sig, dim=-1, rcomplex=False):
+        # the invHtransformsig of qspace is equal to transformsig, but double the
+        # middle of output signal
+
+        # bring the dim to -1
+        sig, transposed = _normalize_dim(sig, dim, -1)
+
+        # double the output signal
+        tsig_half = self.transformsig(sig, dim, rcomplex)
+        tsig = tsig_half / self.halv
+
+        if transposed:
+            tsig = tsig.transposed(dim, -1)
+        return tsig
+
+    @property
+    def isorthogonal(self):
+        return False
 
     def _construct_qgrid_1(self, xgrid, full=False):
         N = len(xgrid)
@@ -159,3 +188,16 @@ class QSpace(BaseSpace):
             tsigbox_flat = torch.cat((tsigbox_flat[:,:1], redundancy, tsigbox_flat[:,1:]), dim=-1) # (...*nx*ny,nz+1)
         tsigbox = tsigbox_flat.view(*tsigbox.shape[:-1], -1, 2) # (...,nx,ny,nz//2+1,2)
         return tsigbox # (...,nx,ny,nz//2+1,2)
+
+def _normalize_dim(tsig, dim, dest_dim=-1):
+    ndim = tsig.ndim
+    if dim < 0:
+        dim = ndim + dim
+    if dest_dim < 0:
+        dest_dim = ndim + dest_dim
+
+    # put the nr at dim=dest_dim
+    transposed = (dim != dest_dim)
+    if transposed:
+        tsig = tsig.transpose(dim, dest_dim) # (...,ns)
+    return tsig, transposed

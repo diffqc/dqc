@@ -46,6 +46,21 @@ class HamiltonPlaneWave(BaseHamilton):
         h = kin+pot # (nbatch, ns, ncols)
         return h
 
+    def applyH(self, wf, vext, *params):
+        # wf: (nbatch, nr, ncols)
+        # vext: (nbatch, nr)
+
+        # the kinetics part is the same as the forward part
+        kin = 0.5 * wf * self.q2
+
+        # the potential part is just the hermitian of the forward part
+        wfr = self.space.Htransformsig(wf, dim=1)
+        potr = wfr * vext.unsqueeze(-1)
+        pot = self.space.invHtransform(potr, dim=1)
+
+        hH = kin + pot
+        return hH
+
     def diag(self, vext):
         # vext: (nbatch, nr)
         nbatch, nr = vext.shape
@@ -76,4 +91,4 @@ class HamiltonPlaneWave(BaseHamilton):
 
     @property
     def issymmetric(self):
-        return False
+        return self.space.isorthogonal

@@ -88,6 +88,59 @@ class BaseSpace(object):
         """
         pass
 
+    def Htransform(self, tsig, dim=-1, rcomplex=False):
+        """
+        Apply the Hermitian transformation to the signal in the given dimension.
+        If the transform is not unitary, then this method should be implemented.
+
+        Arguments
+        ---------
+        * tsig: torch.tensor (...,ns,...)
+            The signal in the transformed domain.
+        * dim: int
+            The dimension where the signal ns is located.
+        * rcomplex: bool
+            If True, then the output signal is regarded as a complex tensor.
+
+        Returns
+        -------
+        * sig: torch.tensor (...,nr,...) or (...,nr,2,...)
+            The signal in the spatial domain.
+        """
+        if self.isorthogonal:
+            return self.invtransformsig(tsig, dim, rcomplex)
+        else:
+            msg = "The Htransform for non-unitary transform %s has not been implemented." %\
+                   (self.__class__.__name__)
+            raise RuntimeError(msg)
+
+    def invHtransform(self, sig, dim=-1, rcomplex=False):
+        """
+        Apply the inverse Hermitian transformation to the signal in the given
+        dimension.
+        If the transform is not unitary, then this method should be implemented.
+
+        Arguments
+        ---------
+        * sig: torch.tensor (...,nr,...)
+            The signal in the spatial domain.
+        * dim: int
+            The dimension where the signal ns is located.
+        * rcomplex: bool
+            If True, then the output signal is regarded as a complex tensor.
+
+        Returns
+        -------
+        * tsig: torch.tensor (...,ns,...) or (...,ns,2,...)
+            The signal in the transformed domain.
+        """
+        if self.isorthogonal:
+            return self.transformsig(sig, dim, rcomplex)
+        else:
+            msg = "The invHtransform for non-unitary transform %s has not been implemented." %\
+                   (self.__class__.__name__)
+            raise RuntimeError(msg)
+
     def flattensig(self, sig, dim=-1, qdom=False):
         """
         Flatten the signal whose shape is (...,*boxshape,...) into
@@ -146,3 +199,7 @@ class BaseSpace(object):
     @property
     def ndim(self):
         return self.rgrid.shape[1]
+
+    @property
+    def isorthogonal(self):
+        return True

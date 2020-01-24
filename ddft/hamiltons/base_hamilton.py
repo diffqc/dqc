@@ -30,6 +30,10 @@ class BaseHamilton(BaseLinearModule):
         """
         pass
 
+    def applyH(self, wfr, vext, *params):
+        raise RuntimeError("The tranposed function for class %s is not implemented." %\
+            (self.__class__.__name__))
+
     @abstractmethod
     def getdens(self, eigvec):
         """
@@ -139,3 +143,15 @@ class BaseHamilton(BaseLinearModule):
         if wfndim == 2:
             h = h.squeeze(-1)
         return h
+
+    def transpose(self, wf, vext, *params):
+        if self.issymmetric:
+            return self.forward(wf, vext, *params)
+        else:
+            wfndim = wf.ndim
+            if wfndim == 2:
+                wf = wf.unsqueeze(-1)
+            hT = self.applyH(wf, vext, *params)
+            if wfndim == 2:
+                hT = hT.squeeze(-1)
+            return hT
