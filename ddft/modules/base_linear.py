@@ -28,12 +28,22 @@ class BaseLinearModule(torch.nn.Module):
         """
         pass
 
+    @abstractmethod
+    def transpose(self, y, *params):
+        pass
+
     @abstractproperty
     def shape(self):
         """
         Returns (nrows, ncols)
         """
         pass
+
+    @property
+    def T(self):
+        if not hasattr(self, "_T"):
+            self._T = TransposeModule(self)
+        return self._T
 
     def diag(self, *params):
         """
@@ -46,9 +56,32 @@ class BaseLinearModule(torch.nn.Module):
         raise RuntimeError(msg)
 
     @property
-    def iscomplex(self):
-        return False
+    def issymmetric(self):
+        return True
+
+class TransposeModule(BaseLinearModule):
+    def __init__(self, model):
+        super(TransposeModule, self).__init__()
+        self.model = model
+        self._shape = [model.shape[1], model.shape[0]]
+
+    def forward(self, x, *args):
+        return self.model.transpose(x, *args)
+
+    def transpose(self, x, *args):
+        return self.model(x, *args)
+
+    @property
+    def T(self):
+        return self.model
+
+    @property
+    def shape(self):
+        return self._shape
+
+    def diag(self, *params):
+        return self.model.diag(*params)
 
     @property
     def issymmetric(self):
-        return True
+        return self.model.issymmetric
