@@ -93,7 +93,7 @@ class QSpace(BaseSpace):
 
         # halving the middle input signal to invtransformsig
         tsig_half = tsig * self.halv
-        sig = self.invtransformsig(tsig, -1)
+        sig = self.invtransformsig(tsig_half, -1)
 
         if transposed:
             sig = sig.transpose(dim, -1)
