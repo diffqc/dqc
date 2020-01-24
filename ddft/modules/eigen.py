@@ -38,8 +38,6 @@ class EigenModule(torch.nn.Module):
     def __init__(self, linmodule, nlowest, **options):
         super(EigenModule, self).__init__()
 
-        if linmodule.iscomplex:
-            raise ValueError("The EigenModule cannot handle complex module (yet).")
         self.linmodule = linmodule
         self.nlowest = nlowest
         self.options = set_default_option({
