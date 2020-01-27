@@ -92,3 +92,31 @@ class HamiltonPlaneWave(BaseHamilton):
     @property
     def issymmetric(self):
         return self.space.isorthogonal
+
+class HamiltonPlaneWaveSpatial(HamiltonPlaneWave):
+    def __init__(self, space):
+        super(HamiltonPlaneWaveSpatial, self).__init__(space)
+
+    def apply(self, wf, vext, *params):
+        # wf: (nbatch, nr, ncols)
+        # vext: (nbatch, nr)
+
+        # the kinetics part is q2 in qspace
+        wfq = self.space.transformsig(wf, dim=1)
+        kinq = 0.5 * wfq * self.q2
+        kin = self.space.invtransformsig(kinq, dim=1)
+
+        # the potential is just pointwise multiplication
+        pot = wf * vext.unsqueeze(-1)
+
+        return kin+pot
+
+    def getdens(self, eigvecs):
+        # eigvecs: (nbatch, nr, nlowest)
+        dens = (eigvecs * eigvecs)
+        sumdens = self.integralbox(dens, dim=1).unsqueeze(1)
+        return dens / sumdens
+
+    @property
+    def issymmetric(self):
+        return True
