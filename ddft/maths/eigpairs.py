@@ -8,6 +8,50 @@ This file contains methods to obtain eigenpairs of a linear transformation
     which is a subclass of ddft.modules.base_linear.BaseLinearModule
 """
 
+class eigendecomp(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, A, neig, options, *params):
+        config = set_default_option({
+            "method": "davidson",
+        }, options)
+
+        if config["method"] == "davidson":
+            evals, evecs = davidson(A, neig, params, **options)
+        elif config["method"] == "lanczos":
+            evals, evecs = lanczos(A, neig, params, **options)
+        elif config ["method"] == "exacteig":
+            evals, evecs = exacteig(A, neig, params, **options)
+        else:
+            raise RuntimeError("Unknown eigen decomposition method: %s" % config["method"])
+
+        # save for the backward
+        ctx.evals = evals # (nbatch, neig)
+        ctx.evecs = evecs # (nbatch, na, neig)
+        ctx.neig = neig
+        ctx.params = params
+        ctx.A = A
+        return evals, evecs
+
+    @staticmethod
+    def backward(ctx, grad_evals, grad_evecs):
+        # make the diagonal only A
+        V = ctx.evecs.detach() # (nbatch, na, neig)
+        with torch.enable_grad():
+            AV = ctx.A(V, *ctx.params) # (nbatch, na, neig)
+            VTAV = torch.bmm(V.transpose(-2,-1), AV) # (nbatch, neig, neig)
+
+            # evals: (nbatch, neig)
+            # evecsH: (nbatch, neig, neig)
+            evals, evecsH = torch.symeig(VTAV, eigenvectors=True)
+            evecs = torch.bmm(V, evecsH)
+
+        # contribution from evals and evecs
+        grad_params = torch.autograd.grad((evals, evecs), ctx.params,
+            grad_outputs=(grad_evals, grad_evecs),
+            create_graph=torch.is_grad_enabled())
+
+        return (None, None, None, *grad_params)
+
 def lanczos(A, neig, params, **options):
     """
     Lanczos iterative method to obtain the `neig` lowest eigenpairs.
@@ -132,7 +176,6 @@ def davidson(A, neig, params, **options):
     V = _set_initial_v(config["v_init"].lower(), nbatch, na, nguess) # (nbatch,na,nguess)
     V = V.to(dtype).to(device)
     dA = A.diag(*params) # (nbatch, na)
-    nsym = not A.issymmetric
 
     prev_eigvals = None
     stop_reason = "max_niter"
@@ -147,10 +190,7 @@ def davidson(A, neig, params, **options):
 
         # eigvals are sorted from the lowest
         # eval: (nbatch, nguess), evec: (nbatch, nguess, nguess)
-        if nsym:
-            eigvalT, eigvecT = eig.apply(T)
-        else:
-            eigvalT, eigvecT = torch.symeig(T, eigenvectors=True)
+        eigvalT, eigvecT = torch.symeig(T, eigenvectors=True)
         eigvecA = torch.bmm(V, eigvecT) # (nbatch, na, nguess)
 
         # check the convergence
@@ -234,10 +274,7 @@ def exacteig(A, neig, params, **options):
 
     # obtain the full matrix of A
     Amatrix = A(V, *params)
-    if A.issymmetric:
-        evals, evecs = torch.symeig(Amatrix, eigenvectors=True)
-    else:
-        evals, evecs = eig.apply(Amatrix)
+    evals, evecs = torch.symeig(Amatrix, eigenvectors=True)
 
     return evals[:,:neig], evecs[:,:,:neig]
 
@@ -274,3 +311,56 @@ def _set_initial_v(vinit_type, nbatch, na, nguess):
     if not ortho:
         V, R = torch.qr(V)
     return V
+
+if __name__ == "__main__":
+    from ddft.utils.fd import finite_differences
+
+    # generate the matrix
+    na = 10
+    dtype = torch.float64
+    A1 = (torch.rand((1,na,na))*1).to(dtype).requires_grad_(True)
+    diag = torch.arange(na, dtype=dtype).unsqueeze(0).requires_grad_(True)
+
+    class Acls:
+        def __call__(self, x, A1, diag):
+            Amatrix = (A1 + A1.transpose(-2,-1))
+            A = Amatrix + diag.diag_embed(dim1=-2, dim2=-1)
+            print(A.shape, x.shape)
+            return torch.bmm(A, x)
+
+        def parameters(self):
+            return []
+
+        @property
+        def shape(self):
+            return (na,na)
+
+        # def diag(self, A1, dg):
+        #     return dg
+
+    def getloss(A1, diag):
+        A = Acls()
+        options = {
+            "method": "exacteig",
+        }
+        evals, evecs = eigendecomp.apply(A, 3, options, A1, diag)
+        loss = (evals**2).sum() + (evecs**2).sum()
+        return loss
+
+    loss = getloss(A1, diag)
+    loss.backward()
+    print("Backward done")
+    Agrad = A1.grad.data
+    dgrad = diag.grad.data
+
+    Afd = finite_differences(getloss, (A1, diag,), 0, eps=1e-5)
+    dfd = finite_differences(getloss, (A1, diag,), 1, eps=1e-5)
+    print("Finite differences done")
+
+    print(Agrad)
+    print(Afd)
+    print(Agrad/Afd)
+
+    print(dgrad)
+    print(dfd)
+    print(dgrad/dfd)
