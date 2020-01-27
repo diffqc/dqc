@@ -24,9 +24,12 @@ def fcntest_qspace(nx, ndim, boxsize, nfreq=1.0, sin=True):
 
 def test_qspace_1d():
     fcntest_qspace(101, 1, 5.0)
+    fcntest_qspace(100, 1, 5.0)
 
-# def test_qspace_2d():
-#     fcntest_qspace(51, 2, 5.0)
-#
-# def test_qspace_3d():
-#     fcntest_qspace(31, 3, 5.0)
+def test_qspace_2d():
+    fcntest_qspace(51, 2, 5.0)
+    fcntest_qspace(50, 2, 5.0)
+
+def test_qspace_3d():
+    fcntest_qspace(31, 3, 5.0)
+    fcntest_qspace(30, 3, 5.0)

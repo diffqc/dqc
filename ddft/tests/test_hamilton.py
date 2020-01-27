@@ -60,11 +60,11 @@ def test_hamilton_pw_kinetics():
     compare_hamilton_pw_kinetics(101, 1, nfreq=12.0, sin=False)
     compare_hamilton_pw_kinetics(101, 1, nfreq=12.0, sin=True)
 
-# def test_hamilton_pw_kinetics2d():
-#     compare_hamilton_pw_kinetics(51, 2)
-#
-# def test_hamilton_pw_kinetics3d():
-#     compare_hamilton_pw_kinetics(31, 3)
+def test_hamilton_pw_kinetics2d():
+    compare_hamilton_pw_kinetics(51, 2)
+
+def test_hamilton_pw_kinetics3d():
+    compare_hamilton_pw_kinetics(31, 3)
 
 def test_hamilton_pw_vext():
     compare_hamilton_pw_vext(101, 1)
@@ -74,8 +74,8 @@ def test_hamilton_pw_vext():
     compare_hamilton_pw_kinetics(101, 1, nfreq=12.0, sin=False)
     compare_hamilton_pw_kinetics(101, 1, nfreq=12.0, sin=True)
 
-# def test_hamilton_pw_vext2d():
-#     compare_hamilton_pw_vext(51, 2)
-#
-# def test_hamilton_pw_vext3d():
-#     compare_hamilton_pw_vext(31, 3)
+def test_hamilton_pw_vext2d():
+    compare_hamilton_pw_vext(51, 2)
+
+def test_hamilton_pw_vext3d():
+    compare_hamilton_pw_vext(31, 3)

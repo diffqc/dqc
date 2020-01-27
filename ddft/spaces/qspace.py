@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 from ddft.spaces.base_space import BaseSpace
+from ddft.maths.rfft import rfft, irfft
 
 class QSpace(BaseSpace):
     """
@@ -16,7 +17,7 @@ class QSpace(BaseSpace):
         self._rgrid = rgrid
         self._boxshape = boxshape
         self.is_even = (boxshape[-1]%2 == 0)
-        self._qgrid, self._qboxshape = self._construct_qgrid(rgrid, boxshape)
+        self._qgrid, self._qboxshape = _construct_qgrid(rgrid, boxshape)
         self.nr = self._rgrid.shape[0]
 
         # halving signal for H transforms and inv H transforms
@@ -49,15 +50,8 @@ class QSpace(BaseSpace):
         sig, transposed = _normalize_dim(sig, dim, -1)
 
         sigbox = self.boxifysig(sig, dim=-1) # (...,...,nx,ny,nz)
-        sigftbox = torch.rfft(sigbox, signal_ndim=self.ndim, onesided=True,
-                normalized=True) # (...,nx,ny,nz//2+1,2)
-
-        # for real fft, there are still redundancy even if we put onesided=True
-        # for even n, the redundancies are in imag(X_0)=0 and imag(X_(N/2))=0
-        # for odd n, the redundancy is in imag(X_0)=0
-        sigftbox_eff = self._remove_redundancy(sigftbox) # (...,nx,ny,nz)
-
-        sigft = self.flattensig(sigftbox_eff, dim=-1, qdom=True) # (...,ns)
+        sigftbox = rfft(sigbox, signal_ndim=self.ndim, normalized=True) # (...,nx,ny,nz)
+        sigft = self.flattensig(sigftbox, dim=-1, qdom=True) # (...,ns)
 
         if transposed:
             sigft = sigft.transpose(dim,-1)
@@ -72,10 +66,7 @@ class QSpace(BaseSpace):
         tsig, transposed = _normalize_dim(tsig, dim, -1)
 
         tsigbox = self.boxifysig(tsig, dim=-1, qdom=True) #(...,nx,ny,nz)
-        # add the redundancy
-        tsigbox = self._add_redundancy(tsigbox)
-        sigbox = torch.irfft(tsigbox, signal_ndim=self.ndim, onesided=True,
-                normalized=True, signal_sizes=self.boxshape) # (...,nx,ny,nz)
+        sigbox = irfft(tsigbox, signal_ndim=self.ndim, normalized=True) # (...,nx,ny,nz)
         sig = self.flattensig(sigbox, dim=-1) # (...,nr)
 
         if transposed:
@@ -118,76 +109,43 @@ class QSpace(BaseSpace):
     def isorthogonal(self):
         return False
 
-    def _construct_qgrid_1(self, xgrid, full=False):
-        N = len(xgrid)
-        dr = xgrid[1] - xgrid[0]
-        boxsize = xgrid[-1] - xgrid[0]
-        dq = 2*np.pi / (N * dr)
-        Nhalf = (N // 2) + 1
-        offset = (N + 1) % 2
-        qgrid_lhalf = torch.arange(Nhalf)
-        qgrid_rhalf = -torch.arange(Nhalf-offset-1,0,-1)
-        if full:
-            qgrid = torch.cat((qgrid_lhalf, qgrid_rhalf))
-        else:
-            qgrid = qgrid_lhalf
-        qgrid = qgrid.to(xgrid.dtype).to(xgrid.device) * dq
-        return qgrid
+def _construct_qgrid_1(xgrid):
+    N = len(xgrid)
+    dr = xgrid[1] - xgrid[0]
+    boxsize = xgrid[-1] - xgrid[0]
+    dq = 2*np.pi / (N * dr)
+    Nhalf = (N // 2) + 1
+    offset = (N + 1) % 2
+    qgrid = torch.arange(Nhalf)
+    qgrid = qgrid.to(xgrid.dtype).to(xgrid.device) * dq
+    return qgrid
 
-    def _construct_qgrid(self, rgrid, boxshape):
-        # rgrid: (nr, ndim)
-        # boxshape = (nx, ny, nz) for 3D
+def _construct_qgrid(rgrid, boxshape):
+    # rgrid: (nr, ndim)
+    # boxshape = (nx, ny, nz) for 3D
 
-        nr, ndim = rgrid.shape
-        rgrid = rgrid.view(*boxshape, ndim) # (nx, ny, nz, ndim)
-        qgrids = []
-        newboxshape = []
-        spacing = nr * ndim
-        for i in range(ndim):
-            spacing = spacing // boxshape[i]
-            index = torch.arange(rgrid.shape[i]) * spacing + i
-            xgrid = torch.take(rgrid, index=index)
-            qgrid = self._construct_qgrid_1(xgrid, full=(i<ndim-1)) # (nx,)
-            qshape = [qgrid.shape[0] if i==j else 1 for j in range(ndim+1)] # =(1,ny,1,1)
-            newboxshape.append(qgrid.shape[0])
-            qgrids.append(qgrid.view(*qshape))
+    nr, ndim = rgrid.shape
+    rgrid = rgrid.view(*boxshape, ndim) # (nx, ny, nz, ndim)
+    qgrids = []
+    spacing = nr * ndim
+    for i in range(ndim):
+        spacing = spacing // boxshape[i]
+        na = rgrid.shape[i]
+        index = torch.arange(rgrid.shape[i]) * spacing + i
+        xgrid = torch.take(rgrid, index=index)
+        qgrid = _construct_qgrid_1(xgrid) # (nx//2+1,)
+        qgrid_double = torch.repeat_interleave(qgrid, 2, dim=-1) # ((nx//2)*2+2)
 
-        newboxshape = newboxshape + [2] # 2 for cosine and sine factor (or real & imag)
-        newboxshape = tuple(newboxshape)
-        for i in range(ndim):
-            qgridsi = qgrids[i].expand(*newboxshape).contiguous() # (nx,ny,nz//2+1,2)
-            # remove the redundancy
-            qgrids_eff = self._remove_redundancy(qgridsi) # (nx,ny,nz)
+        # remove the redundancy
+        if na%2 == 0: # is even
+            qgrideff = qgrid_double[1:-1]
+        else: # odd
+            qgrideff = qgrid_double[1:] # (nx,)
+        qshape = [qgrideff.shape[0] if i==j else 1 for j in range(ndim)] # =(1,ny,1,1)
+        qgrids.append(qgrideff.view(*qshape).expand(*boxshape).unsqueeze(-1)) # (nx,ny,nz,1)
 
-            qgrids[i] = qgrids_eff.unsqueeze(-1) # (nx,ny,nz,1)
-
-        qgrid = torch.cat(qgrids, dim=-1).view(-1,ndim) # (ns,ndim)
-        return qgrid, boxshape
-
-    def _remove_redundancy(self, sig):
-        # sig: (...,nz//2+1, 2)
-        sigflat = sig.view(*sig.shape[:-2], -1) # (...,(nz//2)*2+2)
-        nlast = sigflat.shape[-1]
-
-        # check the index
-        if not hasattr(self, "redundancy_index"):
-            if self.is_even:
-                self.redundancy_index = torch.LongTensor([i for i in range(nlast) if (i!=1 and i!=(nlast-1))])
-            else:
-                self.redundancy_index = torch.LongTensor([i for i in range(nlast) if (i!=1)])
-        sig_eff = sigflat.index_select(dim=-1, index=self.redundancy_index) # (...,nz)
-        return sig_eff
-
-    def _add_redundancy(self, tsigbox):
-        # tsigbox: (...,nx,ny,nz)
-        tsigbox_flat = tsigbox.view(-1,tsigbox.shape[-1]) # (...*nx*ny,nz)
-        redundancy = torch.zeros(tsigbox_flat.shape[0], 1).to(tsigbox.dtype).to(tsigbox.device)
-        if self.is_even:
-            tsigbox_flat = torch.cat((tsigbox_flat[:,:1], redundancy, tsigbox_flat[:,1:-1], redundancy), dim=-1) # (...*nx*ny,nz+2)
-        else:
-            tsigbox_flat = torch.cat((tsigbox_flat[:,:1], redundancy, tsigbox_flat[:,1:]), dim=-1) # (...*nx*ny,nz+1)
-        tsigbox = tsigbox_flat.view(*tsigbox.shape[:-1], -1, 2) # (...,nx,ny,nz//2+1,2)
-        return tsigbox # (...,nx,ny,nz//2+1,2)
+    qgrid = torch.cat(qgrids, dim=-1).view(-1,ndim)
+    return qgrid, boxshape
 
 def _normalize_dim(tsig, dim, dest_dim=-1):
     ndim = tsig.ndim
