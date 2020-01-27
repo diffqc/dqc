@@ -7,15 +7,17 @@ class BaseHamilton(BaseLinearModule):
     @abstractmethod
     def apply(self, wf, vext, *params):
         """
-        Compute the Hamiltonian of a wavefunction in the chosen domain
+        Compute the Hamiltonian of a wavefunction in the spatial domain
         and external potential in the spatial domain.
-        The wf is located in the chosen domain of the Hamiltonian (having the
+        The wf is located in the spatial domain of the Hamiltonian (having the
         same shape as qgrid) and vext in the spatial domain (rgrid).
+        The interpretation of boundary condition and interpolation between
+        points in the spatial domain depends on the chosen space.
 
         Arguments
         ---------
-        * wf: torch.tensor (nbatch, ns, ncols)
-            The wavefunction in the chosen domain
+        * wf: torch.tensor (nbatch, nr, ncols)
+            The wavefunction in the spatial domain
         * vext: torch.tensor (nbatch, nr)
             The external potential in spatial domain. This should be the total
             potential the non-interacting particles feel
@@ -25,27 +27,22 @@ class BaseHamilton(BaseLinearModule):
 
         Returns
         -------
-        * h: torch.tensor (nbatch, ns, ncols)
+        * h: torch.tensor (nbatch, nr, ncols)
             The calculated Hamiltonian
         """
         pass
 
-    def applyT(self, wfr, vext, *params):
-        raise RuntimeError("The tranposed function for class %s is not implemented." %\
-            (self.__class__.__name__))
-
     @abstractmethod
     def getdens(self, eigvec):
         """
-        Calculate the density given the of eigenvectors in the chosen domain.
+        Calculate the density given the eigenvectors.
         The density returned should fulfill integral{density * dr} = 1.
 
         Arguments
         ---------
-        * eigvec: torch.tensor (nbatch, ns, neig)
+        * eigvec: torch.tensor (nbatch, nr, neig)
             The eigenvectors arranged in dimension 1 (i.e. ns). It is assumed
             that eigvec.sum(dim=1) == 1.
-            The eigenvectors are in the chosen domain.
 
         Returns
         -------

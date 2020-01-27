@@ -16,14 +16,14 @@ class HamiltonPlaneWave(BaseHamilton):
         rgrid = self.space.rgrid # (nr, ndim)
         boxshape = self.space.boxshape # (nx,ny,nz)
         self.ndim = self.space.ndim
-        ns, ndim = self.qgrid.shape
-        self._shape = (ns, ns)
+        nr, self.ndim = rgrid.shape
+        self._shape = (nr, nr)
 
         # get the pixel size
         idx = 0
         allshape = (*boxshape, rgrid.shape[-1])
         m = 1
-        for i in range(ndim,0,-1):
+        for i in range(self.ndim,0,-1):
             m *= allshape[i]
             idx += m
         self.pixsize = rgrid[idx,:] - rgrid[0,:] # (ndim,)
@@ -34,32 +34,15 @@ class HamiltonPlaneWave(BaseHamilton):
         # wf: (nbatch, ns, ncols)
         # vext: (nbatch, nr)
 
-        # the kinetics part is just multiply wf with q^2
-        kin = 0.5 * wf * self.q2 # (nbatch, ns, ncols)
+        # the kinetics part is q2 in qspace
+        wfq = self.space.transformsig(wf, dim=1)
+        kinq = 0.5 * wfq * self.q2
+        kin = self.space.invtransformsig(kinq, dim=1)
 
-        # the potential part is element-wise multiplication in spatial domain
-        # so we need to transform wf to spatial domain first
-        wfr = self.space.invtransformsig(wf, dim=1) # (nbatch, nr, ncols)
-        potr = wfr * vext.unsqueeze(-1) # (nbatch, nr, ncols)
-        pot = self.space.transformsig(potr, dim=1) # (nbatch, ns, ncols)
+        # the potential is just pointwise multiplication
+        pot = wf * vext.unsqueeze(-1)
 
-        h = kin+pot # (nbatch, ns, ncols)
-        return h
-
-    def applyT(self, wf, vext, *params):
-        # wf: (nbatch, nr, ncols)
-        # vext: (nbatch, nr)
-
-        # the kinetics part is the same as the forward part
-        kin = 0.5 * wf * self.q2
-
-        # the potential part is just the hermitian of the forward part
-        wfr = self.space.Ttransformsig(wf, dim=1)
-        potr = wfr * vext.unsqueeze(-1)
-        pot = self.space.invTtransformsig(potr, dim=1)
-
-        hH = kin + pot
-        return hH
+        return kin+pot
 
     def diag(self, vext):
         # vext: (nbatch, nr)
@@ -76,11 +59,10 @@ class HamiltonPlaneWave(BaseHamilton):
         return kin + sumvext
 
     def getdens(self, eigvecs):
-        # eigvecs: (nbatch, ns, nlowest)
-        evr = self.space.invtransformsig(eigvecs, dim=1) # (nbatch, nr, nlowest)
-        densflat = (evr*evr) # (nbatch, nr, nlowest)
-        sumdens = self.integralbox(densflat, dim=1).unsqueeze(1) # (nbatch, 1, nlowest)
-        return densflat / sumdens
+        # eigvecs: (nbatch, nr, nlowest)
+        dens = (eigvecs * eigvecs)
+        sumdens = self.integralbox(dens, dim=1).unsqueeze(1)
+        return dens / sumdens
 
     def integralbox(self, p, dim=-1):
         return p.sum(dim=dim) * self.dr3
@@ -88,35 +70,3 @@ class HamiltonPlaneWave(BaseHamilton):
     @property
     def shape(self):
         return self._shape
-
-    @property
-    def issymmetric(self):
-        return self.space.isorthogonal
-
-class HamiltonPlaneWaveSpatial(HamiltonPlaneWave):
-    def __init__(self, space):
-        super(HamiltonPlaneWaveSpatial, self).__init__(space)
-
-    def apply(self, wf, vext, *params):
-        # wf: (nbatch, nr, ncols)
-        # vext: (nbatch, nr)
-
-        # the kinetics part is q2 in qspace
-        wfq = self.space.transformsig(wf, dim=1)
-        kinq = 0.5 * wfq * self.q2
-        kin = self.space.invtransformsig(kinq, dim=1)
-
-        # the potential is just pointwise multiplication
-        pot = wf * vext.unsqueeze(-1)
-
-        return kin+pot
-
-    def getdens(self, eigvecs):
-        # eigvecs: (nbatch, nr, nlowest)
-        dens = (eigvecs * eigvecs)
-        sumdens = self.integralbox(dens, dim=1).unsqueeze(1)
-        return dens / sumdens
-
-    @property
-    def issymmetric(self):
-        return True

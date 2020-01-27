@@ -84,55 +84,6 @@ class BaseSpace(object):
         """
         pass
 
-    def Ttransformsig(self, tsig, dim=-1):
-        """
-        Apply the transposed transformation to the signal in the given dimension.
-        If the transform is not orthogonal, then this method should be implemented.
-
-        Arguments
-        ---------
-        * tsig: torch.tensor (...,ns,...)
-            The signal in the transformed domain.
-        * dim: int
-            The dimension where the signal ns is located.
-
-        Returns
-        -------
-        * sig: torch.tensor (...,nr,...) or (...,nr,2,...)
-            The signal in the spatial domain.
-        """
-        if self.isorthogonal:
-            return self.invtransformsig(tsig, dim)
-        else:
-            msg = "The Ttransformsig for non-orthogonal transform %s has not been implemented." %\
-                   (self.__class__.__name__)
-            raise RuntimeError(msg)
-
-    def invTtransformsig(self, sig, dim=-1):
-        """
-        Apply the inverse transposed transformation to the signal in the given
-        dimension.
-        If the transform is not orthogonal, then this method should be implemented.
-
-        Arguments
-        ---------
-        * sig: torch.tensor (...,nr,...)
-            The signal in the spatial domain.
-        * dim: int
-            The dimension where the signal ns is located.
-
-        Returns
-        -------
-        * tsig: torch.tensor (...,ns,...) or (...,ns,2,...)
-            The signal in the transformed domain.
-        """
-        if self.isorthogonal:
-            return self.transformsig(sig, dim)
-        else:
-            msg = "The invTtransformsig for non-orthogonal transform %s has not been implemented." %\
-                   (self.__class__.__name__)
-            raise RuntimeError(msg)
-
     def flattensig(self, sig, dim=-1, qdom=False):
         """
         Flatten the signal whose shape is (...,*boxshape,...) into

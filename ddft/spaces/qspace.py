@@ -13,7 +13,7 @@ class QSpace(BaseSpace):
         # rgrid is (nr,ndim)
         # boxshape is (nx,ny,nz) for 3D, (nx,ny) for 2D, and (nx,) for 1D
         # qgrid is (ns, ndim)
-        # qboxshape is (nx,ny,nz//2,2)
+        # qboxshape is (nx,ny,nz,2)
         self._rgrid = rgrid
         self._boxshape = boxshape
         self.is_even = (boxshape[-1]%2 == 0)
@@ -50,7 +50,8 @@ class QSpace(BaseSpace):
         sig, transposed = _normalize_dim(sig, dim, -1)
 
         sigbox = self.boxifysig(sig, dim=-1) # (...,...,nx,ny,nz)
-        sigftbox = rfft(sigbox, signal_ndim=self.ndim, normalized=True) # (...,nx,ny,nz)
+        sigftbox = torch.rfft(sigbox, signal_ndim=self.ndim, onesided=False,
+                              normalized=True) # (...,nx,ny,nz,2)
         sigft = self.flattensig(sigftbox, dim=-1, qdom=True) # (...,ns)
 
         if transposed:
@@ -66,44 +67,13 @@ class QSpace(BaseSpace):
         tsig, transposed = _normalize_dim(tsig, dim, -1)
 
         tsigbox = self.boxifysig(tsig, dim=-1, qdom=True) #(...,nx,ny,nz)
-        sigbox = irfft(tsigbox, signal_ndim=self.ndim, normalized=True) # (...,nx,ny,nz)
+        sigbox = torch.irfft(tsigbox, signal_ndim=self.ndim, onesided=False,
+                             normalized=True) # (...,nx,ny,nz)
         sig = self.flattensig(sigbox, dim=-1) # (...,nr)
 
         if transposed:
             sig = sig.transpose(dim,-1)
         return sig # (...,nr,...)
-
-    def Ttransformsig(self, tsig, dim=-1):
-        # the Ttransformsig of qspace is equal to invtransformsig, but with the
-        # non-redundant input signal is halved.
-        # tsig : (...,ns,...)
-        # return: (...,nr,...)
-
-        # bring the dim to -1
-        tsig, transposed = _normalize_dim(tsig, dim, -1) # tsig: (...,ns)
-
-        # halving the middle input signal to invtransformsig
-        tsig_half = tsig * self.halv
-        sig = self.invtransformsig(tsig_half, -1)
-
-        if transposed:
-            sig = sig.transpose(dim, -1)
-        return sig
-
-    def invTtransformsig(self, sig, dim=-1):
-        # the invTtransformsig of qspace is equal to transformsig, but double the
-        # middle of output signal
-
-        # bring the dim to -1
-        sig, transposed = _normalize_dim(sig, dim, -1)
-
-        # double the output signal
-        tsig_half = self.transformsig(sig, -1)
-        tsig = tsig_half / self.halv
-
-        if transposed:
-            tsig = tsig.transpose(dim, -1)
-        return tsig
 
     @property
     def isorthogonal(self):
@@ -116,7 +86,9 @@ def _construct_qgrid_1(xgrid):
     dq = 2*np.pi / (N * dr)
     Nhalf = (N // 2) + 1
     offset = (N + 1) % 2
-    qgrid = torch.arange(Nhalf)
+    qgrid_left = torch.arange(Nhalf)
+    qgrid_right = -torch.arange(Nhalf-offset-1,0,-1)
+    qgrid = torch.cat((qgrid_left, qgrid_right))
     qgrid = qgrid.to(xgrid.dtype).to(xgrid.device) * dq
     return qgrid
 
@@ -128,24 +100,18 @@ def _construct_qgrid(rgrid, boxshape):
     rgrid = rgrid.view(*boxshape, ndim) # (nx, ny, nz, ndim)
     qgrids = []
     spacing = nr * ndim
+    newboxshape = [*boxshape, 2]
     for i in range(ndim):
         spacing = spacing // boxshape[i]
         na = rgrid.shape[i]
         index = torch.arange(rgrid.shape[i]) * spacing + i
         xgrid = torch.take(rgrid, index=index)
-        qgrid = _construct_qgrid_1(xgrid) # (nx//2+1,)
-        qgrid_double = torch.repeat_interleave(qgrid, 2, dim=-1) # ((nx//2)*2+2)
+        qgrid = _construct_qgrid_1(xgrid) # (nx,)
+        qshape = [qgrid.shape[0] if i==j else 1 for j in range(ndim+1)] # =(1,ny,1,1)
+        qgrids.append(qgrid.view(*qshape).expand(*newboxshape).unsqueeze(-1)) # (nx,ny,nz,2,1)
 
-        # remove the redundancy
-        if na%2 == 0: # is even
-            qgrideff = qgrid_double[1:-1]
-        else: # odd
-            qgrideff = qgrid_double[1:] # (nx,)
-        qshape = [qgrideff.shape[0] if i==j else 1 for j in range(ndim)] # =(1,ny,1,1)
-        qgrids.append(qgrideff.view(*qshape).expand(*boxshape).unsqueeze(-1)) # (nx,ny,nz,1)
-
-    qgrid = torch.cat(qgrids, dim=-1).view(-1,ndim)
-    return qgrid, boxshape
+    qgrid = torch.cat(qgrids, dim=-1)
+    return qgrid.view(-1, ndim), newboxshape
 
 def _normalize_dim(tsig, dim, dest_dim=-1):
     ndim = tsig.ndim
