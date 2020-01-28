@@ -15,11 +15,12 @@ class eigendecomp(torch.autograd.Function):
             "method": "davidson",
         }, options)
 
-        if config["method"] == "davidson":
+        method = config["method"].lower()
+        if method == "davidson":
             evals, evecs = davidson(A, neig, params, **options)
-        elif config["method"] == "lanczos":
+        elif method == "lanczos":
             evals, evecs = lanczos(A, neig, params, **options)
-        elif config ["method"] == "exacteig":
+        elif method == "exacteig":
             evals, evecs = exacteig(A, neig, params, **options)
         else:
             raise RuntimeError("Unknown eigen decomposition method: %s" % config["method"])
@@ -35,19 +36,28 @@ class eigendecomp(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_evals, grad_evecs):
         # make the diagonal only A
-        V = ctx.evecs.detach() # (nbatch, na, neig)
+        V = ctx.evecs.clone().detach() # (nbatch, na, neig)
+        VT = V.transpose(-2,-1)
         with torch.enable_grad():
             AV = ctx.A(V, *ctx.params) # (nbatch, na, neig)
-            VTAV = torch.bmm(V.transpose(-2,-1), AV) # (nbatch, neig, neig)
+            VTAV = torch.bmm(VT, AV) # (nbatch, neig, neig)
 
             # evals: (nbatch, neig)
             # evecsH: (nbatch, neig, neig)
             evals, evecsH = torch.symeig(VTAV, eigenvectors=True)
-            evecs = torch.bmm(V, evecsH)
+            # evecs = torch.bmm(V, evecsH)
+            # print(evecs)
+            # print(ctx.evecs)
+            # print(evecs - ctx.evecs)
+
+        grad_evecsH = torch.bmm(VT, grad_evecs)
 
         # contribution from evals and evecs
-        grad_params = torch.autograd.grad((evals, evecs), ctx.params,
-            grad_outputs=(grad_evals, grad_evecs),
+        # grad_params = torch.autograd.grad((evals, evecs), params,
+        #     grad_outputs=(grad_evals, grad_evecs),
+        #     create_graph=torch.is_grad_enabled())
+        grad_params = torch.autograd.grad((evals, evecsH), ctx.params,
+            grad_outputs=(grad_evals, grad_evecsH),
             create_graph=torch.is_grad_enabled())
 
         return (None, None, None, *grad_params)
@@ -325,7 +335,6 @@ if __name__ == "__main__":
         def __call__(self, x, A1, diag):
             Amatrix = (A1 + A1.transpose(-2,-1))
             A = Amatrix + diag.diag_embed(dim1=-2, dim2=-1)
-            print(A.shape, x.shape)
             return torch.bmm(A, x)
 
         def parameters(self):
@@ -344,7 +353,9 @@ if __name__ == "__main__":
             "method": "exacteig",
         }
         evals, evecs = eigendecomp.apply(A, 3, options, A1, diag)
-        loss = (evals**2).sum() + (evecs**2).sum()
+        loss = 0
+        # loss = loss + (evals**2).sum()
+        loss = loss + (evecs**4).sum()
         return loss
 
     loss = getloss(A1, diag)

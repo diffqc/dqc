@@ -1,7 +1,7 @@
 import torch
 from ddft.modules.base_linear import BaseLinearModule
 from ddft.modules.complex import RealModule, add_zero_imag
-from ddft.maths.eigpairs import davidson, exacteig, lanczos
+from ddft.maths.eigpairs import eigendecomp
 from ddft.utils.misc import set_default_option
 
 class EigenModule(torch.nn.Module):
@@ -49,23 +49,11 @@ class EigenModule(torch.nn.Module):
             raise TypeError("The linmodule argument must be instance of BaseLinearModule")
 
     def forward(self, *params):
-        # choose the algorithm
-        method = self.options["method"].lower()
-        if method == "davidson":
-            fcn = davidson
-        elif method == "exacteig":
-            fcn = exacteig
-        elif method == "lanczos":
-            fcn = lanczos
-        else:
-            raise RuntimeError("Unknown eigen method: %s" % method)
-
         # eigvals: (nbatch, nlowest)
         # eigvecs: (nbatch, nr, nlowest)
-        eigvals, eigvecs = fcn(self.linmodule, self.nlowest,
-            params, **self.options)
-
-        return eigvals, eigvecs
+        evals, evecs = eigendecomp.apply(self.linmodule,
+            self.nlowest, self.options, *params)
+        return evals, evecs
 
 if __name__ == "__main__":
     import time
