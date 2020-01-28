@@ -15,15 +15,16 @@ class eigendecomp(torch.autograd.Function):
             "method": "davidson",
         }, options)
 
-        method = config["method"].lower()
-        if method == "davidson":
-            evals, evecs = davidson(A, neig, params, **options)
-        elif method == "lanczos":
-            evals, evecs = lanczos(A, neig, params, **options)
-        elif method == "exacteig":
-            evals, evecs = exacteig(A, neig, params, **options)
-        else:
-            raise RuntimeError("Unknown eigen decomposition method: %s" % config["method"])
+        with torch.enable_grad():
+            method = config["method"].lower()
+            if method == "davidson":
+                evals, evecs = davidson(A, neig, params, **options)
+            elif method == "lanczos":
+                evals, evecs = lanczos(A, neig, params, **options)
+            elif method == "exacteig":
+                evals, evecs = exacteig(A, neig, params, **options)
+            else:
+                raise RuntimeError("Unknown eigen decomposition method: %s" % config["method"])
 
         # save for the backward
         ctx.evals = evals # (nbatch, neig)
@@ -31,36 +32,40 @@ class eigendecomp(torch.autograd.Function):
         ctx.neig = neig
         ctx.params = params
         ctx.A = A
-        return evals, evecs
+        return evals.clone(), evecs.clone()
 
     @staticmethod
     def backward(ctx, grad_evals, grad_evecs):
-        # make the diagonal only A
-        V = ctx.evecs.clone().detach() # (nbatch, na, neig)
-        VT = V.transpose(-2,-1)
-        with torch.enable_grad():
-            AV = ctx.A(V, *ctx.params) # (nbatch, na, neig)
-            VTAV = torch.bmm(VT, AV) # (nbatch, neig, neig)
-
-            # evals: (nbatch, neig)
-            # evecsH: (nbatch, neig, neig)
-            evals, evecsH = torch.symeig(VTAV, eigenvectors=True)
-            # evecs = torch.bmm(V, evecsH)
-            # print(evecs)
-            # print(ctx.evecs)
-            # print(evecs - ctx.evecs)
-
-        grad_evecsH = torch.bmm(VT, grad_evecs)
-
-        # contribution from evals and evecs
-        # grad_params = torch.autograd.grad((evals, evecs), params,
-        #     grad_outputs=(grad_evals, grad_evecs),
-        #     create_graph=torch.is_grad_enabled())
-        grad_params = torch.autograd.grad((evals, evecsH), ctx.params,
-            grad_outputs=(grad_evals, grad_evecsH),
-            create_graph=torch.is_grad_enabled())
-
+        grad_params = torch.autograd.grad((ctx.evals, ctx.evecs),
+            ctx.params, grad_outputs=(grad_evals, grad_evecs))
         return (None, None, None, *grad_params)
+
+        # # make the diagonal only A
+        # V = ctx.evecs.clone().detach() # (nbatch, na, neig)
+        # VT = V.transpose(-2,-1)
+        # with torch.enable_grad():
+        #     AV = ctx.A(V, *ctx.params) # (nbatch, na, neig)
+        #     VTAV = torch.bmm(VT, AV) # (nbatch, neig, neig)
+        #
+        #     # evals: (nbatch, neig)
+        #     # evecsH: (nbatch, neig, neig)
+        #     evals, evecsH = torch.symeig(VTAV, eigenvectors=True)
+        #     # evecs = torch.bmm(V, evecsH)
+        #     # print(evecs)
+        #     # print(ctx.evecs)
+        #     # print(evecs - ctx.evecs)
+        #
+        # grad_evecsH = torch.bmm(VT, grad_evecs)
+        #
+        # # contribution from evals and evecs
+        # # grad_params = torch.autograd.grad((evals, evecs), params,
+        # #     grad_outputs=(grad_evals, grad_evecs),
+        # #     create_graph=torch.is_grad_enabled())
+        # grad_params = torch.autograd.grad((evals, evecsH), ctx.params,
+        #     grad_outputs=(grad_evals, grad_evecsH),
+        #     create_graph=torch.is_grad_enabled())
+        #
+        # return (None, None, None, *grad_params)
 
 def lanczos(A, neig, params, **options):
     """
@@ -326,16 +331,24 @@ if __name__ == "__main__":
     from ddft.utils.fd import finite_differences
 
     # generate the matrix
-    na = 10
+    na = 20
     dtype = torch.float64
-    A1 = (torch.rand((1,na,na))*1).to(dtype).requires_grad_(True)
+    A1 = (torch.rand((1,na,na))*0.1).to(dtype).requires_grad_(True)
     diag = torch.arange(na, dtype=dtype).unsqueeze(0).requires_grad_(True)
 
     class Acls:
         def __call__(self, x, A1, diag):
+            xndim = x.ndim
+            if xndim == 2:
+                x = x.unsqueeze(-1)
+
             Amatrix = (A1 + A1.transpose(-2,-1))
             A = Amatrix + diag.diag_embed(dim1=-2, dim2=-1)
-            return torch.bmm(A, x)
+            y = torch.bmm(A, x)
+
+            if xndim == 2:
+                y = y.squeeze(-1)
+            return y
 
         def parameters(self):
             return []
@@ -344,15 +357,20 @@ if __name__ == "__main__":
         def shape(self):
             return (na,na)
 
-        # def diag(self, A1, dg):
-        #     return dg
+        def diag(self, A1, dg):
+            Amatrix = (A1 + A1.transpose(-2,-1))
+            A = Amatrix + diag.diag_embed(dim1=-2, dim2=-1)
+            return A.diagonal(dim1=-2, dim2=-1)
 
     def getloss(A1, diag):
         A = Acls()
+        neig = 1
         options = {
-            "method": "exacteig",
+            "method": "davidson",
+            "verbose": True,
+            "v_init": "rand",
         }
-        evals, evecs = eigendecomp.apply(A, 3, options, A1, diag)
+        evals, evecs = eigendecomp.apply(A, neig, options, A1, diag)
         loss = 0
         # loss = loss + (evals**2).sum()
         loss = loss + (evecs**4).sum()
