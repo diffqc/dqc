@@ -37,7 +37,8 @@ class eigendecomp(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_evals, grad_evecs):
         grad_params = torch.autograd.grad((ctx.evals, ctx.evecs),
-            ctx.params, grad_outputs=(grad_evals, grad_evecs))
+            ctx.params, grad_outputs=(grad_evals, grad_evecs),
+            retain_graph=True)
         return (None, None, None, *grad_params)
 
         # # make the diagonal only A
