@@ -1,7 +1,7 @@
 import torch
 from ddft.modules.base_linear import BaseLinearModule
 from ddft.modules.complex import RealModule, add_zero_imag
-from ddft.maths.eigpairs import eigendecomp
+from ddft.maths.lsymeig import lsymeig
 from ddft.utils.misc import set_default_option
 
 class EigenModule(torch.nn.Module):
@@ -51,8 +51,9 @@ class EigenModule(torch.nn.Module):
     def forward(self, *params):
         # eigvals: (nbatch, nlowest)
         # eigvecs: (nbatch, nr, nlowest)
-        evals, evecs = eigendecomp.apply(self.linmodule,
-            self.nlowest, self.options, *params)
+        evals, evecs = lsymeig(self.linmodule,
+            self.nlowest, params,
+            fwd_options=self.options)
         return evals, evecs
 
 if __name__ == "__main__":
