@@ -261,6 +261,7 @@ def davidson(A, neig, params, **options):
         # resid = resid - (resid * eigvecA).sum(dim=1, keepdim=True) * eigvecA
         resid = resid.view(nbatch, neig, na) # (nbatch, neig, na)
         resid = resid.transpose(-2, -1) # (nbatch, na, neig)
+        eva = eigvecA.view(nbatch,neig,na).transpose(-2,-1)
 
         max_resid = resid.abs().max()
         if verbose:
@@ -269,7 +270,8 @@ def davidson(A, neig, params, **options):
             break
 
         # apply the preconditioner
-        t = -A.precond(resid, *params, biases=eigvalT) # (nbatch, na, neig)
+        # t = -A.precond(resid, *params, biases=eigvalT) # (nbatch, na, neig)
+        t = A.precond(eva, *params, biases=eigvalT) # (nbatch, na, neig)
         t = t.transpose(-2,-1).unsqueeze(-1).view(-1,na,1) # (nbatch*neig, na, 1)
         # # orthogonalize t from eigvecA
         # t = t - (t * eigvecA).sum(dim=1, keepdim=True) * eigvecA
