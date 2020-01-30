@@ -1,7 +1,7 @@
 import torch
 from ddft.utils.misc import set_default_option
 
-def conjgrad(A, B, precond=None, **options):
+def conjgrad(A, B, precond=None, posdef=True, **options):
     """
     Performing conjugate gradient descent to solve the equation Ax=b.
     This function can also solve batched multiple inverse equation at the
@@ -12,12 +12,14 @@ def conjgrad(A, B, precond=None, **options):
     ---------
     * A: callable
         A function that takes an input X and produce the vectors in the same
-        space as B.
+        space as B. The matrix A must be symmetric.
     * B: torch.tensor (nbatch,na,ncols)
         The tensor on the right hand side.
     * precond: callable
         Matrix precondition that takes an input X and return an approximate of
         A^{-1}(X).
+    * posdef: bool
+        False if the matrix is non-posdef, so A^T(A(x)) will be applied.
     * **options: kwargs
         Options of the iterative solver
     """
@@ -32,12 +34,22 @@ def conjgrad(A, B, precond=None, **options):
     if precond is None:
         precond = lambda x: x
 
+    # double the transformation if not posdef
+    if not posdef:
+        At = A
+        precondt = precond
+        B = A(B)
+        A = lambda x: At(At(x))
+        precond = lambda x: precondt(precondt(x))
+
     # assign a variable to some of the options
     verbose = config["verbose"]
     min_eps = config["min_eps"]
 
     # initialize the guess
     X = torch.zeros_like(B).to(B.device)
+    if torch.allclose(B, X):
+        return X
 
     # do the iterations
     R = B - A(X)
