@@ -33,9 +33,9 @@ def lsymeig(A, neig, params, fwd_options={}, bck_options={}):
     * eigvecs: (nbatch, na, neig)
         The lowest eigenvalues and eigenvectors.
     """
-    return leigendecomp.apply(A, neig, fwd_options, bck_options, *params)
+    return lsymeig_torchfcn.apply(A, neig, fwd_options, bck_options, *params)
 
-class leigendecomp(torch.autograd.Function):
+class lsymeig_torchfcn(torch.autograd.Function):
     @staticmethod
     def forward(ctx, A, neig, fwd_options, bck_options, *params):
         config = set_default_option({
