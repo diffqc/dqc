@@ -1,7 +1,6 @@
 import torch
 import numpy as np
 from ddft.spaces.base_space import BaseSpace
-from ddft.maths.rfft import rfft, irfft
 
 class QSpace(BaseSpace):
     """

@@ -1,6 +1,5 @@
 import torch
 from ddft.utils.misc import set_default_option
-from ddft.maths.eig import eig
 from ddft.utils.ortho import orthogonalize, biorthogonalize
 
 """
