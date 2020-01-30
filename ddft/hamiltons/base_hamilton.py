@@ -68,10 +68,29 @@ class BaseHamilton(BaseLinearModule):
         return
 
     @abstractmethod
-    def diag(self, vext, *params):
+    def precond(self, y, vext, *params, biases=None):
         """
-        Returns the diagonal of the matrix for each batch.
-        The return shape: (nbatch, ns)
+        Apply the preconditioning of the Hamiltonian to the tensor `y`.
+        The return shape: (nbatch, nr, ncols)
+
+        Arguments
+        ---------
+        * y: torch.tensor (nbatch, nr, ncols)
+            The tensor where the preconditioning is applied
+        * vext: torch.tensor (nbatch, nr)
+            The external potential in spatial domain. This should be the total
+            potential the non-interacting particles feel
+            (i.e. xc, Hartree, and external).
+        * *params: list of torch.tensor (nbatch, ...)
+            The list of parameters that define the Hamiltonian
+        * biases: torch.tensor (nbatch, ncols) or None
+            If not None, it will compute the preconditioning for (H-b*I) for
+            each column of y. If None, then it is zero.
+
+        Returns
+        -------
+        * x: torch.tensor (nbatch, nr, ncols)
+            The output of the preconditioning.
         """
         pass
 
