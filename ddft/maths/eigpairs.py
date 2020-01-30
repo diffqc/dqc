@@ -1,5 +1,6 @@
 import torch
 from ddft.utils.misc import set_default_option
+from ddft.maths.cg import conjgrad
 from ddft.utils.ortho import orthogonalize, biorthogonalize
 
 """
@@ -7,65 +8,95 @@ This file contains methods to obtain eigenpairs of a linear transformation
     which is a subclass of ddft.modules.base_linear.BaseLinearModule
 """
 
-class eigendecomp(torch.autograd.Function):
+def lsymeig(A, neig, params, fwd_options={}, bck_options={}):
+    """
+    Obtain `neig` lowest eigenvalues and eigenvectors of a large matrix.
+
+    Arguments
+    ---------
+    * A: BaseLinearModule instance
+        The linear module object on which the eigenpairs are constructed.
+    * neig: int
+        The number of eigenpairs to be retrieved.
+    * params: list of differentiable torch.tensor
+        List of differentiable torch.tensor to be put to A.forward(x,*params).
+        Each of params must have shape of (nbatch,...)
+    * fwd_options:
+        Eigendecomposition iterative algorithm options.
+    * bck_options:
+        Conjugate gradient options to calculate the gradient in
+        backpropagation calculation.
+
+    Returns
+    -------
+    * eigvals: (nbatch, neig)
+    * eigvecs: (nbatch, na, neig)
+        The lowest eigenvalues and eigenvectors.
+    """
+    return leigendecomp.apply(A, neig, fwd_options, bck_options, *params)
+
+class leigendecomp(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, A, neig, options, *params):
+    def forward(ctx, A, neig, fwd_options, bck_options, *params):
         config = set_default_option({
             "method": "davidson",
-        }, options)
+        }, fwd_options)
+        ctx.bck_config = set_default_option({
+            "min_eps": 1e-8,
+        }, bck_options)
 
-        with torch.enable_grad():
-            method = config["method"].lower()
-            if method == "davidson":
-                evals, evecs = davidson(A, neig, params, **options)
-            elif method == "lanczos":
-                evals, evecs = lanczos(A, neig, params, **options)
-            elif method == "exacteig":
-                evals, evecs = exacteig(A, neig, params, **options)
-            else:
-                raise RuntimeError("Unknown eigen decomposition method: %s" % config["method"])
+        method = config["method"].lower()
+        if method == "davidson":
+            evals, evecs = davidson(A, neig, params, **config)
+        elif method == "lanczos":
+            evals, evecs = lanczos(A, neig, params, **config)
+        elif method == "exacteig":
+            evals, evecs = exacteig(A, neig, params, **config)
+        else:
+            raise RuntimeError("Unknown eigen decomposition method: %s" % config["method"])
 
         # save for the backward
         ctx.evals = evals # (nbatch, neig)
         ctx.evecs = evecs # (nbatch, na, neig)
-        ctx.neig = neig
         ctx.params = params
         ctx.A = A
-        return evals.clone(), evecs.clone()
+        return evals, evecs
 
     @staticmethod
     def backward(ctx, grad_evals, grad_evecs):
-        grad_params = torch.autograd.grad((ctx.evals, ctx.evecs),
-            ctx.params, grad_outputs=(grad_evals, grad_evecs),
-            retain_graph=True)
-        return (None, None, None, *grad_params)
+        # grad_evals: (nbatch, neig)
+        # grad_evecs: (nbatch, na, neig)
 
-        # # make the diagonal only A
-        # V = ctx.evecs.clone().detach() # (nbatch, na, neig)
-        # VT = V.transpose(-2,-1)
-        # with torch.enable_grad():
-        #     AV = ctx.A(V, *ctx.params) # (nbatch, na, neig)
-        #     VTAV = torch.bmm(VT, AV) # (nbatch, neig, neig)
-        #
-        #     # evals: (nbatch, neig)
-        #     # evecsH: (nbatch, neig, neig)
-        #     evals, evecsH = torch.symeig(VTAV, eigenvectors=True)
-        #     # evecs = torch.bmm(V, evecsH)
-        #     # print(evecs)
-        #     # print(ctx.evecs)
-        #     # print(evecs - ctx.evecs)
-        #
-        # grad_evecsH = torch.bmm(VT, grad_evecs)
-        #
-        # # contribution from evals and evecs
-        # # grad_params = torch.autograd.grad((evals, evecs), params,
-        # #     grad_outputs=(grad_evals, grad_evecs),
-        # #     create_graph=torch.is_grad_enabled())
-        # grad_params = torch.autograd.grad((evals, evecsH), ctx.params,
-        #     grad_outputs=(grad_evals, grad_evecsH),
-        #     create_graph=torch.is_grad_enabled())
-        #
-        # return (None, None, None, *grad_params)
+        # detach the evals and evecs
+        evals = ctx.evals.detach()
+        evecs = ctx.evecs.detach()
+
+        # the loss function where the gradient will be retrieved
+        with torch.enable_grad():
+            loss = ctx.A(evecs, *ctx.params) # (nbatch, na, neig)
+
+        # calculate the contributions from the eigenvalues
+        gevals = grad_evals.unsqueeze(1) * evecs # (nbatch, na, neig)
+
+        # calculate the contributions from the eigenvectors
+        # orthogonalize the grad_evecs with evecs
+        B = grad_evecs - (grad_evecs * evecs).sum(dim=1, keepdim=True) * evecs
+        A = lambda X: ctx.A(X, *ctx.params) - X * evals.unsqueeze(1)
+        precond = lambda y: ctx.A.precond(y, *ctx.params, biases=evals)
+        gevecs = conjgrad(A, -B, precond=precond, posdef=False, **ctx.bck_config)
+        # orthogonalize gevecs w.r.t. evecs
+        gevecs = gevecs - (gevecs * evecs).sum(dim=1, keepdim=True) * evecs
+
+        # accummulate the gradient contributions
+        gaccum = gevals + gevecs
+        grad_params = torch.autograd.grad(
+            outputs=(loss,),
+            inputs=ctx.params,
+            grad_outputs=(gaccum,),
+            retain_graph=True,
+            create_graph=torch.is_grad_enabled(),
+        )
+        return (None, None, None, None, *grad_params)
 
 def lanczos(A, neig, params, **options):
     """
@@ -190,7 +221,6 @@ def davidson(A, neig, params, **options):
     # set up the initial guess
     V = _set_initial_v(config["v_init"].lower(), nbatch, na, nguess) # (nbatch,na,nguess)
     V = V.to(dtype).to(device)
-    dA = A.diag(*params) # (nbatch, na)
 
     prev_eigvals = None
     stop_reason = "max_niter"
@@ -229,15 +259,10 @@ def davidson(A, neig, params, **options):
         ritz_list = []
         nadd = min(nj, max_addition)
         for i in range(nadd):
-            # precondition the inverse diagonal
-            finv = dA - eigvalT[:,i:i+1]
-            finv[finv.abs() < eps_cond] = eps_cond
-            f = 1. / finv # (nbatch, na)
-
             AVphi = A(eigvecA[:,:,i], *params) # (nbatch, na)
             lmbdaVphi = eigvalT[:,i:i+1] * eigvecA[:,:,i] # (nbatch, na)
-            r = f * (AVphi - lmbdaVphi) # (nbatch, na)
-            r = r.unsqueeze(-1)
+            resid = (AVphi - lmbdaVphi) # (nbatch, na)
+            r = A.precond(resid.unsqueeze(-1), *params, biases=eigvalT[:,i:i+1]) # (nbatch, na, 1)
             ritz_list.append(r)
 
         # add the ritz vectors to the guess vectors
@@ -328,13 +353,15 @@ def _set_initial_v(vinit_type, nbatch, na, nguess):
     return V
 
 if __name__ == "__main__":
+    import time
     from ddft.utils.fd import finite_differences
 
     # generate the matrix
     na = 20
     dtype = torch.float64
+    torch.manual_seed(123)
     A1 = (torch.rand((1,na,na))*0.1).to(dtype).requires_grad_(True)
-    diag = torch.arange(na, dtype=dtype).unsqueeze(0).requires_grad_(True)
+    diag = (torch.arange(na, dtype=dtype)+1.0).unsqueeze(0).requires_grad_(True)
 
     class Acls:
         def __call__(self, x, A1, diag):
@@ -357,28 +384,48 @@ if __name__ == "__main__":
         def shape(self):
             return (na,na)
 
-        def diag(self, A1, dg):
-            Amatrix = (A1 + A1.transpose(-2,-1))
-            A = Amatrix + diag.diag_embed(dim1=-2, dim2=-1)
-            return A.diagonal(dim1=-2, dim2=-1)
+        def precond(self, y, A1, dg, biases=None):
+            # return y
+            # y: (nbatch, na, ncols)
+            # dg: (nbatch, na)
+            # biases: (nbatch, ncols) or None
+            Adiag = A1.diagonal(dim1=-2, dim2=-1) * 2
+            dd = (Adiag + dg).unsqueeze(-1)
+
+            if biases is not None:
+                dd = dd - biases.unsqueeze(1) # (nbatch, na, ncols)
+            dd[dd.abs() < 1e-6] = 1.0
+            yprec = y / dd
+            return yprec
 
     def getloss(A1, diag):
         A = Acls()
-        neig = 1
+        neig = 4
         options = {
-            "method": "davidson",
+            "method": "exacteig",
             "verbose": True,
             "v_init": "rand",
         }
-        evals, evecs = eigendecomp.apply(A, neig, options, A1, diag)
+        bck_options = {
+            "verbose": True,
+            "min_eps": 1e-7,
+        }
+        evals, evecs = lsymeig(A, neig,
+            params=(A1, diag,),
+            fwd_options=options,
+            bck_options=bck_options)
         loss = 0
         # loss = loss + (evals**2).sum()
         loss = loss + (evecs**4).sum()
         return loss
 
+    t0 = time.time()
     loss = getloss(A1, diag)
+    t1 = time.time()
+    print("Forward done in %fs" % (t1 - t0))
     loss.backward()
-    print("Backward done")
+    t2 = time.time()
+    print("Backward done in %fs" % (t2 - t1))
     Agrad = A1.grad.data
     dgrad = diag.grad.data
 
