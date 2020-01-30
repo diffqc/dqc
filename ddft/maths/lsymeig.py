@@ -197,7 +197,7 @@ def davidson(A, neig, params, **options):
     """
     config = set_default_option({
         "max_niter": 120,
-        "nguess": neig+1,
+        "nguess": 1, # number of initial guess / neig
         "min_eps": 1e-6,
         "verbose": False,
         "eps_cond": 1e-6,
@@ -218,70 +218,67 @@ def davidson(A, neig, params, **options):
     nbatch = params[0].shape[0]
     dtype, device = _get_dtype_device(params, A)
 
+    fullshape = (nbatch,neig,na,-1)
+    matshape = (nbatch*neig,na,-1)
+
     # set up the initial guess
-    V = _set_initial_v(config["v_init"].lower(), nbatch, na, nguess) # (nbatch,na,nguess)
+    V = _set_initial_v(config["v_init"].lower(), nbatch*neig, na, nguess) # (nbatch*neig,na,nguess)
     V = V.to(dtype).to(device)
+    V = V.view(*matshape) # (nbatch*neig,na,nguess)
+    params_fullshape = [p.repeat_interleave(neig, dim=0) for p in params]
 
     prev_eigvals = None
     stop_reason = "max_niter"
-    for m in range(nguess, max_niter, nguess):
-        VT = V.transpose(-2,-1)
-        # print(torch.bmm(VT, V))
+    idx = torch.arange(neig).unsqueeze(0).unsqueeze(-1) # (1, neig, 1)
+    # AV = A(V, *params_fullshape).view(*fullshape)
+    for i in range(max_niter):
+        VT = V.transpose(-2,-1) # (nbatch,neig,nguess,na)
         # Can be optimized by saving AV from the previous iteration and only
         # operate AV for the new V. This works because the old V has already
         # been orthogonalized, so it will stay the same
-        AV = A(V, *params) # (nbatch, na, nguess)
-        T = torch.bmm(VT, AV) # (nbatch, nguess, nguess)
+        AV = A(V, *params_fullshape).view(*fullshape) # (nbatch,neig,na,nguess)
+        T = torch.bmm(VT, AV.view(*matshape)) # (nbatch*neig, nguess, nguess)
 
         # eigvals are sorted from the lowest
-        # eval: (nbatch, nguess), evec: (nbatch, nguess, nguess)
+        # eval: (nbatch*neig, nguess), evec: (nbatch*neig, nguess, nguess)
         eigvalT, eigvecT = torch.symeig(T, eigenvectors=True)
-        eigvecA = torch.bmm(V, eigvecT) # (nbatch, na, nguess)
 
-        # check the convergence
-        if prev_eigvals is not None:
-            dev = (eigvalT[:,:neig].data - prev_eigvals).abs().max()
-            if verbose:
-                print("Iter %3d (guess size: %d): %.3e" % (m, eigvecA.shape[-1], dev))
-            if dev < min_eps:
-                stop_reason = "min_eps"
-                break
+        # select the eigenvalues and eigenvectors
+        idx_select = torch.clamp(idx, max=nguess-1) # (1,neig,1)
+        eigvalT = eigvalT.view(nbatch,neig,-1) # (nbatch, neig, nguess)
+        eigvecT = eigvecT.view(nbatch,neig,nguess,-1)
+        idx_evals = idx_select.expand(nbatch,-1,-1) # (nbatch,neig,1)
+        idx_evecs = idx_select.unsqueeze(-1).expand(nbatch,-1,nguess,-1) # (nbatch,neig,nguess,1)
+        eigvalT = torch.gather(eigvalT, dim=-1, index=idx_evals).squeeze(-1) # (nbatch, neig)
+        eigvecT = torch.gather(eigvecT, dim=-1, index=idx_evecs).squeeze(-1) # (nbatch, neig, nguess)
+        eigvecT = eigvecT.view(-1,nguess).unsqueeze(-1) # (nbatch*neig, nguess, 1)
 
-        # stop if V has become a full-rank matrix
-        if V.shape[-1] == na:
-            stop_reason = "full_rank"
+        # calculate the eigenvectors of A
+        eigvecA = torch.bmm(V, eigvecT) # (nbatch*neig, na, 1)
+
+        # calculate the residual
+        resid = A(eigvecA, *params_fullshape) - eigvalT.unsqueeze(-1).unsqueeze(-1) * eigvecA # (nbatch*neig, na, 1)
+        resid = resid.view(nbatch, neig, na) # (nbatch, neig, na)
+        resid = resid.transpose(-2, -1) # (nbatch, na, neig)
+
+        max_resid = resid.abs().max()
+        if verbose:
+            print("Iter %3d (guess size: %d): %.3e" % (i+1, nguess, resid.abs().max()))
+        if max_resid < min_eps:
             break
 
-        # calculate the parameters for the next iteration
-        prev_eigvals = eigvalT[:,:neig].data
+        # apply the preconditioner
+        t = A.precond(resid, *params, biases=eigvalT).transpose(-2,-1).unsqueeze(-1).view(-1,na,1) # (nbatch*neig, na, 1)
 
-        nj = eigvalT.shape[1]
-        ritz_list = []
-        nadd = min(nj, max_addition)
-        for i in range(nadd):
-            AVphi = A(eigvecA[:,:,i], *params) # (nbatch, na)
-            lmbdaVphi = eigvalT[:,i:i+1] * eigvecA[:,:,i] # (nbatch, na)
-            resid = (AVphi - lmbdaVphi) # (nbatch, na)
-            r = A.precond(resid.unsqueeze(-1), *params, biases=eigvalT[:,i:i+1]) # (nbatch, na, 1)
-            ritz_list.append(r)
+        # orthogonalize t with the rest of the V
+        V = torch.cat((V, t), dim=-1)
+        V, R = torch.qr(V) # (nbatch*neig, na, nguess+1)
+        nguess = nguess + 1
+        # AVnew = A(V[:,:,-1:], *params_fullshape).view(*fullshape) # (nbatch,neig,na,1)
+        # AV = torch.cat((AV, AVnew), dim=-1)
 
-        # add the ritz vectors to the guess vectors
-        ritz = torch.cat(ritz_list, dim=-1)
-        ritz = ritz / ritz.norm(dim=1, keepdim=True) # (nbatch, na, nguess)
-        Va = torch.cat((V, ritz), dim=-1)
-        if V.shape[-1] > na:
-            V = V[:,:,-na:]
-
-        # R^{-T} is needed for the backpropagation, so small det(R) will cause
-        # numerical instability. So we need to choose ritz that are
-        # perpendicular to the current columns of V
-
-        # orthogonalize the new columns of V
-        Q, R = torch.qr(Va) # V: (nbatch, na, nguess), R: (nbatch, nguess, nguess)
-        V = Q
-
-    eigvals = eigvalT[:,:neig]
-    eigvecs = eigvecA[:,:,:neig]
+    eigvals = eigvalT # (nbatch, neig)
+    eigvecs = eigvecA.view(nbatch, neig, na).transpose(-2, -1) # (nbatch, na, neig)
     return eigvals, eigvecs
 
 def exacteig(A, neig, params, **options):
@@ -402,7 +399,7 @@ if __name__ == "__main__":
         A = Acls()
         neig = 4
         options = {
-            "method": "exacteig",
+            "method": "davidson",
             "verbose": True,
             "v_init": "rand",
         }
