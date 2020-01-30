@@ -236,8 +236,8 @@ def davidson(A, neig, params, **options):
         # Can be optimized by saving AV from the previous iteration and only
         # operate AV for the new V. This works because the old V has already
         # been orthogonalized, so it will stay the same
-        AV = A(V, *params_fullshape).view(*fullshape) # (nbatch,neig,na,nguess)
-        T = torch.bmm(VT, AV.view(*matshape)) # (nbatch*neig, nguess, nguess)
+        AV = A(V, *params_fullshape) # (nbatch*neig,na,nguess)
+        T = torch.bmm(VT, AV) # (nbatch*neig, nguess, nguess)
 
         # eigvals are sorted from the lowest
         # eval: (nbatch*neig, nguess), evec: (nbatch*neig, nguess, nguess)
@@ -257,7 +257,8 @@ def davidson(A, neig, params, **options):
         eigvecA = torch.bmm(V, eigvecT) # (nbatch*neig, na, 1)
 
         # calculate the residual
-        resid = A(eigvecA, *params_fullshape) - eigvalT.unsqueeze(-1).unsqueeze(-1) * eigvecA # (nbatch*neig, na, 1)
+        resid = torch.bmm(AV, eigvecT) - eigvalT.unsqueeze(-1).unsqueeze(-1) * eigvecA # (nbatch*neig, na, 1)
+        # resid = resid - (resid * eigvecA).sum(dim=1, keepdim=True) * eigvecA
         resid = resid.view(nbatch, neig, na) # (nbatch, neig, na)
         resid = resid.transpose(-2, -1) # (nbatch, na, neig)
 
@@ -268,7 +269,10 @@ def davidson(A, neig, params, **options):
             break
 
         # apply the preconditioner
-        t = A.precond(resid, *params, biases=eigvalT).transpose(-2,-1).unsqueeze(-1).view(-1,na,1) # (nbatch*neig, na, 1)
+        t = -A.precond(resid, *params, biases=eigvalT) # (nbatch, na, neig)
+        t = t.transpose(-2,-1).unsqueeze(-1).view(-1,na,1) # (nbatch*neig, na, 1)
+        # # orthogonalize t from eigvecA
+        # t = t - (t * eigvecA).sum(dim=1, keepdim=True) * eigvecA
 
         # orthogonalize t with the rest of the V
         V = torch.cat((V, t), dim=-1)
