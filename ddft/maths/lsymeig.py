@@ -197,7 +197,7 @@ def davidson(A, neig, params, **options):
     """
     config = set_default_option({
         "max_niter": 1000,
-        "nguess": 1, # number of initial guess / neig
+        "nguess": neig, # number of initial guess
         "min_eps": 1e-6,
         "verbose": False,
         "eps_cond": 1e-6,
@@ -218,51 +218,34 @@ def davidson(A, neig, params, **options):
     nbatch = params[0].shape[0]
     dtype, device = _get_dtype_device(params, A)
 
-    fullshape = (nbatch,neig,na,-1)
-    matshape = (nbatch*neig,na,-1)
-
     # set up the initial guess
-    V = _set_initial_v(config["v_init"].lower(), nbatch*neig, na, nguess) # (nbatch*neig,na,nguess)
+    V = _set_initial_v(config["v_init"].lower(), nbatch, na, nguess) # (nbatch,na,nguess)
     V = V.to(dtype).to(device)
-    V = V.view(*matshape) # (nbatch*neig,na,nguess)
-    params_fullshape = [p.repeat_interleave(neig, dim=0) for p in params]
 
     prev_eigvals = None
     stop_reason = "max_niter"
     idx = torch.arange(neig).unsqueeze(0).unsqueeze(-1) # (1, neig, 1)
     prev_eigvalT = None
-    # AV = A(V, *params_fullshape).view(*fullshape)
+    AV = A(V, *params)
     for i in range(max_niter):
-        VT = V.transpose(-2,-1) # (nbatch,neig,nguess,na)
+        VT = V.transpose(-2,-1) # (nbatch,nguess,na)
         # Can be optimized by saving AV from the previous iteration and only
         # operate AV for the new V. This works because the old V has already
         # been orthogonalized, so it will stay the same
-        AV = A(V, *params_fullshape) # (nbatch*neig,na,nguess)
-        T = torch.bmm(VT, AV) # (nbatch*neig, nguess, nguess)
+        # AV = A(V, *params) # (nbatch,na,nguess)
+        T = torch.bmm(VT, AV) # (nbatch,nguess,nguess)
 
         # eigvals are sorted from the lowest
-        # eval: (nbatch*neig, nguess), evec: (nbatch*neig, nguess, nguess)
+        # eval: (nbatch,nguess), evec: (nbatch, nguess, nguess)
         eigvalT, eigvecT = torch.symeig(T, eigenvectors=True)
-
-        # select the eigenvalues and eigenvectors
-        idx_select = torch.clamp(idx, max=nguess-1) # (1,neig,1)
-        eigvalT = eigvalT.view(nbatch,neig,-1) # (nbatch, neig, nguess)
-        eigvecT = eigvecT.view(nbatch,neig,nguess,-1)
-        idx_evals = idx_select.expand(nbatch,-1,-1) # (nbatch,neig,1)
-        idx_evecs = idx_select.unsqueeze(-1).expand(nbatch,-1,nguess,-1) # (nbatch,neig,nguess,1)
-        eigvalT = torch.gather(eigvalT, dim=-1, index=idx_evals).squeeze(-1) # (nbatch, neig)
-        eigvecT = torch.gather(eigvecT, dim=-1, index=idx_evecs).squeeze(-1) # (nbatch, neig, nguess)
-        eigvecT = eigvecT.view(-1,nguess).unsqueeze(-1) # (nbatch*neig, nguess, 1)
+        eigvalT = eigvalT[:,:neig] # (nbatch,neig)
+        eigvecT = eigvecT[:,:,:neig] # (nbatch,nguess,neig)
 
         # calculate the eigenvectors of A
-        eigvecA = torch.bmm(V, eigvecT) # (nbatch*neig, na, 1)
+        eigvecA = torch.bmm(V, eigvecT) # (nbatch, na, neig)
 
         # calculate the residual
-        resid = torch.bmm(AV, eigvecT) - eigvalT.view(-1).unsqueeze(-1).unsqueeze(-1) * eigvecA # (nbatch*neig, na, 1)
-        # resid = resid - (resid * eigvecA).sum(dim=1, keepdim=True) * eigvecA
-        resid = resid.view(nbatch, neig, na) # (nbatch, neig, na)
-        resid = resid.transpose(-2, -1) # (nbatch, na, neig)
-        eva = eigvecA.view(nbatch,neig,na).transpose(-2,-1) # (nbatch,na,neig)
+        resid = torch.bmm(AV, eigvecT) - eigvalT.unsqueeze(1) * eigvecA # (nbatch, na, neig)
 
         if prev_eigvalT is not None:
             deigval = eigvalT - prev_eigvalT
@@ -282,15 +265,13 @@ def davidson(A, neig, params, **options):
         else:
             z = eigvalT
         t = A.precond(-resid, *params, biases=z) # (nbatch, na, neig)
-        t = t.transpose(-2,-1).view(-1,na).unsqueeze(-1) # (nbatch*neig,na,1)
-        # t = A.precond(resid, *params, biases=eigvalT) # (nbatch, na, neig)
 
         # orthogonalize t with the rest of the V
         V = torch.cat((V, t), dim=-1)
-        V, R = torch.qr(V) # (nbatch*neig, na, nguess+1)
-        nguess = nguess + 1
-        # AVnew = A(V[:,:,-1:], *params_fullshape).view(*fullshape) # (nbatch,neig,na,1)
-        # AV = torch.cat((AV, AVnew), dim=-1)
+        V, R = torch.qr(V) # (nbatch, na, nguess+neig)
+        nguess = nguess + neig
+        AVnew = A(V[:,:,-neig:], *params) # (nbatch,neig,na,1)
+        AV = torch.cat((AV, AVnew), dim=-1)
 
     eigvals = eigvalT # (nbatch, neig)
     eigvecs = eigvecA.view(nbatch, neig, na).transpose(-2, -1) # (nbatch, na, neig)
