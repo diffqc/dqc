@@ -196,7 +196,7 @@ def davidson(A, neig, params, **options):
         The `neig` smallest eigenpairs
     """
     config = set_default_option({
-        "max_niter": 120,
+        "max_niter": 1000,
         "nguess": 1, # number of initial guess / neig
         "min_eps": 1e-6,
         "verbose": False,
@@ -230,6 +230,7 @@ def davidson(A, neig, params, **options):
     prev_eigvals = None
     stop_reason = "max_niter"
     idx = torch.arange(neig).unsqueeze(0).unsqueeze(-1) # (1, neig, 1)
+    prev_eigvalT = None
     # AV = A(V, *params_fullshape).view(*fullshape)
     for i in range(max_niter):
         VT = V.transpose(-2,-1) # (nbatch,neig,nguess,na)
@@ -257,24 +258,32 @@ def davidson(A, neig, params, **options):
         eigvecA = torch.bmm(V, eigvecT) # (nbatch*neig, na, 1)
 
         # calculate the residual
-        resid = torch.bmm(AV, eigvecT) - eigvalT.unsqueeze(-1).unsqueeze(-1) * eigvecA # (nbatch*neig, na, 1)
+        resid = torch.bmm(AV, eigvecT) - eigvalT.view(-1).unsqueeze(-1).unsqueeze(-1) * eigvecA # (nbatch*neig, na, 1)
         # resid = resid - (resid * eigvecA).sum(dim=1, keepdim=True) * eigvecA
         resid = resid.view(nbatch, neig, na) # (nbatch, neig, na)
         resid = resid.transpose(-2, -1) # (nbatch, na, neig)
-        eva = eigvecA.view(nbatch,neig,na).transpose(-2,-1)
+        eva = eigvecA.view(nbatch,neig,na).transpose(-2,-1) # (nbatch,na,neig)
 
-        max_resid = resid.abs().max()
-        if verbose:
-            print("Iter %3d (guess size: %d): %.3e" % (i+1, nguess, resid.abs().max()))
-        if max_resid < min_eps:
-            break
+        if prev_eigvalT is not None:
+            deigval = eigvalT - prev_eigvalT
+            max_deigval = deigval.abs().max()
+            max_resid = resid.abs().max()
+            if verbose:
+                print("Iter %3d (guess size: %d): resid: %.3e, devals: %.3e" % \
+                      (i+1, nguess, max_resid, max_deigval))
+            if max_resid < min_eps:
+                break
+        prev_eigvalT = eigvalT
 
         # apply the preconditioner
-        # t = -A.precond(resid, *params, biases=eigvalT) # (nbatch, na, neig)
-        t = A.precond(eva, *params, biases=eigvalT) # (nbatch, na, neig)
-        t = t.transpose(-2,-1).unsqueeze(-1).view(-1,na,1) # (nbatch*neig, na, 1)
-        # # orthogonalize t from eigvecA
-        # t = t - (t * eigvecA).sum(dim=1, keepdim=True) * eigvecA
+        # initial guess of the eigenvalues are actually help really much
+        if i < 10:
+            z = torch.ones_like(eigvalT) - 10
+        else:
+            z = eigvalT
+        t = A.precond(-resid, *params, biases=z) # (nbatch, na, neig)
+        t = t.transpose(-2,-1).view(-1,na).unsqueeze(-1) # (nbatch*neig,na,1)
+        # t = A.precond(resid, *params, biases=eigvalT) # (nbatch, na, neig)
 
         # orthogonalize t with the rest of the V
         V = torch.cat((V, t), dim=-1)
@@ -360,7 +369,7 @@ if __name__ == "__main__":
     from ddft.utils.fd import finite_differences
 
     # generate the matrix
-    na = 20
+    na = 2000
     dtype = torch.float64
     torch.manual_seed(123)
     A1 = (torch.rand((1,na,na))*0.1).to(dtype).requires_grad_(True)
@@ -407,6 +416,7 @@ if __name__ == "__main__":
         options = {
             "method": "davidson",
             "verbose": True,
+            "nguess": neig,
             "v_init": "rand",
         }
         bck_options = {
@@ -417,6 +427,12 @@ if __name__ == "__main__":
             params=(A1, diag,),
             fwd_options=options,
             bck_options=bck_options)
+        evals2, evecs2 = lsymeig(A, neig,
+            params=(A1, diag,),
+            fwd_options={"method": "exacteig"})
+        print(evals)
+        print(evals2)
+        raise RuntimeError
         loss = 0
         # loss = loss + (evals**2).sum()
         loss = loss + (evecs**4).sum()
