@@ -227,6 +227,21 @@ def davidson(A, neig, params, **options):
     idx = torch.arange(neig).unsqueeze(0).unsqueeze(-1) # (1, neig, 1)
     prev_eigvalT = None
     AV = A(V, *params)
+    shift_is_eigvalT = False
+
+    # estimating the lowest eigenvalues
+    ntest = 20
+    x = torch.randn(nbatch, na, ntest).to(V.dtype).to(V.device) # (nbatch, na, ntest)
+    x = x / x.norm(dim=1, keepdim=True)
+    Ax = A(x, *params) # (nbatch, na, ntest)
+    xTAx = (x * Ax).sum(dim=1) # (nbatch, ntest)
+    mean_eig = xTAx.mean(dim=-1) # (nbatch,)
+    std_f = (xTAx).std(dim=-1) # (nbatch,)
+    std_x2 = (x*x).std()
+    rms_eig = (std_f / std_x2) / (na**0.5)
+    min_eig_est = mean_eig - 2*rms_eig # (nbatch,)
+    min_eig_est = min_eig_est.unsqueeze(-1).repeat(1,neig) # (nbatch,neig)
+
     for i in range(max_niter):
         VT = V.transpose(-2,-1) # (nbatch,nguess,na)
         # Can be optimized by saving AV from the previous iteration and only
@@ -260,11 +275,22 @@ def davidson(A, neig, params, **options):
 
         # apply the preconditioner
         # initial guess of the eigenvalues are actually help really much
-        if i < 10:
-            z = torch.ones_like(eigvalT) - 10
+        if not shift_is_eigvalT:
+            z = min_eig_est # (nbatch,neig)
         else:
             z = eigvalT
         t = A.precond(-resid, *params, biases=z) # (nbatch, na, neig)
+
+        # set the estimate of the eigenvalues
+        if not shift_is_eigvalT:
+            eigvalT_pred = eigvalT + (eigvecA * A(t, *params)).sum(dim=1)
+            diff_eigvalT = (eigvalT - eigvalT_pred) # (nbatch, neig)
+            if diff_eigvalT.abs().max() < rms_eig*1e-2:
+                shift_is_eigvalT = True
+            else:
+                change_idx = min_eig_est > eigvalT
+                next_value = eigvalT - 2*diff_eigvalT
+                min_eig_est[change_idx] = next_value[change_idx]
 
         # orthogonalize t with the rest of the V
         V = torch.cat((V, t), dim=-1)
@@ -274,7 +300,7 @@ def davidson(A, neig, params, **options):
         AV = torch.cat((AV, AVnew), dim=-1)
 
     eigvals = eigvalT # (nbatch, neig)
-    eigvecs = eigvecA.view(nbatch, neig, na).transpose(-2, -1) # (nbatch, na, neig)
+    eigvecs = eigvecA # (nbatch, na, neig)
     return eigvals, eigvecs
 
 def exacteig(A, neig, params, **options):
@@ -398,7 +424,7 @@ if __name__ == "__main__":
             "method": "davidson",
             "verbose": True,
             "nguess": neig,
-            "v_init": "rand",
+            "v_init": "randn",
         }
         bck_options = {
             "verbose": True,
