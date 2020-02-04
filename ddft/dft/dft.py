@@ -135,8 +135,7 @@ if __name__ == "__main__":
         "verbose": False
     }
     eigen_options = {
-        "method": "exacteig",
-        "max_addition": 4,
+        "method": "davidson",
         "verbose": True
     }
     a = torch.tensor([0.0]).to(dtype)
