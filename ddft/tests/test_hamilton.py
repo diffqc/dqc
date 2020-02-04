@@ -32,8 +32,7 @@ def compare_hamilton_pw_kinetics(nx, ndim, boxsize=4.0, nfreq=1.0, sin=True):
     wf, wfq, h, space = setup_hamilton(nx, ndim, boxsize, nfreq=nfreq, sin=sin)
     vext = torch.zeros_like(wf).squeeze(-1)
 
-    kinq = h(wfq, vext) # (1,ns,1)
-    kin = space.invtransformsig(kinq, dim=1)
+    kin = h(wf, vext) # (1,nr,1)
 
     a = wf-2*kin/(2*np.pi*nfreq)**2
     assert torch.allclose(a, torch.zeros_like(a), atol=1e-4)
@@ -44,8 +43,7 @@ def compare_hamilton_pw_vext(nx, ndim, boxsize=4.0, nfreq=1.0, sin=True):
     rgrid_norm = rgrid.norm(dim=-1) # (nr,)
     vext = (rgrid_norm * rgrid_norm * 0.5).unsqueeze(0) # (1,nr)
 
-    hq = h(wfq, vext) # (1,ns,1)
-    hr = space.invtransformsig(hq, dim=1) # (1,nr,1)
+    hr = h(wf, vext) # (1,nr,1)
 
     kin = wf*(2*np.pi*nfreq)**2/2.0 # 1/2 * omega^2 * wf
     vext_wf = hr-kin
