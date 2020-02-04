@@ -54,14 +54,15 @@ class HamiltonPlaneWave(BaseHamilton):
 
         nbatch, nr, ncols = y.shape
 
-        yq = self.space.transformsig(y, dim=1)
+        yq = self.space.transformsig(y, dim=1) # (nbatch, ns, ncols)
+        nbatch, ns, ncols = yq.shape
 
         # get the diagonal and apply the inverse
-        diag_kin = self.q2.squeeze(-1).unsqueeze(0).expand(nbatch, -1) # (nbatch,nr)
+        diag_kin = self.q2.squeeze(-1).unsqueeze(0).expand(nbatch, -1) # (nbatch,ns)
         sumvext = vext.sum(dim=-1, keepdim=True) / np.sqrt(nr*1.0)
-        sumvext = sumvext.expand(-1, nr) # (nbatch, nr)
-        diag = diag_kin + sumvext # (nbatch, nr)
-        diag = diag.unsqueeze(-1) # (nbatch, nr, 1)
+        sumvext = sumvext.expand(-1, ns) # (nbatch, ns)
+        diag = diag_kin + sumvext # (nbatch, ns)
+        diag = diag.unsqueeze(-1) # (nbatch, ns, 1)
         if biases is not None:
             diag = diag - biases.unsqueeze(1) # (nbatch, nr, ncols)
 
