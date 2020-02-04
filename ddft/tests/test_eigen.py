@@ -1,39 +1,37 @@
 import time
 import random
 import torch
+import lintorch as lt
 from ddft.utils.fd import finite_differences
 from ddft.tests.utils import compare_grad_with_fd
-from ddft.modules.base_linear import BaseLinearModule
 from ddft.modules.eigen import EigenModule
 
 def test_eigen_1():
-    class DummyLinearModule(BaseLinearModule):
+    class DummyLinearModule(lt.Module):
         def __init__(self, A):
-            super(DummyLinearModule, self).__init__()
+            super(DummyLinearModule, self).__init__(
+                shape=A.shape,
+                is_symmetric=True,
+            )
             self.A = torch.nn.Parameter(A) # (nr, nr)
 
-        @property
-        def shape(self):
-            return self.A.shape
-
         def forward(self, x, diagonal):
-            # x: (nbatch, nr) or (nbatch, nr, nj)
+            # x: (nbatch, nr, nj)
             # diagonal: (nbatch, nr)
-            xndim = x.ndim
-            if xndim == 2:
-                x = x.unsqueeze(-1)
             nbatch = x.shape[0]
             A = self.A.unsqueeze(0).expand(nbatch, -1, -1)
             y = torch.bmm(A, x) + x * diagonal.unsqueeze(-1) # (nbatch, nr, nj)
-            if xndim == 2:
-                y = y.squeeze(-1)
             return y
 
-        def diag(self, diagonal):
+        def precond(self, y, diagonal, biases=None):
+            # y: (nbatch, nr, nj)
             # diagonal: (nbatch, nr)
-            nbatch = diagonal.shape[0]
-            Adiag = torch.diag(self.A).unsqueeze(0).expand(nbatch, -1)
-            return Adiag + diagonal
+            # biases: (nbatch, nj) or None
+            Adiag = torch.diag(self.A).unsqueeze(0).unsqueeze(-1) # (1,nr,1)
+            diag = diagonal.unsqueeze(-1) + Adiag
+            if biases is not None:
+                diag = diag - biases.unsqueeze(1)
+            return y / diag
 
     torch.manual_seed(180)
     random.seed(180)

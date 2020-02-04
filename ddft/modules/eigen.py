@@ -1,8 +1,5 @@
 import torch
 import lintorch as lt
-from ddft.modules.base_linear import BaseLinearModule
-from ddft.modules.complex import RealModule, add_zero_imag
-from ddft.maths.lsymeig import lsymeig
 from ddft.utils.misc import set_default_option
 
 class EigenModule(torch.nn.Module):
