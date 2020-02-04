@@ -1,11 +1,11 @@
 from abc import abstractmethod, abstractproperty
 from functools import reduce
 import torch
-from ddft.modules.base_linear import BaseLinearModule
+import lintorch as lt
 
-class BaseHamilton(BaseLinearModule):
+class BaseHamilton(lt.Module):
     @abstractmethod
-    def apply(self, wf, vext, *params):
+    def forward(self, wf, vext, *params):
         """
         Compute the Hamiltonian of a wavefunction in the spatial domain
         and external potential in the spatial domain.
@@ -29,6 +29,33 @@ class BaseHamilton(BaseLinearModule):
         -------
         * h: torch.tensor (nbatch, nr, ncols)
             The calculated Hamiltonian
+        """
+        pass
+
+    @abstractmethod
+    def precond(self, y, vext, *params, biases=None):
+        """
+        Apply the preconditioning of the Hamiltonian to the tensor `y`.
+        The return shape: (nbatch, nr, ncols)
+
+        Arguments
+        ---------
+        * y: torch.tensor (nbatch, nr, ncols)
+            The tensor where the preconditioning is applied
+        * vext: torch.tensor (nbatch, nr)
+            The external potential in spatial domain. This should be the total
+            potential the non-interacting particles feel
+            (i.e. xc, Hartree, and external).
+        * *params: list of torch.tensor (nbatch, ...)
+            The list of parameters that define the Hamiltonian
+        * biases: torch.tensor (nbatch, ncols) or None
+            If not None, it will compute the preconditioning for (H-b*I) for
+            each column of y. If None, then it is zero.
+
+        Returns
+        -------
+        * x: torch.tensor (nbatch, nr, ncols)
+            The output of the preconditioning.
         """
         pass
 
@@ -57,40 +84,6 @@ class BaseHamilton(BaseLinearModule):
         """
         Perform integral p(r) dr where p is tensor with shape (nbatch,nr)
         describing the value in the box.
-        """
-        pass
-
-    @abstractproperty
-    def shape(self):
-        """
-        Returns the matrix shape of the Hamiltonian.
-        """
-        return
-
-    @abstractmethod
-    def precond(self, y, vext, *params, biases=None):
-        """
-        Apply the preconditioning of the Hamiltonian to the tensor `y`.
-        The return shape: (nbatch, nr, ncols)
-
-        Arguments
-        ---------
-        * y: torch.tensor (nbatch, nr, ncols)
-            The tensor where the preconditioning is applied
-        * vext: torch.tensor (nbatch, nr)
-            The external potential in spatial domain. This should be the total
-            potential the non-interacting particles feel
-            (i.e. xc, Hartree, and external).
-        * *params: list of torch.tensor (nbatch, ...)
-            The list of parameters that define the Hamiltonian
-        * biases: torch.tensor (nbatch, ncols) or None
-            If not None, it will compute the preconditioning for (H-b*I) for
-            each column of y. If None, then it is zero.
-
-        Returns
-        -------
-        * x: torch.tensor (nbatch, nr, ncols)
-            The output of the preconditioning.
         """
         pass
 
@@ -144,30 +137,3 @@ class BaseHamilton(BaseLinearModule):
         shaper = [sigshape[i] for i in range(dim+1, ndim)]
         newshape = shapel + [*self.boxshape] + shaper
         return sig.view(*newshape)
-
-    def forward(self, wf, vext, *params):
-        # wf: (nbatch, nr) or (nbatch, nr, ncols)
-        # vext: (nbatch, nr)
-
-        # normalize the shape of wf
-        wfndim = wf.ndim
-        if wfndim == 2:
-            wf = wf.unsqueeze(-1)
-
-        h = self.apply(wf, vext, *params)
-
-        if wfndim == 2:
-            h = h.squeeze(-1)
-        return h
-
-    def transpose(self, wf, vext, *params):
-        if self.issymmetric:
-            return self.forward(wf, vext, *params)
-        else:
-            wfndim = wf.ndim
-            if wfndim == 2:
-                wf = wf.unsqueeze(-1)
-            hT = self.applyT(wf, vext, *params)
-            if wfndim == 2:
-                hT = hT.squeeze(-1)
-            return hT

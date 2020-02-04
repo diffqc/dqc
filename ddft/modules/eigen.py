@@ -1,4 +1,5 @@
 import torch
+import lintorch as lt
 from ddft.modules.base_linear import BaseLinearModule
 from ddft.modules.complex import RealModule, add_zero_imag
 from ddft.maths.lsymeig import lsymeig
@@ -10,7 +11,7 @@ class EigenModule(torch.nn.Module):
 
     __init__ arguments:
     -------------------
-    * linmodule: BaseLinearModule
+    * linmodule: lintorch.Module
         The linear module whose forward signature is `forward(self, x, *params)`
         and it should provide the gradient to `x` and each of `params`.
         The linmodule must be a square matrix with size (na, na)
@@ -45,14 +46,14 @@ class EigenModule(torch.nn.Module):
         }, options)
 
         # check type
-        if not isinstance(self.linmodule, BaseLinearModule):
-            raise TypeError("The linmodule argument must be instance of BaseLinearModule")
+        if not isinstance(self.linmodule, lt.Module):
+            raise TypeError("The linmodule argument must be instance of lintorch.Module")
 
     def forward(self, *params):
         # eigvals: (nbatch, nlowest)
         # eigvecs: (nbatch, nr, nlowest)
-        evals, evecs = lsymeig(self.linmodule,
-            self.nlowest, params,
+        evals, evecs = lt.lsymeig(self.linmodule,
+            params, self.nlowest,
             fwd_options=self.options)
         return evals, evecs
 
@@ -60,33 +61,31 @@ if __name__ == "__main__":
     import time
     from ddft.utils.fd import finite_differences
 
-    class DummyLinearModule(BaseLinearModule):
+    class DummyLinearModule(lt.Module):
         def __init__(self, A):
-            super(DummyLinearModule, self).__init__()
+            super(DummyLinearModule, self).__init__(
+                shape=A.shape,
+                is_symmetric=True,
+            )
             self.A = torch.nn.Parameter(A) # (nr, nr)
 
-        @property
-        def shape(self):
-            return self.A.shape
-
         def forward(self, x, diagonal):
-            # x: (nbatch, nr) or (nbatch, nr, nj)
+            # x: (nbatch, nr, nj)
             # diagonal: (nbatch, nr)
-            xndim = x.ndim
-            if xndim == 2:
-                x = x.unsqueeze(-1)
             nbatch = x.shape[0]
             A = self.A.unsqueeze(0).expand(nbatch, -1, -1)
             y = torch.bmm(A, x) + x * diagonal.unsqueeze(-1) # (nbatch, nr, nj)
-            if xndim == 2:
-                y = y.squeeze(-1)
             return y
 
-        def diag(self, diagonal):
+        def precond(self, y, diagonal, biases=None):
+            # y: (nbatch, nr, nj)
             # diagonal: (nbatch, nr)
-            nbatch = diagonal.shape[0]
-            Adiag = torch.diag(self.A).unsqueeze(0).expand(nbatch, -1)
-            return Adiag + diagonal
+            # biases: (nbatch, nj) or None
+            Adiag = torch.diag(self.A).unsqueeze(0).unsqueeze(-1) # (1,nr,1)
+            diag = diagonal.unsqueeze(-1) + Adiag
+            if biases is not None:
+                diag = diag - biases.unsqueeze(1)
+            return y / diag
 
     dtype = torch.float64
     nr = 120
