@@ -104,6 +104,7 @@ def _construct_qgrid(rgrid, boxshape):
         spacing = spacing // boxshape[i]
         na = rgrid.shape[i]
         index = torch.arange(rgrid.shape[i]) * spacing + i
+        index = index.to(rgrid.device)
         xgrid = torch.take(rgrid, index=index)
         qgrid = _construct_qgrid_1(xgrid) # (nx,)
         qshape = [qgrid.shape[0] if i==j else 1 for j in range(ndim+1)] # =(1,ny,1,1)
