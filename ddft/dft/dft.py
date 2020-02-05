@@ -64,16 +64,26 @@ class DFT(torch.nn.Module):
         dens = eigvec_dens * focc.unsqueeze(1) # (nbatch, nr, nlowest)
         new_density = dens.sum(dim=-1) # (nbatch, nr)
 
+        # save variables for the post-process calculations
+        self._lc_vks = vks
+        self._lc_vext_tot = vext_tot
+        self._lc_eigvals = eigvals
+        self._lc_eigvecs = eigvecs
+        self._lc_density = density
+        self._lc_focc = focc
+
         return new_density
 
-    def energy(self, density, vext, focc):
+    ############################# post processing #############################
+    def energy(self):
         # calculate the total potential experienced by Kohn-Sham particles
-        vks = self.vks_model(density) # (nbatch, nr)
-        vext_tot = vext + vks
-
-        # compute the eigenpairs
-        # evals: (nbatch, nlowest), evecs: (nbatch, nr, nlowest)
-        eigvals, eigvecs = self.eigen_model(vext_tot)
+        # from the last forward calculation
+        vks = self._lc_vks
+        vext_tot = self._lc_vext_tot
+        eigvals = self._lc_eigvals
+        eigvecs = self._lc_eigvecs
+        density = self._lc_density
+        focc = self._lc_focc
 
         # calculates the Kohn-Sham energy
         eks_density = self.eks_model(density) # energy density (nbatch, nr)
@@ -120,7 +130,7 @@ if __name__ == "__main__":
             return vks
 
     dtype = torch.float64
-    ndim = 1
+    ndim = 3
     boxshape = [51, 51, 51][:ndim]
     boxsizes = [10.0, 10.0, 10.0][:ndim]
     rgrids = [torch.linspace(-boxsize/2., boxsize/2., nx+1)[:-1].to(dtype) for (boxsize,nx) in zip(boxsizes,boxshape)]
@@ -160,8 +170,8 @@ if __name__ == "__main__":
         # calculate the density
         nels = focc.sum(-1)
         density0 = torch.zeros_like(vext).to(vext.device) # _get_uniform_density(rgrid, nels)
-        density = scf_model(density0, vext, focc)
-        energy = dft_model.energy(density, vext, focc)
+        density = dft_model(density0, vext, focc)
+        energy = dft_model.energy()
 
         # print(energy)
         # plt.plot(vext.view(-1).detach().numpy())
