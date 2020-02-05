@@ -131,7 +131,7 @@ if __name__ == "__main__":
 
     dtype = torch.float64
     ndim = 3
-    boxshape = [51, 51, 51][:ndim]
+    boxshape = [31, 31, 31][:ndim]
     boxsizes = [10.0, 10.0, 10.0][:ndim]
     rgrids = [torch.linspace(-boxsize/2., boxsize/2., nx+1)[:-1].to(dtype) for (boxsize,nx) in zip(boxsizes,boxshape)]
     rgrids = torch.meshgrid(*rgrids) # (nx,ny,nz)
@@ -146,9 +146,9 @@ if __name__ == "__main__":
     }
     eigen_options = {
         "method": "davidson",
-        "verbose": True
+        "verbose": False
     }
-    a = torch.tensor([0.0]).to(dtype)
+    a = torch.tensor([0.1]).to(dtype)
     p = torch.tensor([1.3333]).to(dtype)
     rgrid_norm = (rgrid).norm(dim=-1)
     # vext = -1./(rgrid_norm + 1e-3)
@@ -170,7 +170,7 @@ if __name__ == "__main__":
         # calculate the density
         nels = focc.sum(-1)
         density0 = torch.zeros_like(vext).to(vext.device) # _get_uniform_density(rgrid, nels)
-        density = dft_model(density0, vext, focc)
+        density = scf_model(density0, vext, focc)
         energy = dft_model.energy()
 
         # print(energy)
@@ -201,7 +201,7 @@ if __name__ == "__main__":
     # use finite_differences
     a_fd = finite_differences(getloss, (a, p, vext, focc), 0, eps=1e-6)
     p_fd = finite_differences(getloss, (a, p, vext, focc), 1, eps=1e-6)
-    vext_fd = finite_differences(getloss, (a, p, vext, focc), 2, eps=1e-3)
+    # vext_fd = finite_differences(getloss, (a, p, vext, focc), 2, eps=1e-3)
     focc_fd = finite_differences(getloss, (a, p, vext, focc), 3, eps=1e-5)
     t3 = time.time()
     print("Finite differences done in %fs" % (t3 - t2))
@@ -216,10 +216,10 @@ if __name__ == "__main__":
     print(p_fd)
     print(p_grad / p_fd)
 
-    print("vext gradients:")
-    print(vext_grad)
-    print(vext_fd)
-    print(vext_grad / vext_fd)
+    # print("vext gradients:")
+    # print(vext_grad)
+    # print(vext_fd)
+    # print(vext_grad / vext_fd)
 
     print("focc gradients:")
     print(focc_grad)
