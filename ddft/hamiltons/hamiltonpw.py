@@ -33,8 +33,8 @@ class HamiltonPlaneWave(BaseHamilton):
         self.dr3 = torch.prod(self.pixsize)
         self.inv_dr3 = 1.0 / self.dr3
 
-    def forward(self, wf, vext, *params):
-        # wf: (nbatch, ns, ncols)
+    def forward(self, wf, vext):
+        # wf: (nbatch, nr, ncols)
         # vext: (nbatch, nr)
 
         # the kinetics part is q2 in qspace
@@ -58,8 +58,8 @@ class HamiltonPlaneWave(BaseHamilton):
         nbatch, ns, ncols = yq.shape
 
         # get the diagonal and apply the inverse
-        diag_kin = self.q2.squeeze(-1).unsqueeze(0).expand(nbatch, -1) # (nbatch,ns)
-        sumvext = vext.sum(dim=-1, keepdim=True) / np.sqrt(nr*1.0)
+        diag_kin = self.q2.squeeze(-1).unsqueeze(0).expand(nbatch, -1) * 0.5 # (nbatch,ns)
+        sumvext = vext.sum(dim=-1, keepdim=True) / (nr*1.0)
         sumvext = sumvext.expand(-1, ns) # (nbatch, ns)
         diag = diag_kin + sumvext # (nbatch, ns)
         diag = diag.unsqueeze(-1) # (nbatch, ns, 1)
@@ -81,3 +81,30 @@ class HamiltonPlaneWave(BaseHamilton):
 
     def integralbox(self, p, dim=-1):
         return p.sum(dim=dim) * self.dr3
+
+if __name__ == "__main__":
+    import matplotlib.pyplot as plt
+    from ddft.spaces.qspace import QSpace
+
+    dtype = torch.float64
+    ndim = 3
+    boxshape = [51, 51, 51][:ndim]
+    boxsizes = [10.0, 10.0, 10.0][:ndim]
+    rgrids = [torch.linspace(-boxsize/2., boxsize/2., nx+1)[:-1].to(dtype) for (boxsize,nx) in zip(boxsizes,boxshape)]
+    rgrids = torch.meshgrid(*rgrids) # (nx,ny,nz)
+    rgrid = torch.cat([rgrid.unsqueeze(-1) for rgrid in rgrids], dim=-1).view(-1,ndim) # (nr,3)
+    nr = rgrid.shape[0]
+
+    qspace = QSpace(rgrid, boxshape)
+    hpw = HamiltonPlaneWave(qspace)
+
+    nbatch = 1
+    vext = torch.ones((nbatch, nr), dtype=dtype) * 1
+    wf = torch.rand((nbatch, nr, 1), dtype=dtype)
+    hr = hpw(wf, vext)
+    wf_retr = hpw.precond(hr, vext)
+
+    dev_wf = (wf - wf_retr).squeeze()
+    print(dev_wf)
+    plt.plot(dev_wf.numpy())
+    plt.show()
