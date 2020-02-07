@@ -34,7 +34,7 @@ class BaseHamilton(lt.Module):
         pass
 
     @abstractmethod
-    def precond(self, y, vext, *params, biases=None):
+    def precond(self, y, vext, *params, biases=None, M=None, mparams=None):
         """
         Apply the preconditioning of the Hamiltonian to the tensor `y`.
         The return shape: (nbatch, ns, ncols)
@@ -52,11 +52,26 @@ class BaseHamilton(lt.Module):
         * biases: torch.tensor (nbatch, ncols) or None
             If not None, it will compute the preconditioning for (H-b*I) for
             each column of y. If None, then it is zero.
+        * M: lintorch.Module or None
+            The transformation on the biases side. If biases is None,
+            then this argument is ignored. If None or ignored, then M=I.
+        * mparams: list of differentiable torch.tensor
+            List of differentiable torch.tensor to be put to M.
 
         Returns
         -------
         * x: torch.tensor (nbatch, ns, ncols)
             The output of the preconditioning.
+        """
+        pass
+
+    @abstractmethod
+    def overlap(self):
+        """
+        Returns an instance of lintorch.Module that represents the overlap
+        matrix of the basis (i.e. F^T*F where F is the basis).
+        If None, then it is assumed that the overlap matrix is an identity
+        matrix (i.e. the basis is completely orthogonal).
         """
         pass
 

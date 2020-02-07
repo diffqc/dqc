@@ -14,6 +14,10 @@ class EigenModule(torch.nn.Module):
         The linmodule must be a square matrix with size (na, na)
     * nlowest: int
         Indicates how many lowest eigenpairs should be retrieved by this module.
+    * rlinmodule: lintorch.Module or None
+        The linear module for the right hand side of the eigendecomposition
+        equation. If specified, then it will solve the eigendecomposition
+        equation `AU = BUE` where `linmodule` is `A` and `rlinmodule` is `B`.
 
     forward arguments:
     ------------------
@@ -33,11 +37,12 @@ class EigenModule(torch.nn.Module):
     eigendecomposition on the real part to remove the degeneracy due to the
     complex representation.
     """
-    def __init__(self, linmodule, nlowest, **options):
+    def __init__(self, linmodule, nlowest, rlinmodule=None, **options):
         super(EigenModule, self).__init__()
 
         self.linmodule = linmodule
         self.nlowest = nlowest
+        self.rlinmodule = rlinmodule
         self.options = set_default_option({
             "method": "davidson",
         }, options)
@@ -49,6 +54,7 @@ class EigenModule(torch.nn.Module):
     def forward(self, *params):
         # eigvals: (nbatch, nlowest)
         # eigvecs: (nbatch, nr, nlowest)
+        # TODO: add rlinmodule in lsymeig
         evals, evecs = lt.lsymeig(self.linmodule,
             params, self.nlowest,
             fwd_options=self.options)

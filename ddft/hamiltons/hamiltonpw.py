@@ -51,7 +51,10 @@ class HamiltonPlaneWave(BaseHamilton):
 
         return kin+pot
 
-    def precond(self, y, vext, biases=None):
+    def overlap(self):
+        return None
+
+    def precond(self, y, vext, biases=None, M=None, mparams=None):
         # y: (nbatch, nr, ncols)
         # vext: (nbatch, nr)
         # biases: (nbatch, ncols) or None
