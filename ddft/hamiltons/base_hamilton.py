@@ -4,20 +4,21 @@ import torch
 import lintorch as lt
 
 class BaseHamilton(lt.Module):
+    ################################ Basis part ################################
     @abstractmethod
     def forward(self, wf, vext, *params):
         """
-        Compute the Hamiltonian of a wavefunction in the spatial domain
+        Compute the Hamiltonian of a wavefunction in the basis domain
         and external potential in the spatial domain.
-        The wf is located in the spatial domain of the Hamiltonian (having the
-        same shape as qgrid) and vext in the spatial domain (rgrid).
+        The wf is located in the basis domain of the Hamiltonian and vext in
+        the spatial domain (rgrid).
         The interpretation of boundary condition and interpolation between
         points in the spatial domain depends on the chosen space.
 
         Arguments
         ---------
-        * wf: torch.tensor (nbatch, nr, ncols)
-            The wavefunction in the spatial domain
+        * wf: torch.tensor (nbatch, ns, ncols)
+            The wavefunction in the basis domain
         * vext: torch.tensor (nbatch, nr)
             The external potential in spatial domain. This should be the total
             potential the non-interacting particles feel
@@ -27,7 +28,7 @@ class BaseHamilton(lt.Module):
 
         Returns
         -------
-        * h: torch.tensor (nbatch, nr, ncols)
+        * h: torch.tensor (nbatch, ns, ncols)
             The calculated Hamiltonian
         """
         pass
@@ -36,11 +37,11 @@ class BaseHamilton(lt.Module):
     def precond(self, y, vext, *params, biases=None):
         """
         Apply the preconditioning of the Hamiltonian to the tensor `y`.
-        The return shape: (nbatch, nr, ncols)
+        The return shape: (nbatch, ns, ncols)
 
         Arguments
         ---------
-        * y: torch.tensor (nbatch, nr, ncols)
+        * y: torch.tensor (nbatch, ns, ncols)
             The tensor where the preconditioning is applied
         * vext: torch.tensor (nbatch, nr)
             The external potential in spatial domain. This should be the total
@@ -54,11 +55,12 @@ class BaseHamilton(lt.Module):
 
         Returns
         -------
-        * x: torch.tensor (nbatch, nr, ncols)
+        * x: torch.tensor (nbatch, ns, ncols)
             The output of the preconditioning.
         """
         pass
 
+    ############################# Integration part #############################
     @abstractmethod
     def getdens(self, eigvec):
         """
@@ -67,7 +69,7 @@ class BaseHamilton(lt.Module):
 
         Arguments
         ---------
-        * eigvec: torch.tensor (nbatch, nr, neig)
+        * eigvec: torch.tensor (nbatch, ns, neig)
             The eigenvectors arranged in dimension 1 (i.e. ns). It is assumed
             that eigvec.sum(dim=1) == 1.
 
@@ -86,54 +88,3 @@ class BaseHamilton(lt.Module):
         describing the value in the box.
         """
         pass
-
-    ########################### implemented methods ###########################
-    def flattensig(self, sig, dim=-1):
-        """
-        Flatten the signal whose shape is (...,*boxshape,...) into
-        (...,nr,...).
-
-        Arguments
-        ---------
-        * sig: torch.tensor
-            The signal to be flatten
-        * dim: int
-            The dimension position where the `nr` will be located at the output.
-        """
-        ndim = sig.ndim
-        boxshape = self.boxshape
-        nboxshape = len(boxshape)
-        nr = reduce(lambda x,y: x*y, boxshape)
-
-        # get the dim into starting dim
-        if dim < 0:
-            dim = ndim + dim - (nboxshape - 1)
-
-        sigshape = sig.shape
-        shapel = [sigshape[i] for i in range(dim)]
-        shaper = [sigshape[i] for i in range(dim+nboxshape, ndim)]
-        newshape = shapel + [nr] + shaper
-        return sig.view(*newshape)
-
-    def boxifysig(self, sig, dim=-1):
-        """
-        Shape the signal into box shape, i.e. transform from (...,nr,...) into
-        (...,*boxshape,...)
-
-        Arguments
-        ---------
-        * sig: torch.tensor
-            The signal to be boxify
-        * dim: int
-            The dimension where the `nr` is located.
-        """
-        # make dim positive
-        ndim = sig.ndim
-        if dim < 0:
-            dim = ndim + dim
-
-        sigshape = sig.shape
-        shapel = [sigshape[i] for i in range(dim)]
-        shaper = [sigshape[i] for i in range(dim+1, ndim)]
-        newshape = shapel + [*self.boxshape] + shaper
-        return sig.view(*newshape)

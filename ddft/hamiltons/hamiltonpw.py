@@ -3,6 +3,9 @@ import numpy as np
 from ddft.hamiltons.base_hamilton import BaseHamilton
 
 class HamiltonPlaneWave(BaseHamilton):
+    # Note: even though the name is HamiltonPlaneWave, the basis is spatial
+    # basis. We use plane wave just to calculate the kinetics part.
+
     def __init__(self, space):
         # rgrid is (nr,ndim), ordered by (x, y, z)
         # boxshape (ndim,) = (nx, ny, nz)
