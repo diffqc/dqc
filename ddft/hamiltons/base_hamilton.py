@@ -60,7 +60,32 @@ class BaseHamilton(lt.Module):
         """
         pass
 
-    ############################# Integration part #############################
+    ################################ Grid part ################################
+    @abstractproperty
+    def rgrid(self):
+        """
+        The spatial grid with shape (nr, ndim).
+        """
+        pass
+
+    @abstractmethod
+    def getvhartree(self, dens):
+        """
+        Return the Hartree potential in spatial grid given the density in
+        spatial grid.
+
+        Arguments
+        ---------
+        * dens: torch.tensor (nbatch, nr)
+            The density profile in spatial grid.
+
+        Returns
+        -------
+        * vhartree: torch.tensor (nbatch, nr)
+            The Hartree potential.
+        """
+        pass
+
     @abstractmethod
     def getdens(self, eigvec):
         """

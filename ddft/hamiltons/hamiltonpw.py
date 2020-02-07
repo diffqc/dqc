@@ -77,6 +77,13 @@ class HamiltonPlaneWave(BaseHamilton):
         yres = self.space.invtransformsig(yq2, dim=1)
         return yres
 
+    @property
+    def rgrid(self):
+        return self.space.rgrid
+
+    def getvhartree(self, dens):
+        raise RuntimeError("getvhartree for HamiltonPlaneWave has not been implemented")
+
     def getdens(self, eigvecs):
         # eigvecs: (nbatch, nr, nlowest)
         dens = (eigvecs * eigvecs)

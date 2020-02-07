@@ -5,7 +5,6 @@ from ddft.utils.fd import finite_differences
 from ddft.hamiltons.hspatial1d import HamiltonSpatial1D
 from ddft.hamiltons.hamiltonpw import HamiltonPlaneWave
 from ddft.modules.equilibrium import EquilibriumModule
-from ddft.spaces.qspace import QSpace
 from ddft.dft.dft import DFT, _get_uniform_density
 
 # slow
@@ -42,8 +41,7 @@ def test_dft1d_1():
 
     def getloss(a, p, vext, focc, return_model=False):
         # set up the modules
-        qspace = QSpace(rgrid.unsqueeze(-1), (len(rgrid),))
-        H_model = HamiltonPlaneWave(qspace)
+        H_model = HamiltonPlaneWave(rgrid.unsqueeze(-1), (len(rgrid),))
         eks_model = EKS1(a, p)
         dft_model = DFT(H_model, eks_model, nlowest,
             **eigen_options)
