@@ -1,22 +1,23 @@
 import torch
 import numpy as np
 from ddft.hamiltons.base_hamilton import BaseHamilton
+from ddft.spaces.qspace import QSpace
 
 class HamiltonPlaneWave(BaseHamilton):
     # Note: even though the name is HamiltonPlaneWave, the basis is spatial
     # basis. We use plane wave just to calculate the kinetics part.
 
-    def __init__(self, space):
+    def __init__(self, rgrid, boxshape):
         # rgrid is (nr,ndim), ordered by (x, y, z)
         # boxshape (ndim,) = (nx, ny, nz)
-        nr = len(space.rgrid)
+        self.space = QSpace(rgrid, boxshape)
+        nr = len(self.space.rgrid)
         super(HamiltonPlaneWave, self).__init__(
             shape = (nr, nr),
             is_symmetric = True,
             is_real = True)
 
-        # set up the space
-        self.space = space
+        # set up the qspace
         self.qgrid = self.space.qgrid # (ns,ndim)
         self.q2 = (self.qgrid*self.qgrid).sum(dim=-1, keepdim=True) # (ns,1)
 
@@ -87,7 +88,6 @@ class HamiltonPlaneWave(BaseHamilton):
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
-    from ddft.spaces.qspace import QSpace
 
     dtype = torch.float64
     ndim = 3
@@ -98,8 +98,7 @@ if __name__ == "__main__":
     rgrid = torch.cat([rgrid.unsqueeze(-1) for rgrid in rgrids], dim=-1).view(-1,ndim) # (nr,3)
     nr = rgrid.shape[0]
 
-    qspace = QSpace(rgrid, boxshape)
-    hpw = HamiltonPlaneWave(qspace)
+    hpw = HamiltonPlaneWave(rgrid, boxshape)
 
     nbatch = 1
     vext = torch.ones((nbatch, nr), dtype=dtype) * 1

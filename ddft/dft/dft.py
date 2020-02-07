@@ -117,7 +117,6 @@ if __name__ == "__main__":
     from ddft.hamiltons.hspatial1d import HamiltonSpatial1D
     from ddft.hamiltons.hamiltonpw import HamiltonPlaneWave
     from ddft.modules.equilibrium import EquilibriumModule
-    from ddft.spaces.qspace import QSpace
 
     class EKS1(torch.nn.Module):
         def __init__(self, a, p):
@@ -158,8 +157,7 @@ if __name__ == "__main__":
 
     def getloss(a, p, vext, focc, return_model=False):
         # set up the modules
-        qspace = QSpace(rgrid, boxshape)
-        H_model = HamiltonPlaneWave(qspace)
+        H_model = HamiltonPlaneWave(rgrid, boxshape)
         eks_model = EKS1(a, p)
         dft_model = DFT(H_model, eks_model, nlowest,
             **eigen_options)

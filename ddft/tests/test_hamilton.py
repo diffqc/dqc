@@ -1,7 +1,6 @@
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-from ddft.spaces.qspace import QSpace
 from ddft.hamiltons.hamiltonpw import HamiltonPlaneWave
 
 def setup_hamilton(nx, ndim, boxsize, nfreq=1.0, sin=True):
@@ -19,17 +18,16 @@ def setup_hamilton(nx, ndim, boxsize, nfreq=1.0, sin=True):
     else:
         wf = torch.cos(rgrid * 2 * np.pi * nfreq).unsqueeze(0) # (1,nr,ndim)
     wf = torch.sum(wf, dim=-1, keepdim=True) # (1,nr,1)
-    wfq = space.transformsig(wf, dim=1) # (1,ns,1)
 
     # assert torch.allclose(space.invtransformsig(wfq, dim=1), wf, atol=1e-5)
     # assert torch.allclose(space.transformsig(space.invtransformsig(wfq, dim=1), dim=1), wfq, atol=1e-5)
 
-    h = HamiltonPlaneWave(space)
-    return wf, wfq, h, space
+    h = HamiltonPlaneWave(rgrid, [nx for i in range(ndim)])
+    return wf, h, space
 
 
 def compare_hamilton_pw_kinetics(nx, ndim, boxsize=4.0, nfreq=1.0, sin=True):
-    wf, wfq, h, space = setup_hamilton(nx, ndim, boxsize, nfreq=nfreq, sin=sin)
+    wf, h, space = setup_hamilton(nx, ndim, boxsize, nfreq=nfreq, sin=sin)
     vext = torch.zeros_like(wf).squeeze(-1)
 
     kin = h(wf, vext) # (1,nr,1)
@@ -38,7 +36,7 @@ def compare_hamilton_pw_kinetics(nx, ndim, boxsize=4.0, nfreq=1.0, sin=True):
     assert torch.allclose(a, torch.zeros_like(a), atol=1e-4)
 
 def compare_hamilton_pw_vext(nx, ndim, boxsize=4.0, nfreq=1.0, sin=True):
-    wf, wfq, h, space = setup_hamilton(nx, ndim, boxsize, nfreq=nfreq, sin=sin)
+    wf, h, space = setup_hamilton(nx, ndim, boxsize, nfreq=nfreq, sin=sin)
     rgrid = space.rgrid # (nr, ndim)
     rgrid_norm = rgrid.norm(dim=-1) # (nr,)
     vext = (rgrid_norm * rgrid_norm * 0.5).unsqueeze(0) # (1,nr)
