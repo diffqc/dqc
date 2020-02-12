@@ -46,7 +46,7 @@ class DFT(torch.nn.Module):
         self.eks_model = eks_model
         self.vks_model = DifferentialModule(eks_model)
         self.eigen_model = EigenModule(H_model, nlowest,
-            rlinmodule=H_model.overlap(), **eigen_options)
+            rlinmodule=H_model.overlap, **eigen_options)
 
     def forward(self, density, vext, focc, hparams=[], rparams=[]):
         # density: (nbatch, nr)
@@ -146,7 +146,7 @@ class DFTMulti(torch.nn.Module):
         self.eks_model = eks_model
         self.vks_model = DifferentialModule(eks_model)
         self.eigen_models = [EigenModule(H_model, nlowest,
-            rlinmodule=H_model.overlap(), **eigen_options) \
+            rlinmodule=H_model.overlap, **eigen_options) \
             for (H_model, nlowest) in zip(self.H_models, nlowests)]
 
     def forward(self, density, vext, foccs, all_hparams=[], all_rparams=[]):

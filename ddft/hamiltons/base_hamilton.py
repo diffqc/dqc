@@ -4,6 +4,8 @@ import torch
 import lintorch as lt
 
 class BaseHamilton(lt.Module):
+    # TODO: do initialization to check if the methods are implemented properly
+
     ################################ Basis part ################################
     @abstractmethod
     def forward(self, wf, vext, *params):
@@ -65,15 +67,17 @@ class BaseHamilton(lt.Module):
         """
         pass
 
-    @abstractmethod
+    @property
     def overlap(self):
         """
-        Returns an instance of lintorch.Module that represents the overlap
+        overlap should act as a function that represents the overlap
         matrix of the basis (i.e. F^T*F where F is the basis).
-        If None, then it is assumed that the overlap matrix is an identity
-        matrix (i.e. the basis is completely orthogonal).
+
+        If the basis is orthonormal, then it should remain as None property.
+        Otherwise, it should be wrapped with @lintorch.module decorator
+        and takes an input of (wf, *rparams).
         """
-        pass
+        return None
 
     ################################ Grid part ################################
     @abstractproperty
