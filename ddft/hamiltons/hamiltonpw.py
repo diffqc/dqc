@@ -77,18 +77,18 @@ class HamiltonPlaneWave(BaseHamilton):
         yres = self.space.invtransformsig(yq2, dim=1)
         return yres
 
+    def tocoeff(self, wfr, dim=-2):
+        return wfr
+
+    def torgrid(self, wfs, dim=-2):
+        return wfs
+
     @property
     def rgrid(self):
         return self.space.rgrid
 
     def getvhartree(self, dens):
         raise RuntimeError("getvhartree for HamiltonPlaneWave has not been implemented")
-
-    def getdens(self, eigvecs):
-        # eigvecs: (nbatch, nr, nlowest)
-        dens = (eigvecs * eigvecs)
-        sumdens = self.integralbox(dens, dim=1).unsqueeze(1)
-        return dens / sumdens
 
     def integralbox(self, p, dim=-1):
         return p.sum(dim=dim) * self.dr3

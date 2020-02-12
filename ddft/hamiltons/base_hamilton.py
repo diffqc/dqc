@@ -79,6 +79,42 @@ class BaseHamilton(lt.Module):
         """
         return None
 
+    @abstractmethod
+    def tocoeff(self, wfr, dim=-2):
+        """
+        Convert the signal in spatial domain to the coefficients of the basis
+        in the given dimension.
+
+        Arguments
+        ---------
+        * wfr: torch.tensor (..., nr, ...)
+            The signal in spatial domain.
+
+        Returns
+        -------
+        * wfs: torch.tensor (..., ns, ...)
+            The coefficients of the basis of the signal.
+        """
+        pass
+
+    @abstractmethod
+    def torgrid(self, wfs, dim=-2):
+        """
+        Obtain the signal in spatial domain from the coefficients of the basis
+        in the given dimension.
+
+        Arguments
+        ---------
+        * wfs: torch.tensor (..., ns, ...)
+            The coefficients of the basis of the signal.
+
+        Returns
+        -------
+        * wfr: torch.tensor (..., nr, ...)
+            The signal in spatial domain.
+        """
+        pass
+
     ################################ Grid part ################################
     @abstractproperty
     def rgrid(self):
@@ -123,7 +159,10 @@ class BaseHamilton(lt.Module):
             The density where the integral over the space should be equal to 1.
             The density is in the spatial domain.
         """
-        pass
+        eigvec_r = self.torgrid(eigvec, dim=-2)
+        dens = (eigvec_r * eigvec_r)
+        sumdens = self.integralbox(dens, dim=1).unsqueeze(1)
+        return dens / sumdens
 
     @abstractmethod
     def integralbox(self, p, dim=-1):
