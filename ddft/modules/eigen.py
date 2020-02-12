@@ -54,7 +54,6 @@ class EigenModule(torch.nn.Module):
     def forward(self, hparams, rparams=[]):
         # eigvals: (nbatch, nlowest)
         # eigvecs: (nbatch, nr, nlowest)
-        # TODO: add rlinmodule in lsymeig
         evals, evecs = lt.lsymeig(self.linmodule,
             hparams, self.nlowest,
             M=self.rlinmodule,

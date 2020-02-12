@@ -47,7 +47,7 @@ class DFT(torch.nn.Module):
         self.eigen_model = EigenModule(H_model, nlowest,
             rlinmodule=H_model.overlap(), **eigen_options)
 
-    def forward(self, density, vext, focc):
+    def forward(self, density, vext, focc, hparams=[], rparams=[]):
         # density: (nbatch, nr)
         # vext: (nbatch, nr)
         # focc: (nbatch, nlowest)
@@ -58,7 +58,7 @@ class DFT(torch.nn.Module):
 
         # compute the eigenpairs
         # evals: (nbatch, nlowest), evecs: (nbatch, nr, nlowest)
-        eigvals, eigvecs = self.eigen_model((vext_tot,))
+        eigvals, eigvecs = self.eigen_model((vext_tot, *hparams), rparams=rparams)
 
         # normalize the norm of density
         eigvec_dens = self.H_model.getdens(eigvecs) # (nbatch, nr, nlowest)
