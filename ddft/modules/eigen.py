@@ -51,12 +51,14 @@ class EigenModule(torch.nn.Module):
         if not isinstance(self.linmodule, lt.Module):
             raise TypeError("The linmodule argument must be instance of lintorch.Module")
 
-    def forward(self, *params):
+    def forward(self, hparams, rparams=[]):
         # eigvals: (nbatch, nlowest)
         # eigvecs: (nbatch, nr, nlowest)
         # TODO: add rlinmodule in lsymeig
         evals, evecs = lt.lsymeig(self.linmodule,
-            params, self.nlowest,
+            hparams, self.nlowest,
+            M=self.rlinmodule,
+            mparams=rparams,
             fwd_options=self.options)
         return evals, evecs
 
@@ -101,7 +103,7 @@ if __name__ == "__main__":
     eigenmodule = EigenModule(linmodule, nlowest=neig)
 
     def getloss(diag):
-        eigvals, eigvecs = eigenmodule(diag) # evals: (nbatch, neig), evecs: (nbatch, nr, neig)
+        eigvals, eigvecs = eigenmodule((diag,)) # evals: (nbatch, neig), evecs: (nbatch, nr, neig)
         loss = ((eigvals.unsqueeze(1) * eigvecs)**2).sum()
         return loss
 
