@@ -2,7 +2,6 @@ import time
 import torch
 import matplotlib.pyplot as plt
 from ddft.utils.fd import finite_differences
-from ddft.hamiltons.hspatial1d import HamiltonSpatial1D
 from ddft.hamiltons.hamiltonpw import HamiltonPlaneWave
 from ddft.modules.equilibrium import EquilibriumModule
 from ddft.dft.dft import DFT, _get_uniform_density
