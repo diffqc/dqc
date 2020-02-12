@@ -9,9 +9,6 @@ def setup_hamilton(nx, ndim, boxsize, nfreq=1.0, sin=True):
     rgrids = torch.meshgrid(*[x for i in range(ndim)]) # (nx,nx)
     rgrid = torch.cat([rgridx.unsqueeze(-1) for rgridx in rgrids], dim=-1).view(-1,ndim) # (nr,ndim)
 
-    # construct the space
-    space = QSpace(rgrid, [nx for i in range(ndim)])
-
     # construct the wavefunction as wf = sumj(sin(2*pi*xj))
     if sin:
         wf = torch.sin(rgrid * 2 * np.pi * nfreq).unsqueeze(0) # (1,nr,ndim)
@@ -23,11 +20,11 @@ def setup_hamilton(nx, ndim, boxsize, nfreq=1.0, sin=True):
     # assert torch.allclose(space.transformsig(space.invtransformsig(wfq, dim=1), dim=1), wfq, atol=1e-5)
 
     h = HamiltonPlaneWave(rgrid, [nx for i in range(ndim)])
-    return wf, h, space
+    return wf, h, rgrid
 
 
 def compare_hamilton_pw_kinetics(nx, ndim, boxsize=4.0, nfreq=1.0, sin=True):
-    wf, h, space = setup_hamilton(nx, ndim, boxsize, nfreq=nfreq, sin=sin)
+    wf, h, rgrid = setup_hamilton(nx, ndim, boxsize, nfreq=nfreq, sin=sin)
     vext = torch.zeros_like(wf).squeeze(-1)
 
     kin = h(wf, vext) # (1,nr,1)
@@ -36,8 +33,7 @@ def compare_hamilton_pw_kinetics(nx, ndim, boxsize=4.0, nfreq=1.0, sin=True):
     assert torch.allclose(a, torch.zeros_like(a), atol=1e-4)
 
 def compare_hamilton_pw_vext(nx, ndim, boxsize=4.0, nfreq=1.0, sin=True):
-    wf, h, space = setup_hamilton(nx, ndim, boxsize, nfreq=nfreq, sin=sin)
-    rgrid = space.rgrid # (nr, ndim)
+    wf, h, rgrid = setup_hamilton(nx, ndim, boxsize, nfreq=nfreq, sin=sin)
     rgrid_norm = rgrid.norm(dim=-1) # (nr,)
     vext = (rgrid_norm * rgrid_norm * 0.5).unsqueeze(0) # (1,nr)
 

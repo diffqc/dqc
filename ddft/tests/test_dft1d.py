@@ -53,7 +53,7 @@ def test_dft1d_1():
         nels = focc.sum(-1)
         density0 = _get_uniform_density(rgrid, nels)
         density = scf_model(density0, vext, focc)
-        energy = dft_model.energy(density, vext, focc)
+        energy = dft_model.energy()
 
         # calculate the defined loss function
         loss = (density*density).sum() + (energy*energy).sum()
