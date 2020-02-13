@@ -89,11 +89,11 @@ class DFT(torch.nn.Module):
 
         # calculates the Kohn-Sham energy
         eks_density = self.eks_model(density) # energy density (nbatch, nr)
-        Eks = self.H_model.integralbox(eks_density, dim=-1) # (nbatch,)
+        Eks = self.H_model.grid.integralbox(eks_density, dim=-1) # (nbatch,)
 
         # calculate the individual non-interacting particles energy
         sum_eigvals = (eigvals * focc).sum(dim=-1) # (nbatch,)
-        vks_integral = self.H_model.integralbox(vks*density, dim=-1)
+        vks_integral = self.H_model.grid.integralbox(vks*density, dim=-1)
 
         # compute the interacting particles energy
         Etot = sum_eigvals - vks_integral + Eks
@@ -196,14 +196,14 @@ class DFTMulti(torch.nn.Module):
 
         # calculates the Kohn-Sham energy
         eks_density = self.eks_model(density) # energy density (nbatch, nr)
-        Eks = self.H_model.integralbox(eks_density, dim=-1) # (nbatch,)
+        Eks = self.H_model.grid.integralbox(eks_density, dim=-1) # (nbatch,)
 
         # calculate the individual non-interacting particles energy
         # sum_eigvals_list: list of (nbatch,)
         sum_eigvals_list = [(eigvals * focc).sum(dim=-1) \
             for (eigvals, focc) in (all_eigvals, foccs)]
         sum_eigvals = functools.reduce(lambda x,y: x+y, sum_eigvals_list)
-        vks_integral = self.H_model.integralbox(vks*density, dim=-1)
+        vks_integral = self.H_model.grid.integralbox(vks*density, dim=-1)
 
         # compute the interacting particles energy
         Etot = sum_eigvals - vks_integral + Eks
@@ -226,9 +226,9 @@ if __name__ == "__main__":
     import time
     import matplotlib.pyplot as plt
     from ddft.utils.fd import finite_differences
-    from ddft.hamiltons.hspatial1d import HamiltonSpatial1D
     from ddft.hamiltons.hamiltonpw import HamiltonPlaneWave
     from ddft.modules.equilibrium import EquilibriumModule
+    from ddft.grids.linearnd import LinearNDGrid
 
     class EKS1(torch.nn.Module):
         def __init__(self, a, p):
@@ -242,11 +242,11 @@ if __name__ == "__main__":
 
     dtype = torch.float64
     ndim = 3
-    boxshape = [31, 31, 31][:ndim]
-    boxsizes = [10.0, 10.0, 10.0][:ndim]
-    rgrids = [torch.linspace(-boxsize/2., boxsize/2., nx+1)[:-1].to(dtype) for (boxsize,nx) in zip(boxsizes,boxshape)]
-    rgrids = torch.meshgrid(*rgrids) # (nx,ny,nz)
-    rgrid = torch.cat([rgrid.unsqueeze(-1) for rgrid in rgrids], dim=-1).view(-1,ndim) # (nr,3)
+    boxshape = torch.tensor([31, 31, 31][:ndim])
+    boxsizes = torch.tensor([10.0, 10.0, 10.0][:ndim], dtype=dtype)
+    grid = LinearNDGrid(boxsizes, boxshape)
+    rgrid = grid.rgrid
+
     nlowest = 4
     forward_options = {
         "verbose": False,
@@ -269,7 +269,7 @@ if __name__ == "__main__":
 
     def getloss(a, p, vext, focc, return_model=False):
         # set up the modules
-        H_model = HamiltonPlaneWave(rgrid, boxshape)
+        H_model = HamiltonPlaneWave(grid)
         eks_model = EKS1(a, p)
         dft_model = DFT(H_model, eks_model, nlowest,
             **eigen_options)

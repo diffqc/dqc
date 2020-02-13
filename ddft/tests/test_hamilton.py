@@ -2,12 +2,14 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from ddft.hamiltons.hamiltonpw import HamiltonPlaneWave
+from ddft.grids.linearnd import LinearNDGrid
 
 def setup_hamilton(nx, ndim, boxsize, nfreq=1.0, sin=True):
     dtype = torch.float64
-    x = torch.linspace(-boxsize/2.0, boxsize/2.0, nx+1)[:-1].to(dtype)
-    rgrids = torch.meshgrid(*[x for i in range(ndim)]) # (nx,nx)
-    rgrid = torch.cat([rgridx.unsqueeze(-1) for rgridx in rgrids], dim=-1).view(-1,ndim) # (nr,ndim)
+    boxshape = torch.tensor([nx, nx, nx][:ndim])
+    boxsizes = torch.tensor([boxsize, boxsize, boxsize][:ndim], dtype=dtype)
+    grid = LinearNDGrid(boxsizes, boxshape)
+    rgrid = grid.rgrid # (nr, ndim)
 
     # construct the wavefunction as wf = sumj(sin(2*pi*xj))
     if sin:
@@ -19,7 +21,7 @@ def setup_hamilton(nx, ndim, boxsize, nfreq=1.0, sin=True):
     # assert torch.allclose(space.invtransformsig(wfq, dim=1), wf, atol=1e-5)
     # assert torch.allclose(space.transformsig(space.invtransformsig(wfq, dim=1), dim=1), wfq, atol=1e-5)
 
-    h = HamiltonPlaneWave(rgrid, [nx for i in range(ndim)])
+    h = HamiltonPlaneWave(grid)
     return wf, h, rgrid
 
 

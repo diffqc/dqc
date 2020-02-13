@@ -130,14 +130,6 @@ class BaseHamilton(lt.Module):
         """
         pass
 
-    ################################ Grid part ################################
-    @abstractproperty
-    def rgrid(self):
-        """
-        The spatial grid with shape (nr, ndim).
-        """
-        pass
-
     @abstractmethod
     def getvhartree(self, dens):
         """
@@ -156,7 +148,14 @@ class BaseHamilton(lt.Module):
         """
         pass
 
-    @abstractmethod
+    ################################ Grid part ################################
+    @abstractproperty
+    def grid(self):
+        """
+        Returns the grid object.
+        """
+        pass
+
     def getdens(self, eigvec):
         """
         Calculate the density given the eigenvectors.
@@ -176,13 +175,5 @@ class BaseHamilton(lt.Module):
         """
         eigvec_r = self.torgrid(eigvec, dim=-2)
         dens = (eigvec_r * eigvec_r)
-        sumdens = self.integralbox(dens, dim=1).unsqueeze(1)
+        sumdens = self.grid.integralbox(dens, dim=1).unsqueeze(1)
         return dens / sumdens
-
-    @abstractmethod
-    def integralbox(self, p, dim=-1):
-        """
-        Perform integral p(r) dr where p is tensor with shape (nbatch,nr)
-        describing the value in the box.
-        """
-        pass

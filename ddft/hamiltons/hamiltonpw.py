@@ -7,11 +7,10 @@ class HamiltonPlaneWave(BaseHamilton):
     # Note: even though the name is HamiltonPlaneWave, the basis is spatial
     # basis. We use plane wave just to calculate the kinetics part.
 
-    def __init__(self, rgrid, boxshape):
-        # rgrid is (nr,ndim), ordered by (x, y, z)
-        # boxshape (ndim,) = (nx, ny, nz)
-        self.space = QSpace(rgrid, boxshape)
-        nr = len(self.space.rgrid)
+    def __init__(self, grid):
+        self.space = QSpace(grid.rgrid, grid.boxshape)
+        self._grid = grid
+        nr = len(grid.rgrid)
         super(HamiltonPlaneWave, self).__init__(
             shape = (nr, nr),
             is_symmetric = True,
@@ -21,21 +20,10 @@ class HamiltonPlaneWave(BaseHamilton):
         self.qgrid = self.space.qgrid # (ns,ndim)
         self.q2 = (self.qgrid*self.qgrid).sum(dim=-1, keepdim=True) # (ns,1)
 
-        rgrid = self.space.rgrid # (nr, ndim)
-        boxshape = self.space.boxshape # (nx,ny,nz)
+        rgrid = grid.rgrid # (nr, ndim)
+        boxshape = grid.boxshape # (nx,ny,nz)
         self.ndim = self.space.ndim
         nr, self.ndim = rgrid.shape
-
-        # get the pixel size
-        idx = 0
-        allshape = (*boxshape, rgrid.shape[-1])
-        m = 1
-        for i in range(self.ndim,0,-1):
-            m *= allshape[i]
-            idx += m
-        self.pixsize = rgrid[idx,:] - rgrid[0,:] # (ndim,)
-        self.dr3 = torch.prod(self.pixsize)
-        self.inv_dr3 = 1.0 / self.dr3
 
     def forward(self, wf, vext):
         # wf: (nbatch, nr, ncols)
@@ -84,30 +72,26 @@ class HamiltonPlaneWave(BaseHamilton):
         return wfs
 
     @property
-    def rgrid(self):
-        return self.space.rgrid
+    def grid(self):
+        return self._grid
 
     def getvhartree(self, dens):
         raise RuntimeError("getvhartree for HamiltonPlaneWave has not been implemented")
 
-    def integralbox(self, p, dim=-1):
-        return p.sum(dim=dim) * self.dr3
-
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
+    from ddft.grids.linearnd import LinearNDGrid
 
     dtype = torch.float64
     ndim = 3
-    boxshape = [51, 51, 51][:ndim]
-    boxsizes = [10.0, 10.0, 10.0][:ndim]
-    rgrids = [torch.linspace(-boxsize/2., boxsize/2., nx+1)[:-1].to(dtype) for (boxsize,nx) in zip(boxsizes,boxshape)]
-    rgrids = torch.meshgrid(*rgrids) # (nx,ny,nz)
-    rgrid = torch.cat([rgrid.unsqueeze(-1) for rgrid in rgrids], dim=-1).view(-1,ndim) # (nr,3)
-    nr = rgrid.shape[0]
+    boxshape = torch.tensor([51, 51, 51][:ndim])
+    boxsizes = torch.tensor([10.0, 10.0, 10.0][:ndim], dtype=dtype)
 
-    hpw = HamiltonPlaneWave(rgrid, boxshape)
+    grid = LinearNDGrid(boxsizes, boxshape)
+    hpw = HamiltonPlaneWave(grid)
 
     nbatch = 1
+    nr = grid.rgrid.shape[0]
     vext = torch.ones((nbatch, nr), dtype=dtype) * 1
     wf = torch.rand((nbatch, nr, 1), dtype=dtype)
     hr = hpw(wf, vext)

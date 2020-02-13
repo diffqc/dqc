@@ -5,6 +5,7 @@ from ddft.utils.fd import finite_differences
 from ddft.hamiltons.hamiltonpw import HamiltonPlaneWave
 from ddft.modules.equilibrium import EquilibriumModule
 from ddft.dft.dft import DFT, _get_uniform_density
+from ddft.grids.linearnd import LinearNDGrid
 
 # slow
 def test_dft1d_1():
@@ -20,7 +21,9 @@ def test_dft1d_1():
 
     dtype = torch.float64
     nr = 101
-    rgrid = torch.linspace(-5, 5, nr).to(dtype)
+    boxshape = torch.tensor([nr])
+    boxsizes = torch.tensor([10.0], dtype=dtype)
+    grid = LinearNDGrid(boxsizes, boxshape)
     nlowest = 4
     forward_options = {
         "verbose": False,
@@ -35,12 +38,13 @@ def test_dft1d_1():
     }
     a = torch.tensor([1.0]).to(dtype)
     p = torch.tensor([1.3333]).to(dtype)
+    rgrid = grid.rgrid.squeeze(-1)
     vext = (rgrid * rgrid * 0.5).unsqueeze(0).requires_grad_() # (nbatch, nr)
     focc = torch.tensor([[2.0, 2.0, 2.0, 1.0]]).requires_grad_() # (nbatch, nlowest)
 
     def getloss(a, p, vext, focc, return_model=False):
         # set up the modules
-        H_model = HamiltonPlaneWave(rgrid.unsqueeze(-1), (len(rgrid),))
+        H_model = HamiltonPlaneWave(grid)
         eks_model = EKS1(a, p)
         dft_model = DFT(H_model, eks_model, nlowest,
             **eigen_options)
