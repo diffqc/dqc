@@ -240,7 +240,10 @@ if __name__ == "__main__":
             self.p = torch.nn.Parameter(p)
 
         def forward(self, density):
-            vks = self.a * density.abs()**self.p
+            # small addition is made to safeguard if density equals to 0
+            # this expression will be differentiated at least twice for 1st
+            # order differentiation and more for higher order differentiation.
+            vks = self.a * (density.abs()+1e-6)**self.p
             return vks
 
     dtype = torch.float64
