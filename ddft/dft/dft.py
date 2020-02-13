@@ -246,7 +246,7 @@ if __name__ == "__main__":
     dtype = torch.float64
     mode = "atom"
     if mode == "cartesian":
-        ndim = 3
+        ndim = 1
         boxshape = torch.tensor([31, 31, 31][:ndim])
         boxsizes = torch.tensor([10.0, 10.0, 10.0][:ndim], dtype=dtype)
         grid = LinearNDGrid(boxsizes, boxshape)
@@ -274,7 +274,7 @@ if __name__ == "__main__":
     H_model.to(dtype)
     vext = vext.unsqueeze(0).requires_grad_()
 
-    nlowest = 4
+    nlowest = 2
     forward_options = {
         "verbose": False,
         "linesearch": False,
@@ -288,7 +288,7 @@ if __name__ == "__main__":
     }
     a = torch.tensor([0.0]).to(dtype)
     p = torch.tensor([1.3333]).to(dtype)
-    focc = torch.tensor([[1.0, 0.0, 0.0, 0.0]]).requires_grad_() # (nbatch, nlowest)
+    focc = torch.tensor([[1.0, 0.0]]).requires_grad_() # (nbatch, nlowest)
 
     def getloss(a, p, vext, focc, return_model=False):
         # set up the modules

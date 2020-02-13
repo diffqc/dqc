@@ -57,7 +57,7 @@ class HamiltonAtomRadial(BaseHamilton):
             is_real = True)
 
         # well-tempered gaussian factor from tinydft
-        self.gwidths = torch.nn.Parameter(gwidths) # (ng)
+        self.gwidths = gwidths # torch.nn.Parameter(gwidths) # (ng)
         self.rs = grid.rgrid[:,0] # (nr,)
         self.angmom = angmom
 
@@ -104,7 +104,8 @@ class HamiltonAtomRadial(BaseHamilton):
 
         # add all the matrix and apply the Hamiltonian
         fock = (self.kin + extpot) + self.coul * atomz.unsqueeze(-1).unsqueeze(-1)
-        hwf = torch.matmul(fock, wf)
+        nbatch = wf.shape[0]
+        hwf = torch.bmm(fock.expand(nbatch,-1,-1), wf)
         return hwf
 
     def precond(self, y, vext, atomz, biases=None, M=None, mparams=None):
