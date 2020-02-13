@@ -262,7 +262,7 @@ if __name__ == "__main__":
     elif mode == "atom":
         gwidths = torch.logspace(np.log10(1e-5), np.log10(1e2), 100).to(dtype)
         grid = RadialShiftExp(1e-6, 1e4, 2000, dtype=dtype)
-        H_model = HamiltonAtomRadial(grid, gwidths, angmom=0, dtype=dtype, device=torch.device("cpu"))
+        H_model = HamiltonAtomRadial(grid, gwidths, angmom=0)
 
         atomz = torch.tensor([1.0])
         hparams = [atomz]
@@ -271,6 +271,7 @@ if __name__ == "__main__":
         rgrid_norm = (rgrid).norm(dim=-1)
         vext = rgrid_norm*0
 
+    H_model.to(dtype)
     vext = vext.unsqueeze(0).requires_grad_()
 
     nlowest = 4

@@ -5,8 +5,7 @@ import lintorch as lt
 
 class BaseHamilton(lt.Module):
     # TODO: do initialization to check if the methods are implemented properly
-    def __init__(self, shape, is_symmetric=True, is_real=True,
-            dtype=None, device=None):
+    def __init__(self, shape, is_symmetric=True, is_real=True):
 
         super(BaseHamilton, self).__init__(
             shape=shape,
@@ -15,12 +14,17 @@ class BaseHamilton(lt.Module):
 
         if hasattr(self._overlap, "__call__"):
             self.overlap = lt.module(shape,
-                is_symmetric=is_symmetric, is_real=is_real,
-                dtype=dtype, device=device)(self._overlap)
+                is_symmetric=is_symmetric, is_real=is_real)(self._overlap)
         else:
             msg = "If overlap is a property, it must be a None. Otherwise, it has to be a method"
             assert self._overlap is None, msg
             self.overlap = self._overlap
+
+    def to(self, dtype_or_device):
+        super(BaseHamilton, self).to(dtype_or_device)
+        if isinstance(self.overlap, lt.Module):
+            self.overlap.to(dtype_or_device)
+        return self
 
     ################################ Basis part ################################
     @abstractmethod

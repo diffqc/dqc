@@ -21,7 +21,7 @@ def setup_hamilton(nx, ndim, boxsize, nfreq=1.0, sin=True):
     # assert torch.allclose(space.invtransformsig(wfq, dim=1), wf, atol=1e-5)
     # assert torch.allclose(space.transformsig(space.invtransformsig(wfq, dim=1), dim=1), wfq, atol=1e-5)
 
-    h = HamiltonPlaneWave(grid)
+    h = HamiltonPlaneWave(grid).to(dtype)
     return wf, h, rgrid
 
 

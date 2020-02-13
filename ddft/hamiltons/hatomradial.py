@@ -48,15 +48,13 @@ class HamiltonAtomRadial(BaseHamilton):
     """
 
     def __init__(self, grid, gwidths,
-                       angmom=0, dtype=None, device=None):
+                       angmom=0):
         ng = gwidths.shape[0]
         self._grid = grid
         super(HamiltonAtomRadial, self).__init__(
             shape = (ng, ng),
             is_symmetric = True,
-            is_real = True,
-            dtype = dtype,
-            device = device)
+            is_real = True)
 
         # well-tempered gaussian factor from tinydft
         self.gwidths = torch.nn.Parameter(gwidths) # (ng)
