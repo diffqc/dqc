@@ -18,15 +18,15 @@ class EquilibriumModule(torch.nn.Module):
 
     def forward(self, y0, *params):
         # y0 & each of params: (nbatch, ...)
-        yequi = _Forward.apply(self.model, y0, self.fwd_options, *params)
+        yequi = _Forward.apply(self.model, y0, self.fwd_options, params)
         if self.training:
             ymodel = self.model(yequi, *params)
-            yequi = _Backward.apply(ymodel, yequi, self.bck_options, *params)
+            yequi = _Backward.apply(ymodel, yequi, self.bck_options)
         return yequi
 
 class _Forward(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, model, y0, options, *params):
+    def forward(ctx, model, y0, options, orig_params):
         # set default options
         config = set_default_option({
             "max_niter": 50,
@@ -35,24 +35,22 @@ class _Forward(torch.autograd.Function):
         }, options)
 
         def loss(y):
-            ymodel = model(y, *params)
+            ymodel = model(y, *orig_params)
             return y - ymodel
 
         # solve the equilibrium equation with L-BFGS
         jinv0 = 1.0
         y = lbfgs(loss, y0, jinv0=jinv0, **config)
-
-        ctx.nparams = len(params)
         return y
 
     @staticmethod
     def backward(ctx, *grads):
-        res = tuple([None for _ in range(ctx.nparams + 3)])
+        res = tuple([None for _ in range(4)])
         return res
 
 class _Backward(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, ymodel, yinp, options, *params):
+    def forward(ctx, ymodel, yinp, options):
         ctx.options = set_default_option({
             "max_niter": 50,
             "min_reps": 1e-6,
@@ -61,7 +59,6 @@ class _Backward(torch.autograd.Function):
 
         ctx.ymodel = ymodel
         ctx.yinp = yinp
-        ctx.params = params
         return ymodel
 
     @staticmethod
@@ -69,7 +66,6 @@ class _Backward(torch.autograd.Function):
         # grad_ymodel: (nbatch,...)
         ymodel = ctx.ymodel
         yinp = ctx.yinp
-        params = ctx.params
 
         def _apply_ImDfDy(gy):
             dfdy, = torch.autograd.grad(ymodel, (yinp,), gy, retain_graph=True)
@@ -83,8 +79,7 @@ class _Backward(torch.autograd.Function):
         jinv0 = 1.0
         gymodel = lbfgs(loss_for_inv, gx0, jinv0=jinv0, **ctx.options)
 
-        grad_params = [None for _ in range(len(params))]
-        return (gymodel, None, None, *grad_params)
+        return (gymodel, None, None)
 
 if __name__ == "__main__":
     import time
