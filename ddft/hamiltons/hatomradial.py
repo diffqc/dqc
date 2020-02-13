@@ -10,19 +10,17 @@ class HamiltonAtomRadial(BaseHamilton):
     """
     HamiltonAtomRadial represents the system of one atom with all-electrons
     potential at the centre of coordinate. The chosen basis is
-    well-tempered Gaussian radial basis set and the chosen grid is shifted
-    exponential in radial direction.
+    well-tempered Gaussian radial basis set.
     This Hamiltonian only works for symmetric density and potential, so it only
     works for s-only atoms and closed-shell atoms
     (e.g. H, He, Li, Be, Ne, Ar)
 
     Arguments
     ---------
+    * grid: BaseGrid
+        The integration grid.
     * gwidths: torch.tensor (ng,)
         The tensor of Gaussian-widths of the basis. The tensor should be uniform
-        in logspace.
-    * rs: torch.tensor (nr,)
-        The tensor of the biased radial grid. The tensor should be uniform
         in logspace.
     * angmom: int
         The angular momentum of the Hamiltonian
@@ -49,9 +47,10 @@ class HamiltonAtomRadial(BaseHamilton):
         the radial grid range.
     """
 
-    def __init__(self, gwidths, rs,
+    def __init__(self, grid, gwidths,
                        angmom=0):
         ng = gwidths.shape[0]
+        self._grid = grid
         super(HamiltonAtomRadial, self).__init__(
             shape = (ng, ng),
             is_symmetric = True,
@@ -59,11 +58,7 @@ class HamiltonAtomRadial(BaseHamilton):
 
         # well-tempered gaussian factor from tinydft
         self.gwidths = gwidths # (ng)
-        self.gs = 0.5 / (self.gwidths * self.gwidths)
-        self.logrs = torch.log(rs) # (nr)
-        self.rmin = rs[0]
-        self.dlogr = self.logrs[1] - self.logrs[0]
-        self.rs = rs - self.rmin
+        self.rs = grid.rgrid[:,0] # (nr,)
         self.angmom = angmom
 
         # get the basis in rgrid
@@ -135,25 +130,19 @@ class HamiltonAtomRadial(BaseHamilton):
         wfr = (wfs.unsqueeze(dim+1) * basis).sum(dim=dim) # (..., nr, ...)
         return wfr
 
-    ############################# grid part #############################
-    def rgrid(self):
-        return self.rs
-
     def getvhartree(self, dens):
         raise RuntimeError("getvhartree for HamiltonAtomRadial has not been implemented.")
 
-    def integralbox(self, p, dim=-1):
-        # p: (nbatch, nr)
-        # return (nbatch,)
-        integrand = p * (self.rs + self.rmin) * 4 * np.pi * self.rs*self.rs
-        res = torch.sum(integrand, dim=dim) * self.dlogr
-        return res
+    ############################# grid part #############################
+    def grid(self):
+        return self._grid
 
 if __name__ == "__main__":
+    from ddft.grids.radialshiftexp import RadialShiftExp
     dtype = torch.float64
     gwidths = torch.logspace(np.log10(1e-5), np.log10(1e2), 100).to(dtype)
-    rs = torch.logspace(np.log10(1e-6), np.log10(1e4), 2000).to(dtype)
-    h = HamiltonAtomRadial(gwidths, rs, angmom=0)
+    grid = RadialShiftExp(1e-6, 1e4, 2000, dtype=dtype)
+    h = HamiltonAtomRadial(grid, gwidths, angmom=0)
 
     vext = torch.zeros(1, 2000).to(dtype)
     atomz = torch.tensor([1.0]).to(dtype)

@@ -1,6 +1,7 @@
 import torch
+from ddft.grids.base_grid import BaseGrid
 
-class LinearNDGrid(object):
+class LinearNDGrid(BaseGrid):
     def __init__(self, boxsizes, boxshape):
         self.boxsizes = boxsizes
         self._boxshape = boxshape
