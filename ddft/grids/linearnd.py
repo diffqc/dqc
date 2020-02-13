@@ -30,8 +30,8 @@ class LinearNDGrid(BaseGrid):
         pixsize = self._rgrid[idx,:] - self._rgrid[0,:] # (ndim,)
         self.dr3 = torch.prod(pixsize)
 
-    def integralbox(self, p, dim=-1):
-        return p.sum(dim=dim) * self.dr3
+    def get_integrand_box(self, p):
+        return p * self.dr3
 
     @property
     def rgrid(self):
