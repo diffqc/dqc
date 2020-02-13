@@ -96,11 +96,7 @@ class HamiltonAtomRadial(BaseHamilton):
         # atomz: (nbatch,)
 
         # the external potential part
-        zeros = torch.zeros(1, dtype=vext.dtype).to(vext.device)
-        if torch.allclose(vext, zeros):
-            extpot = 0
-        else:
-            raise RuntimeError("Nonzero external potential has not been implemented.")
+        extpot = self.grid.mmintegralbox(vext.unsqueeze(1) * self.basis, self.basis.transpose(-2,-1))
 
         # add all the matrix and apply the Hamiltonian
         fock = (self.kin + extpot) + self.coul * atomz.unsqueeze(-1).unsqueeze(-1)
