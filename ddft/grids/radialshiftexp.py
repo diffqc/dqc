@@ -15,9 +15,9 @@ class RadialShiftExp(BaseGrid):
     def integralbox(self, p, dim=-1):
         # p: (nbatch, nr)
         # return (nbatch,)
-        integrand = p * (self.rs + self.rmin) * 4 * np.pi * self.rs*self.rs
-        res = torch.sum(integrand, dim=dim) * self.dlogr
-        return res
+        integrand = p.transpose(dim,-1) * (self.rs + self.rmin) * 4 * np.pi * self.rs*self.rs
+        res = torch.sum(integrand, dim=-1) * self.dlogr
+        return res.transpose(dim,-1)
 
     @property
     def rgrid(self):

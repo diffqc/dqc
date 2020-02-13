@@ -48,16 +48,18 @@ class HamiltonAtomRadial(BaseHamilton):
     """
 
     def __init__(self, grid, gwidths,
-                       angmom=0):
+                       angmom=0, dtype=None, device=None):
         ng = gwidths.shape[0]
         self._grid = grid
         super(HamiltonAtomRadial, self).__init__(
             shape = (ng, ng),
             is_symmetric = True,
-            is_real = True)
+            is_real = True,
+            dtype = dtype,
+            device = device)
 
         # well-tempered gaussian factor from tinydft
-        self.gwidths = gwidths # (ng)
+        self.gwidths = torch.nn.Parameter(gwidths) # (ng)
         self.rs = grid.rgrid[:,0] # (nr,)
         self.angmom = angmom
 
@@ -110,7 +112,7 @@ class HamiltonAtomRadial(BaseHamilton):
     def precond(self, y, vext, atomz, biases=None, M=None, mparams=None):
         return y # ???
 
-    def overlap(self, wf):
+    def _overlap(self, wf):
         return torch.matmul(self.olp, wf)
 
     def tocoeff(self, wfr, dim=-2):
@@ -134,6 +136,7 @@ class HamiltonAtomRadial(BaseHamilton):
         raise RuntimeError("getvhartree for HamiltonAtomRadial has not been implemented.")
 
     ############################# grid part #############################
+    @property
     def grid(self):
         return self._grid
 
@@ -142,7 +145,7 @@ if __name__ == "__main__":
     dtype = torch.float64
     gwidths = torch.logspace(np.log10(1e-5), np.log10(1e2), 100).to(dtype)
     grid = RadialShiftExp(1e-6, 1e4, 2000, dtype=dtype)
-    h = HamiltonAtomRadial(grid, gwidths, angmom=0)
+    h = HamiltonAtomRadial(grid, gwidths, angmom=0, dtype=dtype, device=device)
 
     vext = torch.zeros(1, 2000).to(dtype)
     atomz = torch.tensor([1.0]).to(dtype)

@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 from ddft.modules.eigen import EigenModule
 from ddft.modules.calcarith import DifferentialModule
 from ddft.utils.misc import set_default_option
@@ -227,8 +228,10 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
     from ddft.utils.fd import finite_differences
     from ddft.hamiltons.hamiltonpw import HamiltonPlaneWave
+    from ddft.hamiltons.hatomradial import HamiltonAtomRadial
     from ddft.modules.equilibrium import EquilibriumModule
     from ddft.grids.linearnd import LinearNDGrid
+    from ddft.grids.radialshiftexp import RadialShiftExp
 
     class EKS1(torch.nn.Module):
         def __init__(self, a, p):
@@ -241,11 +244,34 @@ if __name__ == "__main__":
             return vks
 
     dtype = torch.float64
-    ndim = 3
-    boxshape = torch.tensor([31, 31, 31][:ndim])
-    boxsizes = torch.tensor([10.0, 10.0, 10.0][:ndim], dtype=dtype)
-    grid = LinearNDGrid(boxsizes, boxshape)
-    rgrid = grid.rgrid
+    mode = "atom"
+    if mode == "cartesian":
+        ndim = 3
+        boxshape = torch.tensor([31, 31, 31][:ndim])
+        boxsizes = torch.tensor([10.0, 10.0, 10.0][:ndim], dtype=dtype)
+        grid = LinearNDGrid(boxsizes, boxshape)
+        H_model = HamiltonPlaneWave(grid)
+
+        hparams = []
+
+        rgrid = grid.rgrid
+        rgrid_norm = (rgrid).norm(dim=-1)
+        # vext = -1./(rgrid_norm + 1e-3)
+        vext = rgrid_norm**2 * 0.5
+
+    elif mode == "atom":
+        gwidths = torch.logspace(np.log10(1e-5), np.log10(1e2), 100).to(dtype)
+        grid = RadialShiftExp(1e-6, 1e4, 2000, dtype=dtype)
+        H_model = HamiltonAtomRadial(grid, gwidths, angmom=0, dtype=dtype, device=torch.device("cpu"))
+
+        atomz = torch.tensor([1.0])
+        hparams = [atomz]
+
+        rgrid = grid.rgrid
+        rgrid_norm = (rgrid).norm(dim=-1)
+        vext = rgrid_norm*0
+
+    vext = vext.unsqueeze(0).requires_grad_()
 
     nlowest = 4
     forward_options = {
@@ -256,20 +282,15 @@ if __name__ == "__main__":
         "verbose": False
     }
     eigen_options = {
-        "method": "davidson",
+        "method": "exacteig",
         "verbose": False
     }
-    a = torch.tensor([0.1]).to(dtype)
+    a = torch.tensor([0.0]).to(dtype)
     p = torch.tensor([1.3333]).to(dtype)
-    rgrid_norm = (rgrid).norm(dim=-1)
-    # vext = -1./(rgrid_norm + 1e-3)
-    vext = rgrid_norm**2 * 0.5
-    vext = vext.unsqueeze(0).requires_grad_()
     focc = torch.tensor([[1.0, 0.0, 0.0, 0.0]]).requires_grad_() # (nbatch, nlowest)
 
     def getloss(a, p, vext, focc, return_model=False):
         # set up the modules
-        H_model = HamiltonPlaneWave(grid)
         eks_model = EKS1(a, p)
         dft_model = DFT(H_model, eks_model, nlowest,
             **eigen_options)
@@ -280,7 +301,7 @@ if __name__ == "__main__":
         # calculate the density
         nels = focc.sum(-1)
         density0 = torch.zeros_like(vext).to(vext.device) # _get_uniform_density(rgrid, nels)
-        density = scf_model(density0, vext, focc)
+        density = scf_model(density0, vext, focc, hparams)
         energy = dft_model.energy()
 
         # print(energy)
