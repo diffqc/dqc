@@ -20,6 +20,7 @@ class EquilibriumModule(torch.nn.Module):
         # y0 & each of params: (nbatch, ...)
         yequi = _Forward.apply(self.model, y0, self.fwd_options, params)
         if self.training:
+            yequi.requires_grad_()
             ymodel = self.model(yequi, *params)
             yequi = _Backward.apply(ymodel, yequi, self.bck_options)
         return yequi
