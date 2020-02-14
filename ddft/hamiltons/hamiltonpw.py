@@ -65,9 +65,6 @@ class HamiltonPlaneWave(BaseHamilton):
         yres = self.space.invtransformsig(yq2, dim=1)
         return yres
 
-    def tocoeff(self, wfr, dim=-2):
-        return wfr
-
     def torgrid(self, wfs, dim=-2):
         return wfs
 

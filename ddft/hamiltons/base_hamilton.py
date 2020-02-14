@@ -100,24 +100,6 @@ class BaseHamilton(lt.Module):
         return None
 
     @abstractmethod
-    def tocoeff(self, wfr, dim=-2):
-        """
-        Convert the signal in spatial domain to the coefficients of the basis
-        in the given dimension.
-
-        Arguments
-        ---------
-        * wfr: torch.tensor (..., nr, ...)
-            The signal in spatial domain.
-
-        Returns
-        -------
-        * wfs: torch.tensor (..., ns, ...)
-            The coefficients of the basis of the signal.
-        """
-        pass
-
-    @abstractmethod
     def torgrid(self, wfs, dim=-2):
         """
         Obtain the signal in spatial domain from the coefficients of the basis

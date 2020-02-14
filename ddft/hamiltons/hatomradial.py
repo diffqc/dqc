@@ -110,9 +110,6 @@ class HamiltonAtomRadial(BaseHamilton):
     def _overlap(self, wf):
         return torch.matmul(self.olp, wf)
 
-    def tocoeff(self, wfr, dim=-2):
-        pass # ???
-
     def torgrid(self, wfs, dim=-2):
         # wfs: (..., ng, ...)
         ndim = wfs.ndim
