@@ -17,6 +17,10 @@ class _safepow(torch.autograd.Function):
         a = ctx.a.clone()
         a[a.abs() < ctx.eps] = ctx.eps
         gr = grad_res * ctx.res
-        grad_a = gr * ctx.p / a
-        grad_p = gr * torch.log(a)
+        grad_a = None
+        grad_p = None
+        if isinstance(ctx.a, torch.Tensor):
+            grad_a = gr * ctx.p / a
+        if isinstance(ctx.p, torch.Tensor):
+            grad_p = gr * torch.log(a)
         return (grad_a, grad_p, None)
