@@ -3,6 +3,7 @@ import numpy as np
 from ddft.modules.eigen import EigenModule
 from ddft.modules.calcarith import DifferentialModule
 from ddft.utils.misc import set_default_option
+from ddft.utils.safeops import safepow
 
 class DFT(torch.nn.Module):
     """
@@ -243,7 +244,7 @@ if __name__ == "__main__":
             # small addition is made to safeguard if density equals to 0
             # this expression will be differentiated at least twice for 1st
             # order differentiation and more for higher order differentiation.
-            vks = self.a * (density.abs()+1e-6)**self.p
+            vks = self.a * safepow(density.abs(), self.p)
             return vks
 
     dtype = torch.float64
