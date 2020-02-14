@@ -1,4 +1,5 @@
 import torch
+import lintorch as lt
 from ddft.utils.misc import set_default_option
 from ddft.maths.rootfinder import lbfgs
 
@@ -54,8 +55,9 @@ class _Backward(torch.autograd.Function):
     def forward(ctx, ymodel, yinp, options):
         ctx.options = set_default_option({
             "max_niter": 50,
-            "min_reps": 1e-6,
+            "min_eps": 1e-6,
             "verbose": False,
+            "method": "lbfgs",
         }, options)
 
         ctx.ymodel = ymodel
@@ -68,18 +70,17 @@ class _Backward(torch.autograd.Function):
         ymodel = ctx.ymodel
         yinp = ctx.yinp
 
-        def _apply_ImDfDy(gy):
+        nr = ymodel.shape[-1]
+        @lt.module(shape=(nr,nr))
+        def _apply_ImDfDy(gy, ymodel, yinp):
+            gy = gy.squeeze(-1)
             dfdy, = torch.autograd.grad(ymodel, (yinp,), gy, retain_graph=True)
-            return gy - dfdy
+            res = gy - dfdy
+            res = res.unsqueeze(-1)
+            return res
 
-        # solve x for  (I-df/dy)(x) == gy
-        def loss_for_inv(x):
-            return _apply_ImDfDy(x) - grad_yout
-
-        gx0 = torch.zeros_like(grad_yout).to(grad_yout.device)
-        jinv0 = 1.0
-        gymodel = lbfgs(loss_for_inv, gx0, jinv0=jinv0, **ctx.options)
-
+        gymodel = lt.solve(_apply_ImDfDy, [ymodel, yinp], grad_yout.unsqueeze(-1),
+            fwd_options=ctx.options, bck_options=ctx.options).squeeze(-1)
         return (gymodel, None, None)
 
 if __name__ == "__main__":

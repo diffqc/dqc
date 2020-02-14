@@ -289,7 +289,7 @@ if __name__ == "__main__":
         "method": "exacteig",
         "verbose": False
     }
-    a = torch.tensor([0.0]).to(dtype)
+    a = torch.tensor([0.1]).to(dtype)
     p = torch.tensor([1.3333]).to(dtype)
     focc = torch.tensor([[1.0, 0.0]]).requires_grad_() # (nbatch, nlowest)
 
