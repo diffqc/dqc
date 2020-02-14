@@ -233,8 +233,9 @@ if __name__ == "__main__":
     from ddft.modules.equilibrium import EquilibriumModule
     from ddft.grids.linearnd import LinearNDGrid
     from ddft.grids.radialshiftexp import RadialShiftExp
+    from ddft.eks import BaseEKS, Hartree, xLDA
 
-    class EKS1(torch.nn.Module):
+    class EKS1(BaseEKS):
         def __init__(self, a, p):
             super(EKS1, self).__init__()
             self.a = torch.nn.Parameter(a)
@@ -297,6 +298,8 @@ if __name__ == "__main__":
     def getloss(a, p, vext, focc, return_model=False):
         # set up the modules
         eks_model = EKS1(a, p)
+        # eks_model = eks_model + Hartree(H_model.grid)
+        eks_model = eks_model + xLDA()
         dft_model = DFT(H_model, eks_model, nlowest,
             **eigen_options)
         scf_model = EquilibriumModule(dft_model,
