@@ -72,9 +72,6 @@ class HamiltonPlaneWave(BaseHamilton):
     def grid(self):
         return self._grid
 
-    def getvhartree(self, dens):
-        raise RuntimeError("getvhartree for HamiltonPlaneWave has not been implemented")
-
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     from ddft.grids.linearnd import LinearNDGrid

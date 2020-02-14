@@ -117,24 +117,6 @@ class BaseHamilton(lt.Module):
         """
         pass
 
-    @abstractmethod
-    def getvhartree(self, dens):
-        """
-        Return the Hartree potential in spatial grid given the density in
-        spatial grid.
-
-        Arguments
-        ---------
-        * dens: torch.tensor (nbatch, nr)
-            The density profile in spatial grid.
-
-        Returns
-        -------
-        * vhartree: torch.tensor (nbatch, nr)
-            The Hartree potential.
-        """
-        pass
-
     ################################ Grid part ################################
     @abstractproperty
     def grid(self):

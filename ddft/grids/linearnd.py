@@ -33,6 +33,9 @@ class LinearNDGrid(BaseGrid):
     def get_integrand_box(self, p):
         return p * self.dr3
 
+    def solve_poisson(self, f):
+        raise RuntimeError("Unimplemented solve_poisson for LinearNDGrid")
+
     @property
     def rgrid(self):
         return self._rgrid

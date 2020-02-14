@@ -24,6 +24,25 @@ class BaseGrid(object):
         """
         pass
 
+    @abstractmethod
+    def solve_poisson(self, f):
+        """
+        Solve Poisson's equation del^2 v = f, where f is a torch.tensor with
+        shape (nbatch, nr) and v is also similar.
+
+        Arguments
+        ---------
+        * f: torch.tensor (nbatch, nr)
+            Input tensor
+
+        Results
+        -------
+        * v: torch.tensor (nbatch, nr)
+            The tensor that fulfills del^2 v = f. Please note that v can be
+            non-unique due to ill-conditioned operator del^2.
+        """
+        pass
+
     @abstractproperty
     def rgrid(self):
         """

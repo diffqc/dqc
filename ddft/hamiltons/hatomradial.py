@@ -124,9 +124,6 @@ class HamiltonAtomRadial(BaseHamilton):
         wfr = (wfs.unsqueeze(dim+1) * basis).sum(dim=dim) # (..., nr, ...)
         return wfr
 
-    def getvhartree(self, dens):
-        raise RuntimeError("getvhartree for HamiltonAtomRadial has not been implemented.")
-
     ############################# grid part #############################
     @property
     def grid(self):

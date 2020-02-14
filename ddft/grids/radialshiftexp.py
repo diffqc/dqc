@@ -15,6 +15,15 @@ class RadialShiftExp(BaseGrid):
     def get_integrand_box(self, p):
         return p * (self.rs + self.rmin) * 4 * np.pi * self.rs*self.rs * self.dlogr
 
+    def solve_poisson(self, f):
+        # f: (nbatch, nr)
+        eps = 1e-10
+        intgn1 = f * self.rs*self.rs * (self.rs + self.rmin)
+        int1 = torch.cumsum(intgn1, dim=-1) * self.dlogr
+        intgn2 = int1 / (self.rs * self.rs + eps) * (self.rs + self.rmin)
+        int2 = torch.cumsum(intgn2, dim=-1) * self.dlogr
+        return int2
+
     @property
     def rgrid(self):
         return self._rgrid
