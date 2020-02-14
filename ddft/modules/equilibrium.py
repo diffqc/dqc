@@ -32,7 +32,7 @@ class _Forward(torch.autograd.Function):
         # set default options
         config = set_default_option({
             "max_niter": 50,
-            "min_reps": 1e-6,
+            "min_eps": 1e-6,
             "verbose": False,
         }, options)
 
@@ -41,6 +41,7 @@ class _Forward(torch.autograd.Function):
             return y - ymodel
 
         # solve the equilibrium equation with L-BFGS
+        # y = approximate_newton(loss, y0, **config)
         jinv0 = 1.0
         y = lbfgs(loss, y0, jinv0=jinv0, **config)
         return y
@@ -82,6 +83,37 @@ class _Backward(torch.autograd.Function):
         gymodel = lt.solve(_apply_ImDfDy, [ymodel, yinp], grad_yout.unsqueeze(-1),
             fwd_options=ctx.options, bck_options=ctx.options).squeeze(-1)
         return (gymodel, None, None)
+
+def approximate_newton(lossfn, y0, **config):
+    # y0: (nbatch, nr)
+    # y: (nbatch, nr, 1)
+    y = y0.unsqueeze(-1)
+    verbose = config["verbose"]
+    min_eps = config["min_eps"]
+
+    nr = y0.shape[-1]
+    for i in range(config["max_niter"]):
+        yinp = y.clone().detach().requires_grad_()
+        with torch.enable_grad():
+            loss = lossfn(yinp.squeeze(-1)).unsqueeze(-1) # (nbatch, nr, 1)
+
+        @lt.module(shape=(nr,nr))
+        def jac(y):
+            return torch.autograd.grad((loss,), (yinp,), grad_outputs=(y,), retain_graph=True)[0]
+
+        # check convergence
+        maxloss = loss.abs().max()
+        if maxloss < min_eps:
+            break
+        if verbose:
+            print("Iter %3d: maxloss %.3e" % (i+1, maxloss))
+
+        dy = lt.solve(jac, [], loss, fwd_options={"min_eps": 1e-2, "method": "lbfgs", "verbose": True}) # (nbatch, nr, 1)
+        y = y - dy
+        del loss
+        del yinp
+
+    return y.squeeze(-1)
 
 if __name__ == "__main__":
     import time
