@@ -56,9 +56,8 @@ class _Backward(torch.autograd.Function):
     def forward(ctx, ymodel, yinp, options):
         ctx.options = set_default_option({
             "max_niter": 50,
-            "min_eps": 1e-6,
+            "min_eps": 1e-9,
             "verbose": False,
-            "method": "lbfgs",
         }, options)
 
         ctx.ymodel = ymodel
@@ -72,10 +71,11 @@ class _Backward(torch.autograd.Function):
         yinp = ctx.yinp
 
         nr = ymodel.shape[-1]
-        @lt.module(shape=(nr,nr))
+        @lt.module(shape=(nr,nr), is_symmetric=False)
         def _apply_ImDfDy(gy, ymodel, yinp):
             gy = gy.squeeze(-1)
-            dfdy, = torch.autograd.grad(ymodel, (yinp,), gy, retain_graph=True)
+            dfdy, = torch.autograd.grad(ymodel, (yinp,), gy,
+                retain_graph=True, create_graph=torch.is_grad_enabled())
             res = gy - dfdy
             res = res.unsqueeze(-1)
             return res
