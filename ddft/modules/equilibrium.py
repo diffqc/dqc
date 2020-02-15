@@ -97,9 +97,10 @@ def approximate_newton(lossfn, y0, **config):
         with torch.enable_grad():
             loss = lossfn(yinp.squeeze(-1)).unsqueeze(-1) # (nbatch, nr, 1)
 
-        @lt.module(shape=(nr,nr))
-        def jac(y):
-            return torch.autograd.grad((loss,), (yinp,), grad_outputs=(y,), retain_graph=True)[0]
+        @lt.module(shape=(nr,nr), is_symmetric=False)
+        def jac(y, loss, yinp):
+            return torch.autograd.grad((loss,), (yinp,), grad_outputs=(y,),
+                retain_graph=True, create_graph=torch.is_grad_enabled())[0]
 
         # check convergence
         maxloss = loss.abs().max()
@@ -108,7 +109,9 @@ def approximate_newton(lossfn, y0, **config):
         if verbose:
             print("Iter %3d: maxloss %.3e" % (i+1, maxloss))
 
-        dy = lt.solve(jac, [], loss, fwd_options={"min_eps": 1e-2, "method": "lbfgs", "verbose": True}) # (nbatch, nr, 1)
+        dy = lt.solve(jac, [loss, yinp], loss, fwd_options={"min_eps": 1e-2,
+            "method": "conjgrad",
+            "verbose": True}) # (nbatch, nr, 1)
         y = y - dy
         del loss
         del yinp
