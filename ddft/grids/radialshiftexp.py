@@ -17,12 +17,13 @@ class RadialShiftExp(BaseGrid):
 
     def solve_poisson(self, f):
         # f: (nbatch, nr)
+        # the expression below is obtained by changing the order of integration
         eps = 1e-10
-        intgn1 = f * self.rs*self.rs * (self.rs + self.rmin)
-        int1 = torch.cumsum(intgn1, dim=-1) * self.dlogr
-        intgn2 = int1 / (self.rs * self.rs + eps) * (self.rs + self.rmin)
-        int2 = torch.cumsum(intgn2, dim=-1) * self.dlogr
-        return int2
+        intgn1 = f * self.rs * (self.rs + self.rmin) * self.dlogr
+        intgn2 = intgn1 * self.rs
+        int1 = torch.cumsum(intgn1, dim=-1)
+        int2 = torch.cumsum(intgn2, dim=-1) / (self.rs + eps)
+        return int1 - int2
 
     @property
     def rgrid(self):
