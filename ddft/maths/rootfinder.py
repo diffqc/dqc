@@ -218,6 +218,8 @@ def lbfgs(f, x0, jinv0=1.0, **options):
     # perform the main iteration
     xk = x0
     gk = f(xk)
+    bestgk = gk.abs().max()
+    bestx = x0
     for k in range(config["max_niter"]):
         dk = -_apply_Hk(H0, sk_history, yk_history, rk_history, gk)
         xknew, gknew = _line_search(xk, gk, dk, f)
@@ -239,13 +241,19 @@ def lbfgs(f, x0, jinv0=1.0, **options):
         # alphakold = alphak
         gk = gknew
 
+        # save the best point
+        maxgk = gk.abs().max()
+        if maxgk < bestgk:
+            bestx = xk
+            bestgk = maxgk
+
         # check the stopping condition
         if verbose:
             print("Iter %3d: %.3e" % (k+1, gk.abs().max()))
         if torch.allclose(gk, torch.zeros_like(gk), atol=min_feps):
             break
 
-    return xk
+    return bestx
 
 def _set_jinv0(jinv0, x0):
     nbatch, nfeat = x0.shape
