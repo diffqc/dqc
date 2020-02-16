@@ -34,14 +34,32 @@ class _Forward(torch.autograd.Function):
             "max_niter": 50,
             "min_eps": 1e-6,
             "verbose": False,
+            "linesearch": True,
         }, options)
 
         def loss(y):
             ymodel = model(y, *orig_params)
+            # return ((y - ymodel)**2).sum()
             return y - ymodel
 
         # solve the equilibrium equation with L-BFGS
         # y = approximate_newton(loss, y0, **config)
+
+        # yvar = y0.detach().requires_grad_()
+        # opt = torch.optim.LBFGS([yvar], line_search_fn="strong_wolfe")
+        # for i in range(config["max_niter"]):
+        #     def closure():
+        #         opt.zero_grad()
+        #         with torch.enable_grad():
+        #             lss = loss(yvar)
+        #         lss.backward()
+        #
+        #         if config["verbose"]:
+        #             print("Iter %3d: loss %.3e" % (i+1, lss.data))
+        #         return lss
+        #     opt.step(closure)
+        # y = yvar.data
+
         jinv0 = 1.0
         y = lbfgs(loss, y0, jinv0=jinv0, **config)
         return y
