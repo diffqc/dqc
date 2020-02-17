@@ -11,19 +11,20 @@ class RadialShiftExp(BaseGrid):
         self.rs = unshifted_rgrid - self.rmin
         self._rgrid = self.rs.unsqueeze(1) # (nr, 1)
         self.dlogr = logr[1] - logr[0]
+        self._dvolume = (self.rs + self.rmin) * 4 * np.pi * self.rs*self.rs * self.dlogr
 
-    def get_integrand_box(self, p):
-        return p * (self.rs + self.rmin) * 4 * np.pi * self.rs*self.rs * self.dlogr
+    def get_dvolume(self):
+        return self._dvolume
 
     def solve_poisson(self, f):
         # f: (nbatch, nr)
-        # the expression below is obtained by changing the order of integration
+        # the expression below is used to make the operator symmetric
         eps = 1e-10
-        intgn1 = f * self.rs * (self.rs + self.rmin) * self.dlogr
-        intgn2 = intgn1 * self.rs
+        intgn1 = f * self.rs * self.rs * (self.rs + self.rmin) * self.dlogr
         int1 = torch.cumsum(intgn1, dim=-1)
-        int2 = torch.cumsum(intgn2, dim=-1) / (self.rs + eps)
-        return int1 - int2
+        intgn2 = int1 / (self.rs * self.rs + eps) * (self.rs + self.rmin) * self.dlogr
+        int2 = -torch.cumsum(intgn2.flip(dims=[-1]), dim=-1).flip(dims=[-1])
+        return int2
 
     @property
     def rgrid(self):

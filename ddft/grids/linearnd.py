@@ -30,8 +30,8 @@ class LinearNDGrid(BaseGrid):
         pixsize = self._rgrid[idx,:] - self._rgrid[0,:] # (ndim,)
         self.dr3 = torch.prod(pixsize)
 
-    def get_integrand_box(self, p):
-        return p * self.dr3
+    def get_dvolume(self):
+        return self.dr3
 
     def solve_poisson(self, f):
         raise RuntimeError("Unimplemented solve_poisson for LinearNDGrid")

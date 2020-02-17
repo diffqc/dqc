@@ -46,7 +46,7 @@ class DFT(torch.nn.Module):
         super(DFT, self).__init__()
         self.H_model = H_model
         self.eks_model = eks_model
-        self.vks_model = VKS(eks_model)
+        self.vks_model = VKS(eks_model, H_model.grid)
         self.eigen_model = EigenModule(H_model, nlowest,
             rlinmodule=H_model.overlap, **eigen_options)
 
@@ -146,7 +146,7 @@ class DFTMulti(torch.nn.Module):
         super(DFTMulti, self).__init__()
         self.H_models = H_models
         self.eks_model = eks_model
-        self.vks_model = VKS(eks_model)
+        self.vks_model = VKS(eks_model, H_model.grid)
         self.eigen_models = [EigenModule(H_model, nlowest,
             rlinmodule=H_model.overlap, **eigen_options) \
             for (H_model, nlowest) in zip(self.H_models, nlowests)]

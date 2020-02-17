@@ -18,7 +18,7 @@ def test_vks():
     a = torch.tensor([1.0]).to(dtype)
     p = torch.tensor([1.3333]).to(dtype)
     eks_mdl = EKS1(a, p)
-    vks_mdl = VKS(eks_mdl)
+    vks_mdl = VKS(eks_mdl, grid)
     eks = eks_mdl(density)
     vks = vks_mdl(density)
 

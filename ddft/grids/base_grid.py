@@ -4,23 +4,14 @@ import torch
 class BaseGrid(object):
 
     @abstractmethod
-    def get_integrand_box(self, p):
+    def get_dvolume(self):
         """
-        Get the integrand of p when performing integral(p * dVolume) over the
-        last dimension.
-        The output of this function will be summed when the integral over the
-        volume is performed.
-
-        Arguments
-        ---------
-        * p: torch.tensor (..., ..., nr)
-            The tensor to be integrated over the spatial grid.
+        Obtain the torch.tensor containing the dV elements for the integration.
 
         Returns
         -------
-        * pintegrand: torch.tensor (..., ..., nr)
-            The integrand of the volume integral so that pintegrand.sum() should
-            be performed when the volume integration is performed.
+        * dV: torch.tensor (nr,)
+            The dV elements for the integration
         """
         pass
 
@@ -29,6 +20,8 @@ class BaseGrid(object):
         """
         Solve Poisson's equation del^2 v = f, where f is a torch.tensor with
         shape (nbatch, nr) and v is also similar.
+        The solve-Poisson's operator must be written in a way that it is
+        a symmetric transformation.
 
         Arguments
         ---------
@@ -71,7 +64,7 @@ class BaseGrid(object):
         * dim: int
             The dimension where it should be integrated.
         """
-        integrand = self.get_integrand_box(p.transpose(dim,-1))
+        integrand = p.transpose(dim,-1) * self.get_dvolume()
         res = torch.sum(integrand, dim=-1)
         return res.transpose(dim,-1)
 
@@ -91,5 +84,5 @@ class BaseGrid(object):
         * mm: torch.tensor (..., n1, n2)
             The result of matrix multiplication integration.
         """
-        pleft = self.get_integrand_box(p1)
+        pleft = p1 * self.get_dvolume()
         return torch.matmul(pleft, p2)

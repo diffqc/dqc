@@ -3,9 +3,11 @@ import torch
 __all__ = ["VKS"]
 
 class VKS(torch.nn.Module):
-    def __init__(self, eks_model):
+    def __init__(self, eks_model, grid):
         super(VKS, self).__init__()
         self.eks_model = eks_model
+        self.grid = grid
+        self.dv = self.grid.get_dvolume()
 
     def forward(self, x):
         assert x.ndim == 2, "The input to VKS module must be 2-dimensional tensor (nbatch, nrgrid)"
@@ -16,11 +18,12 @@ class VKS(torch.nn.Module):
 
         with torch.enable_grad():
             y = self.eks_model(xinp) # (nbatch,nr)
+            y = y * self.dv
             ysum = y.sum()
         grad_enabled = torch.is_grad_enabled()
         dx = torch.autograd.grad(ysum, (xinp,),
             create_graph=grad_enabled)[0]
-        return dx # (same shape as x)
+        return dx / self.dv
 
 if __name__ == "__main__":
     from ddft.eks.base_eks import BaseEKS
@@ -46,7 +49,7 @@ if __name__ == "__main__":
     a = torch.tensor([1.0]).to(dtype)
     p = torch.tensor([1.3333]).to(dtype)
     eks_mdl = EKS1(a, p)
-    vks_mdl = VKS(eks_mdl)
+    vks_mdl = VKS(eks_mdl, grid)
     eks = eks_mdl(density)
     vks = vks_mdl(density)
 
