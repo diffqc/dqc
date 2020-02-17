@@ -25,12 +25,12 @@ def selfconsistent(f, x0, jinv0=1.0, **options):
     # set up the default options
     config = set_default_option({
         "max_niter": 20,
-        "min_feps": 1e-6,
+        "min_eps": 1e-6,
         "verbose": False,
     }, options)
 
     # pull out the options for fast access
-    min_feps = config["min_feps"]
+    min_eps = config["min_eps"]
     verbose = config["verbose"]
 
     # pull out the parameters of x0
@@ -57,7 +57,7 @@ def selfconsistent(f, x0, jinv0=1.0, **options):
         # check the stopping condition
         if verbose:
             print("Iter %3d: %.3e" % (i+1, fx.abs().max()))
-        if torch.allclose(fx, torch.zeros_like(fx), atol=min_feps):
+        if torch.allclose(fx, torch.zeros_like(fx), atol=min_eps):
             break
 
     return x
@@ -85,12 +85,12 @@ def broyden(f, x0, jinv0=1.0, **options):
     # set up the default options
     config = set_default_option({
         "max_niter": 20,
-        "min_feps": 1e-6,
+        "min_eps": 1e-6,
         "verbose": False,
     }, options)
 
     # pull out the options for fast access
-    min_feps = config["min_feps"]
+    min_eps = config["min_eps"]
     verbose = config["verbose"]
 
     # pull out the parameters of x0
@@ -124,7 +124,7 @@ def broyden(f, x0, jinv0=1.0, **options):
         # check the stopping condition
         if verbose:
             print("Iter %3d: %.3e" % (i+1, fx.abs().max()))
-        if torch.allclose(fx, torch.zeros_like(fx), atol=min_feps):
+        if torch.allclose(fx, torch.zeros_like(fx), atol=min_eps):
             break
 
     return x
@@ -151,7 +151,7 @@ def lbfgs(f, x0, jinv0=1.0, **options):
     """
     config = set_default_option({
         "max_niter": 20,
-        "min_feps": 1e-6,
+        "min_eps": 1e-6,
         "max_memory": 10,
         "alpha0": 1.0,
         "linesearch": False,
@@ -159,7 +159,7 @@ def lbfgs(f, x0, jinv0=1.0, **options):
     }, options)
 
     # pull out the options for fast access
-    min_feps = config["min_feps"]
+    min_eps = config["min_eps"]
     max_memory = config["max_memory"]
     verbose = config["verbose"]
     linesearch = config["linesearch"]
@@ -250,7 +250,7 @@ def lbfgs(f, x0, jinv0=1.0, **options):
         # check the stopping condition
         if verbose:
             print("Iter %3d: %.3e" % (k+1, gk.abs().max()))
-        if torch.allclose(gk, torch.zeros_like(gk), atol=min_feps):
+        if torch.allclose(gk, torch.zeros_like(gk), atol=min_eps):
             break
 
     return bestx
