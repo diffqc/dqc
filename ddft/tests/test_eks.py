@@ -1,5 +1,6 @@
 import torch
-from ddft.eks import BaseEKS, VKS
+import numpy as np
+from ddft.eks import BaseEKS, VKS, Hartree
 from ddft.utils.safeops import safepow
 
 class EKS1(BaseEKS):
@@ -24,6 +25,21 @@ def test_vks():
 
     torch.allclose(eks, a*density**p)
     torch.allclose(vks, a*p*density**(p-1.0))
+
+def test_hartree_radial():
+    dtype = torch.float64
+    grid, density = _setup_density("radialshiftexp", "exp", dtype=dtype)
+
+    hartree_mdl = Hartree(grid)
+    vks_hartree_mdl = VKS(hartree_mdl, grid)
+    vks_hartree = vks_hartree_mdl(density)
+
+    def eks_sum(density):
+        eks_grid = hartree_mdl(density)
+        return eks_grid.sum()
+
+    vks_poisson = grid.solve_poisson(-4.0 * np.pi * density)
+    assert torch.allclose(vks_hartree, vks_poisson)
 
 def _setup_density(gridname, fcnname, dtype=torch.float64):
     from ddft.grids.radialshiftexp import RadialShiftExp
