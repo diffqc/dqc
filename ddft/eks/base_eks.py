@@ -1,7 +1,7 @@
 import torch
 from abc import abstractmethod
 
-__all__ = ["BaseEKS", "VKS"]
+__all__ = ["BaseEKS"]
 
 class BaseEKS(torch.nn.Module):
     def __init__(self):
@@ -37,29 +37,6 @@ class BaseEKS(torch.nn.Module):
 
     def __neg__(self):
         return NegEKS(self)
-
-class VKS(torch.nn.Module):
-    def __init__(self, eks_model, grid):
-        super(VKS, self).__init__()
-        self.eks_model = eks_model
-        self.grid = grid
-
-    def forward(self, x):
-        assert x.ndim == 2, "The input to VKS module must be 2-dimensional tensor (nbatch, nrgrid)"
-        if x.requires_grad:
-            xinp = x
-        else:
-            xinp = x.clone().requires_grad_()
-
-        with torch.enable_grad():
-            y = self.eks_model(xinp) # (nbatch,nr)
-            yint = self.grid.integralbox(y, dim=-1)
-            ysum = yint.sum()
-        grad_enabled = torch.is_grad_enabled()
-        dx = torch.autograd.grad(ysum, (xinp,),
-            create_graph=grad_enabled)[0]
-        return dx # (same shape as x)
-
 
 class TensorEKS(BaseEKS):
     def __init__(self, tensor):
