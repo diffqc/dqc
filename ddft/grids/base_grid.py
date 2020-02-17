@@ -21,7 +21,7 @@ class BaseGrid(object):
         Solve Poisson's equation del^2 v = f, where f is a torch.tensor with
         shape (nbatch, nr) and v is also similar.
         The solve-Poisson's operator must be written in a way that it is
-        a symmetric transformation.
+        a symmetric transformation when multiplied by get_dvolume().
 
         Arguments
         ---------
