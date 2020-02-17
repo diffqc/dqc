@@ -23,6 +23,7 @@ class RadialShiftExp(BaseGrid):
         intgn1 = f * self.rs * self.rs * (self.rs + self.rmin) * self.dlogr
         int1 = torch.cumsum(intgn1, dim=-1)
         intgn2 = int1 / (self.rs * self.rs + eps) * (self.rs + self.rmin) * self.dlogr
+        # this form of cumsum is the transpose of torch.cumsum
         int2 = -torch.cumsum(intgn2.flip(dims=[-1]), dim=-1).flip(dims=[-1])
         return int2
 
