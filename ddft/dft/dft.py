@@ -1,3 +1,4 @@
+import functools
 import torch
 import numpy as np
 from ddft.modules.eigen import EigenModule
@@ -146,7 +147,8 @@ class DFTMulti(torch.nn.Module):
         super(DFTMulti, self).__init__()
         self.H_models = H_models
         self.eks_model = eks_model
-        self.vks_model = VKS(eks_model, H_model.grid)
+        self.grid = self.H_models[0].grid
+        self.vks_model = VKS(eks_model, self.grid)
         self.eigen_models = [EigenModule(H_model, nlowest,
             rlinmodule=H_model.overlap, **eigen_options) \
             for (H_model, nlowest) in zip(self.H_models, nlowests)]
@@ -163,10 +165,13 @@ class DFTMulti(torch.nn.Module):
         # compute the eigenpairs
         # all_evals: list of (nbatch, nlowest)
         # all_evecs: list of (nbatch, nr, nlowest)
-        all_eigvals, all_eigvecs = zip([
-            eigen_model((vext_tot, *hparams), rparams=rparams) \
-            for (eigen_model, hparams, rparams) \
-            in zip(self.eigen_models, all_hparams, all_rparams)])
+        if all_rparams == []:
+            all_rparams = [[] for _ in range(len(self.H_models))]
+        rs = [eigen_model((vext_tot, *hparams), rparams=rparams) \
+              for (eigen_model, hparams, rparams) \
+              in zip(self.eigen_models, all_hparams, all_rparams)]
+        all_eigvals = [r[0] for r in rs]
+        all_eigvecs = [r[1] for r in rs]
 
         # normalize the norm of density
         # dens: list of (nbatch, nr)
@@ -198,14 +203,14 @@ class DFTMulti(torch.nn.Module):
 
         # calculates the Kohn-Sham energy
         eks_density = self.eks_model(density) # energy density (nbatch, nr)
-        Eks = self.H_model.grid.integralbox(eks_density, dim=-1) # (nbatch,)
+        Eks = self.grid.integralbox(eks_density, dim=-1) # (nbatch,)
 
         # calculate the individual non-interacting particles energy
         # sum_eigvals_list: list of (nbatch,)
         sum_eigvals_list = [(eigvals * focc).sum(dim=-1) \
-            for (eigvals, focc) in (all_eigvals, foccs)]
+            for (eigvals, focc) in zip(all_eigvals, foccs)]
         sum_eigvals = functools.reduce(lambda x,y: x+y, sum_eigvals_list)
-        vks_integral = self.H_model.grid.integralbox(vks*density, dim=-1)
+        vks_integral = self.grid.integralbox(vks*density, dim=-1)
 
         # compute the interacting particles energy
         Etot = sum_eigvals - vks_integral + Eks
