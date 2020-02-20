@@ -63,25 +63,35 @@ class HamiltonAtomRadial(BaseHamilton):
 
         # get the basis in rgrid
         # (ng, nr)
-        gw1 = self.gwidths.unsqueeze(-1)
-        unnorm_basis = torch.exp(-self.rs*self.rs / (4*gw1*gw1))
-        norm = 1. / (np.sqrt(2 * np.pi) * self.gwidths.unsqueeze(-1))**(1.5) # (ng, 1)
-        self.basis = norm * unnorm_basis
+        gw1 = self.gwidths.unsqueeze(-1) # (ng, 1)
+        unnorm_basis = torch.exp(-self.rs*self.rs / (2*gw1*gw1)) * self.rs # (nr,)
+        norm = np.sqrt(2./3) / gw1**2.5 / np.pi**.75 # (ng, 1)
+        self.basis = norm * unnorm_basis # (ng, nr)
 
-        # print(self.integralbox(self.basis*self.basis))
+        # print(self.grid.integralbox(self.basis*self.basis))
+        # raise RuntimeError
 
         # construct the matrices provided ng is small enough
         gwprod = gw1 * self.gwidths
-        gwprod32 = gwprod**1.5
+        # gwprod32 = gwprod**1.5
+        gwprod12 = gwprod**0.5
+        gwprod52 = gwprod**2.5
         gw2sum = gw1*gw1 + self.gwidths*self.gwidths
         gwnet2 = gwprod*gwprod / gw2sum
         gwnet = torch.sqrt(gwnet2)
+        gwpoly = 2*gw1**4 - 11*gw1*gw1*self.gwidths*self.gwidths + 2*self.gwidths**4
 
-        kin_rad = 3.0/np.sqrt(2.0) * gwnet**3 / gwprod32 / gw2sum
-        kin_ang = gwnet / gwprod32 / np.sqrt(2.0)
+        # kin_rad = 3.0/np.sqrt(2.0) * gwnet**3 / gwprod32 / gw2sum
+        # kin_ang = gwnet / gwprod32 / np.sqrt(2.0)
+        # kin = kin_rad + kin_ang * angmom * (angmom+1)
+        # olp = 2*np.sqrt(2.0) * gwnet**3 / gwprod32
+        # coul = -4.0 / np.sqrt(2.0 * np.pi) * gwnet2 / gwprod32
+
+        olp = 4 * np.sqrt(2) * gwnet**5 / gwprod52
+        coul = -16./(3*np.sqrt(np.pi)) * gwnet**4 / gwprod52
+        kin_ang = 2 * np.sqrt(2) / 3 * gwnet**3 / gwprod52
+        kin_rad = -2*np.sqrt(2) / 3 * gwnet**3 / gw2sum**2 / gwprod52 * gwpoly
         kin = kin_rad + kin_ang * angmom * (angmom+1)
-        olp = 2*np.sqrt(2.0) * gwnet**3 / gwprod32
-        coul = -4.0 / np.sqrt(2.0 * np.pi) * gwnet2 / gwprod32
 
         # create the batch dimension to the matrix to enable batched matmul
         # shape: (1, ns, ns)
@@ -134,7 +144,7 @@ if __name__ == "__main__":
     dtype = torch.float64
     gwidths = torch.logspace(np.log10(1e-5), np.log10(1e2), 100).to(dtype)
     grid = RadialShiftExp(1e-6, 1e4, 2000, dtype=dtype)
-    h = HamiltonAtomRadial(grid, gwidths, angmom=0, dtype=dtype, device=device)
+    h = HamiltonAtomRadial(grid, gwidths, angmom=0).to(dtype)
 
     vext = torch.zeros(1, 2000).to(dtype)
     atomz = torch.tensor([1.0]).to(dtype)
