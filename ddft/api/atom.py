@@ -73,10 +73,10 @@ class Orbitals(object):
             eltot = np.sum(self.elocc[self.elangmom == angmom])
             occ = occ_nums[angmom]
             nlowest = int(np.ceil(eltot*1.0/occ))
-            focc = torch.ones(nlowest, device=device, dtype=dtype).unsqueeze(0) * occ
+            focc = torch.ones(nlowest, device=device, dtype=dtype) * occ
             if eltot % occ != 0:
                 focc[-1] = 1.0 * (eltot % occ)
-            foccs.append(focc)
+            foccs.append(focc.unsqueeze(0))
             nlowests.append(nlowest)
 
         self.foccs = foccs
