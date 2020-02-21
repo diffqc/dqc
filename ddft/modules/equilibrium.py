@@ -35,6 +35,7 @@ class _Forward(torch.autograd.Function):
             "min_eps": 1e-6,
             "verbose": False,
             "linesearch": True,
+            "jinv0": 0.5,
         }, options)
 
         def loss(y):
@@ -60,8 +61,8 @@ class _Forward(torch.autograd.Function):
         #     opt.step(closure)
         # y = yvar.data
 
-        jinv0 = 1.0
-        y = lbfgs(loss, y0, jinv0=jinv0, **config)
+        jinv0 = config["jinv0"]
+        y = lbfgs(loss, y0, **config)
         return y
 
     @staticmethod
