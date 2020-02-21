@@ -105,17 +105,20 @@ class HamiltonAtomRadial(BaseHamilton):
         # vext: (nbatch, nr)
         # atomz: (nbatch,)
 
-        # the external potential part
-        extpot = self.grid.mmintegralbox(vext.unsqueeze(1) * self.basis, self.basis.transpose(-2,-1))
-
-        # add all the matrix and apply the Hamiltonian
-        fock = (self.kin + extpot) + self.coul * atomz.unsqueeze(-1).unsqueeze(-1)
-        nbatch = wf.shape[0]
-        hwf = torch.bmm(fock.expand(nbatch,-1,-1), wf)
+        fock = self.fullmatrix(vext, atomz)
+        hwf = torch.bmm(fock, wf)
         return hwf
 
     def precond(self, y, vext, atomz, biases=None, M=None, mparams=None):
         return y # ???
+
+    def fullmatrix(self, vext, atomz):
+        # the external potential part
+        extpot = self.grid.mmintegralbox(vext.unsqueeze(1) * self.basis, self.basis.transpose(-2,-1))
+
+        # add all the matrix and apply the Hamiltonian
+        fock = self.kin + extpot + self.coul * atomz.unsqueeze(-1).unsqueeze(-1)
+        return fock
 
     def _overlap(self, wf):
         return torch.matmul(self.olp, wf)
