@@ -16,6 +16,12 @@ def atom(atomz, eks_model="lda",
     eig_options = {
         "method": "exacteig",
     }
+    scf_options = {
+        "min_eps": 1e-9,
+    }
+    bck_options = {
+        "min_eps": 1e-9,
+    }
 
     # normalize the device and eks_model
     device = _normalize_device(device)
@@ -45,7 +51,7 @@ def atom(atomz, eks_model="lda",
         if eks_model is not None:
             all_eks_models = all_eks_models + eks_model
         dft_model = DFTMulti(H_models, all_eks_models, nlowests, **eig_options)
-        scf_model = EquilibriumModule(dft_model)
+        scf_model = EquilibriumModule(dft_model, forward_options=scf_options, backward_options=bck_options)
 
         # calculate the density
         foccs = orbitals.get_foccs()
@@ -119,7 +125,7 @@ def get_max_occ_angmom(orbital):
     }[orbital[-1]]
 
 def _check_atom_is_radial(atomz):
-    return atomz in [1,2,3,4,10,18,36,54,86]
+    return atomz in [1,2,3,4,10,12,18,20,25,30,36,54,86]
 
 def _normalize_device(device):
     if isinstance(device, str):
@@ -142,5 +148,76 @@ def _normalize_eks(eks):
         raise RuntimeError("Unknown EKS input type: %s" % type(eks))
 
 if __name__ == "__main__":
-    energy, density = atom(3)
-    print(energy)
+    import time
+    from ddft.utils.safeops import safepow
+    from ddft.utils.fd import finite_differences
+
+    dtype = torch.float64
+    class PseudoLDA(BaseEKS):
+        def __init__(self, a, p):
+            super(PseudoLDA, self).__init__()
+            self.a = torch.nn.Parameter(a)
+            self.p = torch.nn.Parameter(p)
+
+        def forward(self, density):
+            return self.a * safepow(density.abs(), self.p)
+
+    # experimental data
+    atomzs = [2,4,10,12,18,20,30,36][:3]
+    expdata = torch.tensor([-2.904601242647059, -14.674582216911766,
+                            -129.10649963235295, -200.32232950000002,
+                            -529.4431757977941, -680.2348059195,
+                            -1794.8478644, -2789.1691707830882][:3]).to(dtype)
+
+    # pseudo-lda eks model
+    a = torch.tensor([-0.7385587663820223]).to(dtype).requires_grad_()
+    p = torch.tensor([4./3]).to(dtype).requires_grad_()
+    # a = torch.tensor([-0.9312]).to(dtype).requires_grad_()
+    # p = torch.tensor([1.077]).to(dtype).requires_grad_()
+    eks_model = PseudoLDA(a, p)
+    mode = "grad"
+
+    def getloss(a, p, eks_model=None):
+        if eks_model is None:
+            eks_model = PseudoLDA(a, p)
+        loss = 0
+        for i,atomz in enumerate(atomzs):
+            energy, density = atom(atomz, eks_model)
+            loss = loss + ((energy - expdata[i]) / expdata[i])**2
+        return loss
+
+    if mode == "grad":
+        t0 = time.time()
+        loss = getloss(a, p, eks_model)
+        t1 = time.time()
+        print("Forward done in %fs" % (t1 - t0))
+        loss.backward()
+        t2 = time.time()
+        print("Backward done in %fs" % (t2 - t1))
+        agrad = eks_model.a.grad.data
+        pgrad = eks_model.p.grad.data
+
+        afd = finite_differences(getloss, (a, p), 0, eps=1e-2, step=2)
+        pfd = finite_differences(getloss, (a, p), 1, eps=1e-2, step=2)
+        t3 = time.time()
+        print("FD done in %fs" % (t3 - t2))
+
+        print("grad of a:")
+        print(agrad)
+        print(afd)
+        print(agrad/afd)
+
+        print("grad of p:")
+        print(pgrad)
+        print(pfd)
+        print(pgrad/pfd)
+    elif mode == "opt":
+        nsteps = 1000
+        opt = torch.optim.SGD(eks_model.parameters(), lr=1e-2)
+        for i in range(nsteps):
+            opt.zero_grad()
+            loss = getloss(a, p, eks_model)
+            loss.backward()
+            opt.step()
+            print("Iter %d: (loss) %.3e (a) %.3e (p) %.3e" % \
+                (i, loss.data, eks_model.a.data, eks_model.p.data))
