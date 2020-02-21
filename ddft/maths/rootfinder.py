@@ -1,4 +1,5 @@
 import torch
+import warnings
 from ddft.utils.misc import set_default_option
 from ddft.maths.linesearch import line_search
 
@@ -44,6 +45,7 @@ def selfconsistent(f, x0, jinv0=1.0, **options):
     # perform the Broyden iterations
     x = x0
     fx = f(x0) # (nbatch, nfeat)
+    stop_reason = "max_niter"
     for i in range(config["max_niter"]):
         dxnew = -torch.bmm(jinv, fx.unsqueeze(-1)) # (nbatch, nfeat, 1)
         xnew = x + dxnew.squeeze(-1) # (nbatch, nfeat)
@@ -58,7 +60,13 @@ def selfconsistent(f, x0, jinv0=1.0, **options):
         if verbose:
             print("Iter %3d: %.3e" % (i+1, fx.abs().max()))
         if torch.allclose(fx, torch.zeros_like(fx), atol=min_eps):
+            stop_reason = "min_eps"
             break
+
+    if stop_reason != "min_eps":
+        msg = "The selfconsistent iteration does not converge to the required accuracy."
+        msg += "\nRequired: %.3e. Achieved: %.3e" % (min_eps, fx.abs().max())
+        warnings.warn(msg)
 
     return x
 
@@ -104,6 +112,7 @@ def broyden(f, x0, jinv0=1.0, **options):
     # perform the Broyden iterations
     x = x0
     fx = f(x0) # (nbatch, nfeat)
+    stop_reason = "max_niter"
     for i in range(config["max_niter"]):
         dxnew = -torch.bmm(jinv, fx.unsqueeze(-1)) # (nbatch, nfeat, 1)
         xnew = x + dxnew.squeeze(-1) # (nbatch, nfeat)
@@ -125,7 +134,13 @@ def broyden(f, x0, jinv0=1.0, **options):
         if verbose:
             print("Iter %3d: %.3e" % (i+1, fx.abs().max()))
         if torch.allclose(fx, torch.zeros_like(fx), atol=min_eps):
+            stop_reason = "min_eps"
             break
+
+    if stop_reason != "min_eps":
+        msg = "The Broyden iteration does not converge to the required accuracy."
+        msg += "\nRequired: %.3e. Achieved: %.3e" % (min_eps, fx.abs().max())
+        warnings.warn(msg)
 
     return x
 
@@ -220,6 +235,7 @@ def lbfgs(f, x0, jinv0=1.0, **options):
     gk = f(xk)
     bestgk = gk.abs().max()
     bestx = x0
+    stop_reason = "max_niter"
     for k in range(config["max_niter"]):
         dk = -_apply_Hk(H0, sk_history, yk_history, rk_history, gk)
         xknew, gknew = _line_search(xk, gk, dk, f)
@@ -251,7 +267,13 @@ def lbfgs(f, x0, jinv0=1.0, **options):
         if verbose:
             print("Iter %3d: %.3e" % (k+1, gk.abs().max()))
         if torch.allclose(gk, torch.zeros_like(gk), atol=min_eps):
+            stop_reason = "min_eps"
             break
+
+    if stop_reason != "min_eps":
+        msg = "The L-BFGS iteration does not converge to the required accuracy."
+        msg += "\nRequired: %.3e. Achieved: %.3e" % (min_eps, gk.abs().max())
+        warnings.warn(msg)
 
     return bestx
 
