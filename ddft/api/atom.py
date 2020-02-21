@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 from ddft.dft.dft import DFT, DFTMulti
+from ddft.utils.misc import set_default_option
 from ddft.hamiltons.hatomradial import HamiltonAtomRadial
 from ddft.grids.radialshiftexp import RadialShiftExp
 from ddft.modules.equilibrium import EquilibriumModule
@@ -11,17 +12,20 @@ __all__ = ["atom"]
 def atom(atomz, eks_model="lda",
          gwmin=1e-5, gwmax=1e2, ng=100,
          rmin=1e-6, rmax=1e4, nr=2000,
-         dtype=torch.float64, device="cpu"):
+         dtype=torch.float64, device="cpu",
+         eig_options=None, scf_options=None, bck_options=None):
 
-    eig_options = {
+    eig_options = set_default_option({
         "method": "exacteig",
-    }
-    scf_options = {
+    }, eig_options)
+    scf_options = set_default_option({
         "min_eps": 1e-9,
-    }
-    bck_options = {
+        "jinv0": 0.5,
+        "alpha0": 1.0,
+    }, scf_options)
+    bck_options = set_default_option({
         "min_eps": 1e-9,
-    }
+    }, bck_options)
 
     # normalize the device and eks_model
     device = _normalize_device(device)
@@ -163,11 +167,12 @@ if __name__ == "__main__":
             return self.a * safepow(density.abs(), self.p)
 
     # experimental data
-    atomzs = [2,4,10,12,18,20,30,36][:3]
+    natoms = 6
+    atomzs = [2,4,10,12,18,20,30,36][:natoms]
     expdata = torch.tensor([-2.904601242647059, -14.674582216911766,
                             -129.10649963235295, -200.32232950000002,
                             -529.4431757977941, -680.2348059195,
-                            -1794.8478644, -2789.1691707830882][:3]).to(dtype)
+                            -1794.8478644, -2789.1691707830882][:natoms]).to(dtype)
 
     # pseudo-lda eks model
     a = torch.tensor([-0.7385587663820223]).to(dtype).requires_grad_()
@@ -175,7 +180,7 @@ if __name__ == "__main__":
     # a = torch.tensor([-0.9312]).to(dtype).requires_grad_()
     # p = torch.tensor([1.077]).to(dtype).requires_grad_()
     eks_model = PseudoLDA(a, p)
-    mode = "grad"
+    mode = "opt"
 
     def getloss(a, p, eks_model=None):
         if eks_model is None:
@@ -197,8 +202,8 @@ if __name__ == "__main__":
         agrad = eks_model.a.grad.data
         pgrad = eks_model.p.grad.data
 
-        afd = finite_differences(getloss, (a, p), 0, eps=1e-2, step=2)
-        pfd = finite_differences(getloss, (a, p), 1, eps=1e-2, step=2)
+        afd = finite_differences(getloss, (a, p), 0, eps=1e-6, step=1)
+        pfd = finite_differences(getloss, (a, p), 1, eps=1e-6, step=1)
         t3 = time.time()
         print("FD done in %fs" % (t3 - t2))
 
