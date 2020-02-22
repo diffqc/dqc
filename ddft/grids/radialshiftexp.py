@@ -51,7 +51,7 @@ class LegendreRadialShiftExp(BaseGrid):
         self.rs = torch.exp(self.xleggauss * (logrmax - logrmin) + logrmin) - rmin
         self._rgrid = self.rs.unsqueeze(-1)
 
-        self._dr = (self.rs+self.rmin) * self.logrmm * self.wleggauss
+        self._dr = (self.rs+self.rmin) * self.logrmm * self.wleggauss * 0.5
         self._dvolume = (4*np.pi*self.rs*self.rs) * self._dr
 
 
