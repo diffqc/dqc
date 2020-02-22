@@ -48,7 +48,7 @@ class LegendreRadialShiftExp(BaseGrid):
         xleggauss, wleggauss = leggauss(nr)
         self.xleggauss = torch.tensor(xleggauss, dtype=dtype, device=device)
         self.wleggauss = torch.tensor(wleggauss, dtype=dtype, device=device)
-        self.rs = torch.exp(self.xleggauss * (logrmax - logrmin) + logrmin) - rmin
+        self.rs = torch.exp((self.xleggauss+1)*0.5 * (logrmax - logrmin) + logrmin) - rmin
         self._rgrid = self.rs.unsqueeze(-1)
 
         self._dr = (self.rs+self.rmin) * self.logrmm * self.wleggauss * 0.5
