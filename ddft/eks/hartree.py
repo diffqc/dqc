@@ -20,11 +20,11 @@ class Hartree(BaseEKS):
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     from ddft.eks.vks import VKS
-    from ddft.grids.radialshiftexp import RadialShiftExp
+    from ddft.grids.radialshiftexp import RadialShiftExp, LegendreRadialShiftExp
     from ddft.utils.fd import finite_differences
 
     dtype = torch.float64
-    grid = RadialShiftExp(1e-6, 1e4, 2000, dtype=dtype)
+    grid = LegendreRadialShiftExp(1e-6, 1e4, 200, dtype=dtype)
     rgrid = grid.rgrid
     density = torch.exp(-rgrid*rgrid).transpose(-2,-1)
 

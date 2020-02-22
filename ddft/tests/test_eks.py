@@ -12,9 +12,21 @@ class EKS1(BaseEKS):
     def forward(self, x):
         return self.a * x**self.p
 
-def test_vks():
+def test_vks_radial():
+    run_vks_test("radialshiftexp", "exp")
+
+def test_vks_radial_legendre():
+    run_vks_test("legradialshiftexp", "exp")
+
+def test_hartree_radial():
+    run_hartree_test("radialshiftexp", "exp")
+
+def test_hartree_radial_legendre():
+    run_hartree_test("legradialshiftexp", "exp")
+
+def run_vks_test(gridname, fcnname):
     dtype = torch.float64
-    grid, density = _setup_density("radialshiftexp", "exp", dtype=dtype)
+    grid, density = _setup_density(gridname, fcnname, dtype=dtype)
 
     a = torch.tensor([1.0]).to(dtype)
     p = torch.tensor([1.3333]).to(dtype)
@@ -26,9 +38,9 @@ def test_vks():
     torch.allclose(eks, a*density**p)
     torch.allclose(vks, a*p*density**(p-1.0))
 
-def test_hartree_radial():
+def run_hartree_test(gridname, fcnname):
     dtype = torch.float64
-    grid, density = _setup_density("radialshiftexp", "exp", dtype=dtype)
+    grid, density = _setup_density(gridname, fcnname, dtype=dtype)
 
     hartree_mdl = Hartree(grid)
     vks_hartree_mdl = VKS(hartree_mdl, grid)
@@ -42,10 +54,12 @@ def test_hartree_radial():
     assert torch.allclose(vks_hartree, vks_poisson)
 
 def _setup_density(gridname, fcnname, dtype=torch.float64):
-    from ddft.grids.radialshiftexp import RadialShiftExp
+    from ddft.grids.radialshiftexp import RadialShiftExp, LegendreRadialShiftExp
 
     if gridname == "radialshiftexp":
         grid = RadialShiftExp(1e-6, 1e4, 2000, dtype=dtype)
+    elif gridname == "legradialshiftexp":
+        grid = LegendreRadialShiftExp(1e-6, 1e4, 200, dtype=dtype)
     else:
         raise RuntimeError("Unknown gridname: %s" % gridname)
     rgrid = grid.rgrid
