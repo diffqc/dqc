@@ -3,7 +3,7 @@ import numpy as np
 from ddft.dft.dft import DFT, DFTMulti
 from ddft.utils.misc import set_default_option
 from ddft.hamiltons.hatomradial import HamiltonAtomRadial
-from ddft.grids.radialshiftexp import RadialShiftExp
+from ddft.grids.radialshiftexp import RadialShiftExp, LegendreRadialShiftExp
 from ddft.modules.equilibrium import EquilibriumModule
 from ddft.eks import BaseEKS, Hartree, xLDA
 
@@ -11,7 +11,7 @@ __all__ = ["atom"]
 
 def atom(atomz, eks_model="lda",
          gwmin=1e-5, gwmax=1e2, ng=100,
-         rmin=1e-6, rmax=1e4, nr=2000,
+         rmin=1e-6, rmax=1e4, nr=200,
          dtype=torch.float64, device="cpu",
          eig_options=None, scf_options=None, bck_options=None):
 
@@ -40,7 +40,7 @@ def atom(atomz, eks_model="lda",
     else:
         # setup the grids and the hamiltonians
         gwidths = torch.logspace(np.log10(gwmin), np.log10(gwmax), ng, dtype=dtype).to(device)
-        grid = RadialShiftExp(rmin, rmax, nr, dtype=dtype, device=device)
+        grid = LegendreRadialShiftExp(rmin, rmax, nr, dtype=dtype, device=device)
         angmoms = orbitals.get_angmoms()
         H_models = [HamiltonAtomRadial(grid, gwidths, angmom=angmom).to(dtype).to(device) for angmom in angmoms]
 
