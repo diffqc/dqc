@@ -17,7 +17,7 @@ class Lebedev(BaseGrid):
         dset_path = os.path.join(os.path.split(ddft.__file__)[0], "datasets", "lebedevquad", "lebedev_%03d.txt"%prec)
         assert os.path.exists(dset_path), "The dataset lebedev_%03d.txt does not exist" % prec
         lebedev_dsets = torch.tensor(np.loadtxt(dset_path), dtype=dtype, device=device)
-        self.phithetargrid = lebedev_dsets[:,:2] # (nphitheta,2)
+        self.phithetargrid = lebedev_dsets[:,:2] / 180.0 * np.pi # (nphitheta,2)
         self.wphitheta = lebedev_dsets[:,-1] # (nphitheta)
         nphitheta = self.phithetargrid.shape[0]
 
