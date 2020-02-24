@@ -5,12 +5,14 @@ import lintorch as lt
 
 class BaseHamilton(lt.Module):
     # TODO: do initialization to check if the methods are implemented properly
-    def __init__(self, shape, is_symmetric=True, is_real=True):
+    def __init__(self, shape, is_symmetric=True, is_real=True, dtype=None, device=None):
 
         super(BaseHamilton, self).__init__(
             shape=shape,
             is_symmetric=is_symmetric,
-            is_real=is_real)
+            is_real=is_real,
+            dtype=None,
+            device=None)
 
         if hasattr(self._overlap, "__call__"):
             self.overlap = lt.module(shape,
