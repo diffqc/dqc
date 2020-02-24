@@ -106,8 +106,8 @@ class HamiltonAtomYGauss(BaseHamilton):
                 self.angbasis[angbasis_row] = alegcostheta * sinphis[m-1] * norm
                 angbasis_row += 1
 
-        # self.basis = self.radbasis.unsqueeze(1).unsqueeze(-1) * self.angbasis.unsqueeze(1) # (ng, nsh, nrad, nphitheta)
-        # self.basis = self.basis.view(self.ng*self.nsh, -1) # (ns, nr)
+        self.basis = self.radbasis.unsqueeze(1).unsqueeze(-1) * self.angbasis.unsqueeze(1) # (ng, nsh, nrad, nphitheta)
+        self.basis = self.basis.view(self.ng*self.nsh, -1) # (ns, nr)
         # print(self.grid.integralbox(self.basis*self.basis)-1)
         # raise RuntimeError
 
@@ -159,10 +159,10 @@ class HamiltonAtomYGauss(BaseHamilton):
         kin_ang = kin_ang2.view(nbatch, self.ng, self.nsh*ncols)
 
         # vext part
-        # ???
+        extpot = self.grid.mmintegralbox(vext.unsqueeze(1) * self.basis, self.basis.transpose(-2,-1))
 
         hwf = kin_rad + coul + kin_ang # (nbatch, ng, nsh*ncols)
-        hwf = hwf.view(nbatch, -1, ncols)
+        hwf = hwf.view(nbatch, -1, ncols) + extpot
         return hwf
 
     def precond(self, y, vext, atomz, biases=None, M=None, mparams=None):
