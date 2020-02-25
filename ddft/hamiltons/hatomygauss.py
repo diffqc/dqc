@@ -5,7 +5,7 @@ import numpy as np
 import lintorch as lt
 
 from ddft.hamiltons.base_hamilton import BaseHamilton
-from ddft.utils.legendre import legval, assoclegval
+from ddft.utils.spharmonics import spharmonics
 
 class HamiltonAtomYGauss(BaseHamilton):
     """
@@ -76,35 +76,11 @@ class HamiltonAtomYGauss(BaseHamilton):
         self.radbasis = radnorm * unnorm_radbasis # (ng, nrad)
 
         # get the angular basis in rgrid (nsh, nphitheta)
-        # basis in theta is just P_l(cos(theta))
         rgrid1 = rgrid.view(nrad,-1,rgrid.shape[-1]) # (nrad, nphitheta, ndim)
-        nphitheta = rgrid1.shape[1]
         phi = rgrid1[0,:,1] # (nphitheta,)
         theta = rgrid1[0,:,2] # (nphitheta,)
         costheta = torch.cos(theta) # (nphitheta,)
-        legcosthetas = [legval(costheta, l) for l in range(maxangmom+1)] # len == (maxangmom+1), each (nphitheta)
-        cosphis = [torch.cos(m*phi) for m in range(1,maxangmom+1)] # each (nphitheta)
-        sinphis = [torch.sin(m*phi) for m in range(1,maxangmom+1)] # each (nphitheta)
-        self.angbasis = torch.empty((self.nsh, nphitheta), dtype=dtype, device=device)
-        angbasis_row = 0
-        for l in range(maxangmom+1):
-            legcostheta = legcosthetas[l] # (nphitheta,)
-
-            # m = 0
-            normm0 = np.sqrt(2*l+1)
-            self.angbasis[angbasis_row] = legcostheta * normm0
-            angbasis_row += 1
-
-            # m != 0
-            nm = 0.5
-            for m in range(1,l+1):
-                alegcostheta = assoclegval(costheta, l, m)
-                nm = nm * (l-m+1) * (l+m)
-                norm = normm0 / np.sqrt(nm)
-                self.angbasis[angbasis_row] = alegcostheta * cosphis[m-1] * norm
-                angbasis_row += 1
-                self.angbasis[angbasis_row] = alegcostheta * sinphis[m-1] * norm
-                angbasis_row += 1
+        self.angbasis = spharmonics(costheta, phi, maxangmom)
 
         self.basis = self.radbasis.unsqueeze(1).unsqueeze(-1) * self.angbasis.unsqueeze(1) # (ng, nsh, nrad, nphitheta)
         self.basis = self.basis.view(self.ng*self.nsh, -1) # (ns, nr)
