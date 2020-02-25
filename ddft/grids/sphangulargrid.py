@@ -19,6 +19,9 @@ class Lebedev(BaseRadialAngularGrid):
         assert (prec % 2 == 1) and (3 <= prec <= 131),\
                "Precision must be an odd number between 3 and 131"
 
+        self.dtype = dtype
+        self.device = device
+
         # load the datasets from https://people.sc.fsu.edu/~jburkardt/datasets/sphere_lebedev_rule/sphere_lebedev_rule.html
         dset_path = os.path.join(os.path.split(ddft.__file__)[0], "datasets", "lebedevquad", "lebedev_%03d.txt"%prec)
         assert os.path.exists(dset_path), "The dataset lebedev_%03d.txt does not exist" % prec
@@ -58,7 +61,19 @@ class Lebedev(BaseRadialAngularGrid):
         basis = self._get_basis() # (nsh, nphitheta)
         basis_integrate = basis * self.wphitheta
         frad_lm = torch.bmm(basis_integrate.unsqueeze(0).expand(nbatch,-1,-1), f1.transpose(-2,-1)) # (nbatch, nsh, nrad)
-        # ???
+
+        # multiply the spharmonics component to make it an integrand
+        angmoms = self._get_angmoms().unsqueeze(-1) # (nsh,1)
+        frad1 = frad_lm * 4*np.pi/(2*angmoms+1) / self.radrgrid**(angmoms-1) # (nbatch, nsh, nrad)
+
+        # integrate to obtain the potential's spherical harmonics component
+        int1 = self.radgrid.antiderivative(frad1, dim=-1, zeroat="right")
+        vrad_lm = int1 * self.radrgrid**angmoms # (nbatch, nsh, nrad)
+
+        # convert back to the spatial basis
+        v = torch.matmul(vrad_lm.transpose(-2,-1), basis) # (nbatch, nrad, nphitheta)
+        v = v.view(nbatch, nr)
+        return v
 
     @property
     def radial_grid(self):
@@ -78,3 +93,11 @@ class Lebedev(BaseRadialAngularGrid):
             costheta = torch.cos(self.phithetargrid[:,1])
             self._basis_ = spharmonics(costheta, phi, self.prec)
         return self._basis_
+
+    def _get_angmoms(self):
+        if not hasattr(self, "_angmoms_"):
+            lhat = []
+            for angmom in range(maxangmom+1):
+                lhat = lhat + [angmom]*(2*angmom+1)
+            self._angmoms_ = torch.tensor(lhat, dtype=self.dtype, device=self.device) # (nsh,)
+        return self._angmoms_
