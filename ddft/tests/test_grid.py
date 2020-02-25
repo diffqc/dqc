@@ -53,9 +53,13 @@ def runtest_integralbox(grid, prof, rtol, atol):
 
 def runtest_poisson(grid, prof, poisson, rtol, atol):
     pois = grid.solve_poisson(prof.transpose(-2,-1)).transpose(-2,-1)
+    # boundary condition
     pois = pois - pois[-1:,:]
     poisson = poisson - poisson[-1:,:]
-    assert torch.allclose(pois/pois.abs().max(), poisson/poisson.abs().max(), rtol=rtol, atol=atol)
+    # normalize the scale
+    pois = pois / pois.abs().max(dim=0)[0]
+    poisson = poisson / poisson.abs().max(dim=0)[0]
+    assert torch.allclose(pois, poisson, rtol=rtol, atol=atol)
 
 def get_rtol_atol(taskname, gridname1, gridname2=None):
     rtolatol = {
@@ -69,8 +73,8 @@ def get_rtol_atol(taskname, gridname1, gridname2=None):
             }
         },
         "poisson": {
-            "radialshiftexp": [0.0, 2e-4],
-            "legradialshiftexp": [0.0, 8e-5],
+            "radialshiftexp": [0.0, 6e-3],
+            "legradialshiftexp": [0.0, 6e-3],
         }
     }
     if gridname2 is None:
