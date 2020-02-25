@@ -1,7 +1,7 @@
 import torch
 from ddft.utils.fd import finite_differences
 
-def compare_grad_with_fd(fcn, args, idxs, eps=1e-6, rtol=1e-3, fd_to64=True, verbose=False):
+def compare_grad_with_fd(fcn, args, idxs, eps=1e-6, rtol=1e-3, step=1, fd_to64=True, verbose=False):
     if not hasattr(eps, "__iter__"):
         eps = [eps for i in range(len(idxs))]
     if not hasattr(rtol, "__iter__"):
@@ -26,7 +26,7 @@ def compare_grad_with_fd(fcn, args, idxs, eps=1e-6, rtol=1e-3, fd_to64=True, ver
             for arg in args]
     else:
         argsfd = args
-    fds = [finite_differences(fcn, argsfd, idx, eps=eps[i]) for i,idx in enumerate(idxs)]
+    fds = [finite_differences(fcn, argsfd, idx, eps=eps[i], step=step) for i,idx in enumerate(idxs)]
 
     for i in range(len(idxs)):
         ratio = grads[i] / fds[i]
