@@ -3,13 +3,19 @@ import warnings
 import torch
 import numpy as np
 import ddft
-from ddft.grids.base_grid import BaseGrid
+from ddft.grids.base_grid import BaseGrid, BaseRadialGrid, BaseRadialAngularGrid
+from ddft.utils.spharmonics import spharmonics
 
-class Lebedev(BaseGrid):
+class Lebedev(BaseRadialAngularGrid):
     def __init__(self, radgrid, prec, dtype=torch.float, device=torch.device('cpu')):
         super(Lebedev, self).__init__()
 
+        # radgrid must be a BaseRadialGrid
+        if not isinstance(radgrid, BaseRadialGrid):
+            raise TypeError("Argument radgrid must be a BaseRadialGrid")
+
         # the precision must be an odd number in range [3, 131]
+        self.prec = prec
         assert (prec % 2 == 1) and (3 <= prec <= 131),\
                "Precision must be an odd number between 3 and 131"
 
@@ -25,6 +31,7 @@ class Lebedev(BaseGrid):
         self.radgrid = radgrid
         self.radrgrid = radgrid.rgrid[:,0] # (nrad,)
         nrad = self.radrgrid.shape[0]
+        self.nrad = nrad
 
         # combine the grids
         # (nrad, nphitheta)
@@ -42,7 +49,15 @@ class Lebedev(BaseGrid):
         return self._dvolume
 
     def solve_poisson(self, f):
-        pass
+        # f: (nbatch, nr)
+        # nr = nrad * nphitheta
+
+        # get the spherical harmonics components of f as function of radius
+        nbatch, nr = f.shape
+        f1 = f.view(nbatch, self.nrad, -1) # (nbatch, nrad, nphitheta)
+        basis = self._get_basis() # (nsh, nphitheta)
+        basis_integrate = basis * self.wphitheta
+        frad_lm = torch.bmm(basis_integrate.unsqueeze(0).expand(nbatch,-1,-1), f1.transpose(-2,-1)) # (nbatch, nsh, nrad)
         # ???
 
     @property
@@ -56,3 +71,10 @@ class Lebedev(BaseGrid):
     @property
     def boxshape(self):
         warnings.warn("Boxshape is obsolete. Please refrain in using it.")
+
+    def _get_basis(self):
+        if not hasattr(self, "_basis_"):
+            phi = self.phithetargrid[:,0]
+            costheta = torch.cos(self.phithetargrid[:,1])
+            self._basis_ = spharmonics(costheta, phi, self.prec)
+        return self._basis_

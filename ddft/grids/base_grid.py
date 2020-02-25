@@ -86,3 +86,19 @@ class BaseGrid(object):
         """
         pleft = p1 * self.get_dvolume()
         return torch.matmul(pleft, p2)
+
+class BaseRadialGrid(BaseGrid):
+    @abstractmethod
+    def antiderivative(self, intgn, dim=-1, zeroat="left"):
+        """
+        Perform an integration along the specified dimension.
+        """
+        pass
+
+class BaseRadialAngularGrid(BaseGrid):
+    @abstractproperty
+    def radial_grid(self):
+        """
+        Returns the radial grid associated with the parent grid.
+        """
+        pass

@@ -1,10 +1,11 @@
+from abc import abstractmethod
 import torch
 import numpy as np
 from numpy.polynomial.legendre import leggauss, legvander
-from ddft.grids.base_grid import BaseGrid
+from ddft.grids.base_grid import BaseGrid, BaseRadialGrid
 from ddft.utils.legendre import legint
 
-class RadialShiftExp(BaseGrid):
+class RadialShiftExp(BaseRadialGrid):
     def __init__(self, rmin, rmax, nr, dtype=torch.float, device=torch.device('cpu')):
         logr = torch.linspace(np.log(rmin), np.log(rmax), nr).to(dtype).to(device)
         unshifted_rgrid = torch.exp(logr)
@@ -13,7 +14,11 @@ class RadialShiftExp(BaseGrid):
         self.rs = unshifted_rgrid - self.rmin
         self._rgrid = self.rs.unsqueeze(1) # (nr, 1)
         self.dlogr = logr[1] - logr[0]
-        self._dvolume = (self.rs + self.rmin) * 4 * np.pi * self.rs*self.rs * self.dlogr
+
+        # integration elements
+        self._scaling = (self.rs + self.rmin)
+        self._dr = self._scaling * self.dlogr
+        self._dvolume = 4 * np.pi * self.rs*self.rs * self._dr
 
     def get_dvolume(self):
         return self._dvolume
@@ -22,11 +27,11 @@ class RadialShiftExp(BaseGrid):
         # f: (nbatch, nr)
         # the expression below is used to make the operator symmetric
         eps = 1e-10
-        intgn1 = f * self.rs * self.rs * (self.rs + self.rmin) * self.dlogr
-        int1 = torch.cumsum(intgn1, dim=-1)
-        intgn2 = int1 / (self.rs * self.rs + eps) * (self.rs + self.rmin) * self.dlogr
+        intgn1 = f * self.rs * self.rs
+        int1 = self.antiderivative(intgn1, dim=-1, zeroat="left")
+        intgn2 = int1 / (self.rs * self.rs + eps)
         # this form of cumsum is the transpose of torch.cumsum
-        int2 = -torch.cumsum(intgn2.flip(dims=[-1]), dim=-1).flip(dims=[-1])
+        int2 = self.antiderivative(intgn2, dim=-1, zeroat="right")
         return int2
 
     @property
@@ -37,7 +42,14 @@ class RadialShiftExp(BaseGrid):
     def boxshape(self):
         return self._boxshape
 
-class LegendreRadialShiftExp(BaseGrid):
+    def antiderivative(self, intgn, dim=-1, zeroat="left"):
+        intgn = intgn * self._dr
+        if zeroat == "left":
+            return torch.cumsum(intgn, dim=dim)
+        elif zeroat == "right":
+            return -torch.cumsum(intgn.flip(dims=[dim]), dim=dim).flip(dims=[dim])
+
+class LegendreRadialShiftExp(BaseRadialGrid):
     def __init__(self, rmin, rmax, nr, dtype=torch.float, device=torch.device('cpu')):
         self._boxshape = (nr,)
         self.rmin = rmin
@@ -72,12 +84,12 @@ class LegendreRadialShiftExp(BaseGrid):
         # f: (nbatch, nr)
         # the expression below is used to make the operator symmetric
         eps = 1e-10
-        intgn1 = f * self.rs * self.rs * self._scaling
-        int1 = self._antiderivative(intgn1, dim=-1, zeroat="left")
+        intgn1 = f * self.rs * self.rs# * self._scaling
+        int1 = self.antiderivative(intgn1, dim=-1, zeroat="left")
 
-        intgn2 = int1 / (self.rs * self.rs + eps) * self._scaling
+        intgn2 = int1 / (self.rs * self.rs + eps)# * self._scaling
         # this form of cumsum is the transpose of torch.cumsum
-        int2 = self._antiderivative(intgn2, dim=-1, zeroat="right")
+        int2 = self.antiderivative(intgn2, dim=-1, zeroat="right")
         return int2
 
     @property
@@ -88,8 +100,9 @@ class LegendreRadialShiftExp(BaseGrid):
     def boxshape(self):
         return self._boxshape
 
-    def _antiderivative(self, intgn, dim=-1, zeroat="left"):
+    def antiderivative(self, intgn, dim=-1, zeroat="left"):
         # intgn: (nbatch, nr)
+        intgn = intgn * self._scaling
         coeff = torch.matmul(intgn, self.inv_basis) # (nbatch, nr)
         intcoeff = legint(coeff, dim=dim, zeroat=zeroat)[:,:-1] # (nbatch, nr)
         res = torch.matmul(intcoeff, self.basis) # (nbatch, nr)
