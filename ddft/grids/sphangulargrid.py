@@ -7,7 +7,7 @@ from ddft.grids.base_grid import BaseGrid, BaseRadialGrid, BaseRadialAngularGrid
 from ddft.utils.spharmonics import spharmonics
 
 class Lebedev(BaseRadialAngularGrid):
-    def __init__(self, radgrid, prec, dtype=torch.float, device=torch.device('cpu')):
+    def __init__(self, radgrid, prec, basis_maxangmom=None, dtype=torch.float, device=torch.device('cpu')):
         super(Lebedev, self).__init__()
 
         # radgrid must be a BaseRadialGrid
@@ -16,6 +16,7 @@ class Lebedev(BaseRadialAngularGrid):
 
         # the precision must be an odd number in range [3, 131]
         self.prec = prec
+        self.basis_maxangmom = basis_maxangmom if basis_maxangmom is not None else prec
         assert (prec % 2 == 1) and (3 <= prec <= 131),\
                "Precision must be an odd number between 3 and 131"
 
@@ -47,6 +48,12 @@ class Lebedev(BaseRadialAngularGrid):
         # print(self._dvolume_rad.sum()/self.radrgrid.max()**3/(4*np.pi/3), self.wphitheta.sum())
         dvolume = self._dvolume_rad.unsqueeze(-1) * self.wphitheta
         self._dvolume = dvolume.view(-1) # (nrad*nphitheta)
+
+        # # check the basis orthonormality
+        # basis = self._get_basis() # (nsh, nphitheta)
+        # basis_olp = torch.matmul(basis*self.wphitheta, basis.transpose(-2,-1))
+        # assert torch.allclose(basis_olp, torch.eye(basis_olp.shape[0], dtype=basis_olp.dtype, device=basis_olp.device))
+        # raise RuntimeError
 
     def get_dvolume(self):
         return self._dvolume
@@ -91,7 +98,7 @@ class Lebedev(BaseRadialAngularGrid):
         if not hasattr(self, "_basis_"):
             phi = self.phithetargrid[:,0]
             costheta = torch.cos(self.phithetargrid[:,1])
-            self._basis_ = spharmonics(costheta, phi, self.prec)
+            self._basis_ = spharmonics(costheta, phi, self.basis_maxangmom)
         return self._basis_
 
     def _get_angmoms(self):

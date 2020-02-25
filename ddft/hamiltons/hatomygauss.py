@@ -176,7 +176,7 @@ if __name__ == "__main__":
     dtype = torch.float64
     gwidths = torch.logspace(np.log10(1e-5), np.log10(1e2), 60).to(dtype)
     radgrid = LegendreRadialShiftExp(1e-6, 1e4, 200, dtype=dtype)
-    grid = Lebedev(radgrid, 13, dtype=dtype)
+    grid = Lebedev(radgrid, prec=13, basis_maxangmom=4, dtype=dtype)
     nr = grid.rgrid.shape[0]
     h = HamiltonAtomYGauss(grid, gwidths, maxangmom=3).to(dtype)
 
