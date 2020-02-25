@@ -32,12 +32,25 @@ def test_spherical_integralbox():
     for gridname, radgridname, fcnname in product(sph_gridnames, radial_gridnames, radial_fcnnames):
         runtest(gridname, radgridname, fcnname)
 
+# def test_radial_poisson():
+#     def runtest(gridname, fcnname):
+#         grid, rtol = get_radial_grid(gridname, dtype, device)
+#         prof1 = get_fcn(fcnname, grid.rgrid)
+#         poisson1 = get_poisson(fcnname, grid.rgrid)
+#         runtest_poisson(grid, rtol, prof1, poisson1)
+#
+#     for gridname, fcnname in product(radial_gridnames, radial_fcnnames):
+#         runtest(gridname, fcnname)
 
 ############################## helper functions ##############################
 def runtest_integralbox(grid, rtol, prof):
     ones = torch.tensor([1.0], dtype=prof.dtype, device=prof.device)
     int1 = grid.integralbox(prof*prof, dim=0)
     assert torch.allclose(int1, ones, rtol=rtol, atol=0.0)
+
+def runtest_poisson(grid, rtol, prof, poisson):
+    pois = grid.solve_poisson(prof.transpose(-2,-1)).transpose(-2,-1)
+    assert torch.allclose(pois, poisson, rtol=rtol)
 
 def get_radial_grid(gridname, dtype, device):
     if gridname == "radialshiftexp":
@@ -74,3 +87,20 @@ def get_fcn(fcnname, rgrid):
             return unnorm_basis * norm
 
     raise RuntimeError("Unknown function name: %s" % fcnname)
+
+def get_poisson(fcnname, rgrid):
+    # ???
+    dtype = rgrid.dtype
+    device = rgrid.device
+
+    if fcnname in ["gauss1", "exp1"]:
+        rs = rgrid[:,0].unsqueeze(-1) # (nr,1)
+        gw = torch.logspace(np.log10(1e-4), np.log10(1e2), 100).to(dtype).to(device)
+        if fcnname == "gauss1":
+            unnorm_basis = torch.exp(-rs*rs / (2*gw*gw)) * rs # (nr,ng)
+            norm = np.sqrt(2./3) / gw**2.5 / np.pi**.75 # (ng)
+            return unnorm_basis * norm # (nr, ng)
+        elif fcnname == "exp1":
+            unnorm_basis = torch.exp(-rs/gw)
+            norm = 1./torch.sqrt(np.pi*gw**3)
+            return unnorm_basis * norm
