@@ -11,8 +11,10 @@ def legint(coeffs, dim=-1, zeroat="left"):
 
     if zeroat == "left":
         m0 = 1.0
+        mfinal = 1.0
     elif zeroat == "right":
         m0 = -1.0
+        mfinal = -1.0
     else:
         m0 = 0.0
 
@@ -20,7 +22,7 @@ def legint(coeffs, dim=-1, zeroat="left"):
     dr = c[..., -2:] / j21[-2:]
     dl = -c[..., 1:2] / 3.0 + m0 * c[..., :1]
 
-    res = torch.cat((dl, dmid, dr), dim=-1).transpose(dim, -1)
+    res = mfinal * torch.cat((dl, dmid, dr), dim=-1).transpose(dim, -1)
     return res
 
 def legval(x, order):

@@ -32,7 +32,7 @@ class RadialShiftExp(BaseRadialGrid):
         intgn2 = int1 / (self.rs * self.rs + eps)
         # this form of cumsum is the transpose of torch.cumsum
         int2 = self.antiderivative(intgn2, dim=-1, zeroat="right")
-        return int2
+        return -int2
 
     @property
     def rgrid(self):
@@ -47,7 +47,7 @@ class RadialShiftExp(BaseRadialGrid):
         if zeroat == "left":
             return torch.cumsum(intgn, dim=dim)
         elif zeroat == "right":
-            return -torch.cumsum(intgn.flip(dims=[dim]), dim=dim).flip(dims=[dim])
+            return torch.cumsum(intgn.flip(dims=[dim]), dim=dim).flip(dims=[dim])
 
 class LegendreRadialShiftExp(BaseRadialGrid):
     def __init__(self, rmin, rmax, nr, dtype=torch.float, device=torch.device('cpu')):
@@ -90,7 +90,7 @@ class LegendreRadialShiftExp(BaseRadialGrid):
         intgn2 = int1 / (self.rs * self.rs + eps)# * self._scaling
         # this form of cumsum is the transpose of torch.cumsum
         int2 = self.antiderivative(intgn2, dim=-1, zeroat="right")
-        return int2
+        return -int2
 
     @property
     def rgrid(self):
@@ -101,9 +101,11 @@ class LegendreRadialShiftExp(BaseRadialGrid):
         return self._boxshape
 
     def antiderivative(self, intgn, dim=-1, zeroat="left"):
-        # intgn: (nbatch, nr)
+        # intgn: (..., nr, ...)
+        intgn = intgn.transpose(dim, -1) # (..., nr)
         intgn = intgn * self._scaling
-        coeff = torch.matmul(intgn, self.inv_basis) # (nbatch, nr)
-        intcoeff = legint(coeff, dim=dim, zeroat=zeroat)[:,:-1] # (nbatch, nr)
-        res = torch.matmul(intcoeff, self.basis) # (nbatch, nr)
+        coeff = torch.matmul(intgn, self.inv_basis) # (..., nr)
+        intcoeff = legint(coeff, dim=dim, zeroat=zeroat)[..., :-1] # (nbatch, nr)
+        res = torch.matmul(intcoeff, self.basis) # (..., nr)
+        res = res.transpose(dim, -1)
         return res

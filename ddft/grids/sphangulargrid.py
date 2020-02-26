@@ -63,6 +63,7 @@ class Lebedev(BaseRadialAngularGrid):
         # nr = nrad * nphitheta
 
         # get the spherical harmonics components of f as function of radius
+        eps = 1e-12
         nbatch, nr = f.shape
         f1 = f.view(nbatch, self.nrad, -1) # (nbatch, nrad, nphitheta)
         basis = self._get_basis() # (nsh, nphitheta)
@@ -70,17 +71,21 @@ class Lebedev(BaseRadialAngularGrid):
         frad_lm = torch.bmm(basis_integrate.unsqueeze(0).expand(nbatch,-1,-1), f1.transpose(-2,-1)) # (nbatch, nsh, nrad)
 
         # multiply the spharmonics component to make it an integrand
-        angmoms = self._get_angmoms().unsqueeze(-1) # (nsh,1)
-        frad1 = frad_lm * 4*np.pi/(2*angmoms+1) / self.radrgrid**(angmoms-1) # (nbatch, nsh, nrad)
+        angmoms = self._get_angmoms().unsqueeze(-1)*0 # (nsh,1)
+        frad1 = frad_lm * self.radrgrid**(angmoms+2) # (nbatch, nsh, nrad)
+        frad2 = frad_lm * (self.radrgrid+eps)**(1-angmoms) # (nbatch, nsh, nrad)
 
-        # integrate to obtain the potential's spherical harmonics component
-        int1 = self.radgrid.antiderivative(frad1, dim=-1, zeroat="right")
-        vrad_lm = int1 * self.radrgrid**angmoms # (nbatch, nsh, nrad)
+        # integrate the two factors from left and from the right
+        int1 = self.radgrid.antiderivative(frad1, dim=-1, zeroat="left")
+        int2 = self.radgrid.antiderivative(frad2, dim=-1, zeroat="right")
+        vrad_lm1 = int1 / (self.radrgrid+eps)**(angmoms+1)
+        vrad_lm2 = int2 * self.radrgrid**angmoms
+        vrad_lm = (vrad_lm1 + vrad_lm2) / (2*angmoms+1) # (nbatch, nsh, nrad)
 
         # convert back to the spatial basis
         v = torch.matmul(vrad_lm.transpose(-2,-1), basis) # (nbatch, nrad, nphitheta)
         v = v.view(nbatch, nr)
-        return v
+        return -v
 
     @property
     def radial_grid(self):
@@ -104,7 +109,7 @@ class Lebedev(BaseRadialAngularGrid):
     def _get_angmoms(self):
         if not hasattr(self, "_angmoms_"):
             lhat = []
-            for angmom in range(maxangmom+1):
+            for angmom in range(self.basis_maxangmom+1):
                 lhat = lhat + [angmom]*(2*angmom+1)
             self._angmoms_ = torch.tensor(lhat, dtype=self.dtype, device=self.device) # (nsh,)
         return self._angmoms_
