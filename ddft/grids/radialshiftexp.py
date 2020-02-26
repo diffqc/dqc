@@ -9,9 +9,10 @@ class RadialShiftExp(BaseRadialGrid):
     def __init__(self, rmin, rmax, nr, dtype=torch.float, device=torch.device('cpu')):
         logr = torch.linspace(np.log(rmin), np.log(rmax), nr).to(dtype).to(device)
         unshifted_rgrid = torch.exp(logr)
+        eps = 1e-12
         self._boxshape = (nr,)
-        self.rmin = rmin
-        self.rs = unshifted_rgrid - self.rmin
+        self.rmin = unshifted_rgrid[0]
+        self.rs = unshifted_rgrid - self.rmin + eps # eps for safeguarding not to touch negative
         self._rgrid = self.rs.unsqueeze(1) # (nr, 1)
         self.dlogr = logr[1] - logr[0]
 
@@ -83,11 +84,18 @@ class LegendreRadialShiftExp(BaseRadialGrid):
     def solve_poisson(self, f):
         # f: (nbatch, nr)
         # the expression below is used to make the operator symmetric
-        eps = 1e-10
-        intgn1 = f * self.rs * self.rs# * self._scaling
-        int1 = self.antiderivative(intgn1, dim=-1, zeroat="left")
 
-        intgn2 = int1 / (self.rs * self.rs + eps)# * self._scaling
+        # the calculation is done by calculating the ratio of left and right
+        # first because this increases the accuracy by quite significant,
+        # although the runtime is slightly increases
+
+        rratio1 = self.rs.unsqueeze(-1) / self.rs
+        rratio = torch.min(rratio1, rratio1.transpose(-2,-1))
+        rratio2 = rratio * rratio
+
+        intgn1 = f.unsqueeze(-2) * rratio2 # (nbatch, nr, nr)
+        intgn2 = self.antiderivative(intgn1, dim=-1, zeroat="left").diagonal(dim1=-2, dim2=-1)
+
         # this form of cumsum is the transpose of torch.cumsum
         int2 = self.antiderivative(intgn2, dim=-1, zeroat="right")
         return -int2

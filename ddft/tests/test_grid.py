@@ -56,7 +56,7 @@ def test_spherical_poisson():
         print(fcnname, spgridname, radgridname)
         runtest_poisson(sphgrid, prof1, poisson1, rtol=rtol, atol=atol)
 
-    for gridname, radgridname, fcnname in product(sph_gridnames, radial_gridnames, radial_fcnnames):
+    for gridname, radgridname, fcnname in product(sph_gridnames, radial_gridnames, radial_fcnnames):#+["gauss-l1"]):
         runtest(gridname, radgridname, fcnname)
 
 ############################## helper functions ##############################
@@ -89,11 +89,11 @@ def get_rtol_atol(taskname, gridname1, gridname2=None):
             }
         },
         "poisson": {
-            "radialshiftexp": [0.0, 6e-3],
-            "legradialshiftexp": [0.0, 6e-3],
+            "radialshiftexp": [0.0, 2e-2],
+            "legradialshiftexp": [0.0, 8e-4],
             "lebedev": {
-                "radialshiftexp": [0.0, 6e-3],
-                "legradialshiftexp": [0.0, 6e-3],
+                "radialshiftexp": [0.0, 6e-2],
+                "legradialshiftexp": [0.0, 2e-3],
             }
         }
     }
@@ -104,7 +104,7 @@ def get_rtol_atol(taskname, gridname1, gridname2=None):
 
 def get_radial_grid(gridname, dtype, device):
     if gridname == "radialshiftexp":
-        grid = RadialShiftExp(1e-6, 1e4, 4000, dtype=dtype, device=device)
+        grid = RadialShiftExp(1e-6, 1e4, 400, dtype=dtype, device=device)
     elif gridname == "legradialshiftexp":
         grid = LegendreRadialShiftExp(1e-6, 1e4, 400, dtype=dtype, device=device)
     else:
@@ -155,9 +155,9 @@ def get_poisson(fcnname, rgrid):
     dtype = rgrid.dtype
     device = rgrid.device
 
+    gw = torch.logspace(np.log10(1e-4), np.log10(1e0), 30).to(dtype).to(device)
     if fcnname in radial_fcnnames:
         rs = rgrid[:,0].unsqueeze(-1) # (nr,1)
-        gw = torch.logspace(np.log10(1e-4), np.log10(1e0), 30).to(dtype).to(device)
         if fcnname == "gauss1":
             rg = rs/(np.sqrt(2)*gw)
             sqrtpi = np.sqrt(np.pi)
@@ -165,4 +165,17 @@ def get_poisson(fcnname, rgrid):
             return y # (nr, ng)
         elif fcnname == "exp1":
             y = -gw*gw*(2*gw - torch.exp(-rs/gw)*(rs+2*gw)) / (rs*np.sqrt(np.pi)*gw**1.5)
+            return y
+
+    elif fcnname in sph_fcnnames:
+        rs = rgrid[:,0].unsqueeze(-1) # (nr,1)
+        phi = rgrid[:,1].unsqueeze(-1) # (nr,1)
+        theta = rgrid[:,2].unsqueeze(-1)
+        costheta = torch.cos(theta) # (nr,1)
+        sintheta = torch.sin(theta)
+
+        if fcnname == "gauss-l1":
+            y1 = torch.sqrt(3 * gw) * (2*gw**2 - (rs**2 + 2*gw**2)*torch.exp(-rs*rs/(2*gw*gw))) / (rs*rs * np.pi**.75)
+            y2 = np.sqrt(1.5) * rs * (1 - torch.erf(rs/np.sqrt(2)/gw)) / np.pi**.25 / gw**.5
+            y = -(y1 + y2) / 3.0 * costheta
             return y
