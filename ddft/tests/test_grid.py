@@ -197,4 +197,4 @@ def get_poisson(fcnname, rgrid):
             smallidx = (rs/gw)**2 < 1e-2
             y1[smallidx] = y1small[smallidx]
             y2 = 0.580281 * rs*rs * gamma2 / gw**1.5
-            return -(y1 + y2*0) / 5.0 * costheta * sintheta
+            return -(y1 + y2) / 5.0 * costheta * sintheta
