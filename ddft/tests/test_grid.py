@@ -1,6 +1,7 @@
 from itertools import product
 import torch
 import numpy as np
+from scipy.special import gamma, gammaincc
 from ddft.grids.radialshiftexp import RadialShiftExp, LegendreRadialShiftExp
 from ddft.grids.sphangulargrid import Lebedev
 
@@ -56,7 +57,7 @@ def test_spherical_poisson():
         print(fcnname, spgridname, radgridname)
         runtest_poisson(sphgrid, prof1, poisson1, rtol=rtol, atol=atol)
 
-    for gridname, radgridname, fcnname in product(sph_gridnames, radial_gridnames, radial_fcnnames+["gauss-l1"]):
+    for gridname, radgridname, fcnname in product(sph_gridnames, radial_gridnames, ["gauss-l2"]):
         runtest(gridname, radgridname, fcnname)
 
 ############################## helper functions ##############################
@@ -71,11 +72,11 @@ def runtest_poisson(grid, prof, poisson, rtol, atol):
     pois = pois - pois[-1:,:]
     poisson = poisson - poisson[-1:,:]
     # check if shape and magnitude matches
-    # import matplotlib.pyplot as plt
-    # plt.plot(grid.radial_grid.rgrid[:,0], pois[10::74,0].numpy())
-    # plt.plot(grid.radial_grid.rgrid[:,0], poisson[10::74,0].numpy())
-    # plt.gca().set_xscale("log")
-    # plt.show()
+    import matplotlib.pyplot as plt
+    plt.plot(grid.radial_grid.rgrid[:,0], pois[10::74,0].numpy())
+    plt.plot(grid.radial_grid.rgrid[:,0], poisson[10::74,0].numpy())
+    plt.gca().set_xscale("log")
+    plt.show()
     assert torch.allclose(pois, poisson, rtol=rtol, atol=atol)
     # normalize the scale to match the shape with stricter constraint (typically .abs().max() < 1)
     pois = pois / pois.abs().max(dim=0)[0]
@@ -187,3 +188,13 @@ def get_poisson(fcnname, rgrid):
             y2 = np.sqrt(1.5) * rs * (1 - torch.erf(rs/np.sqrt(2)/gw)) / np.pi**.25 / gw**.5
             y = -(y1 + y2) / 3.0 * costheta
             return y
+        elif fcnname == "gauss-l2":
+            a = rs/np.sqrt(2)/gw
+            e = 1e-10
+            gamma2 = torch.tensor(gammaincc(e, (a*a).cpu().numpy()) * gamma(e)).to(a.device)
+            y1 = torch.sqrt(gw) / rs**3 * (-1.16056*rs*torch.exp(-a*a)*(rs*rs+3*gw*gw) + 4.36365*gw**3*torch.erf(a))
+            y1small = torch.exp(-a*a) / gw**3.5 * (0.773708*gw*gw*rs*rs - 0.193427*rs**4)
+            smallidx = (rs/gw)**2 < 1e-2
+            y1[smallidx] = y1small[smallidx]
+            y2 = 0.580281 * rs*rs * gamma2 / gw**1.5
+            return -(y1 + y2*0) / 5.0 * costheta * sintheta
