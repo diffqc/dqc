@@ -80,7 +80,7 @@ class Lebedev(BaseRadialAngularGrid):
         rratio = torch.min(rlg1, rlg1.transpose(-2,-1)) # (nrad, nrad) symmetric
 
         # get the power of the ratio
-        angmoms = self._get_angmoms().unsqueeze(-1)*0 # (nsh,1)
+        angmoms = self._get_angmoms().unsqueeze(-1) # (nsh,1)
         angmoms1 = angmoms.unsqueeze(-1)
         rratiol = rratio**angmoms1
         rratiol2 = rratiol * rratio*rratio
