@@ -56,7 +56,7 @@ def test_spherical_poisson():
         print(fcnname, spgridname, radgridname)
         runtest_poisson(sphgrid, prof1, poisson1, rtol=rtol, atol=atol)
 
-    for gridname, radgridname, fcnname in product(sph_gridnames, radial_gridnames, radial_fcnnames):#+["gauss-l1"]):
+    for gridname, radgridname, fcnname in product(sph_gridnames, radial_gridnames, radial_fcnnames+["gauss-l1"]):
         runtest(gridname, radgridname, fcnname)
 
 ############################## helper functions ##############################
@@ -175,7 +175,10 @@ def get_poisson(fcnname, rgrid):
         sintheta = torch.sin(theta)
 
         if fcnname == "gauss-l1":
-            y1 = torch.sqrt(3 * gw) * (2*gw**2 - (rs**2 + 2*gw**2)*torch.exp(-rs*rs/(2*gw*gw))) / (rs*rs * np.pi**.75)
+            y1 = torch.sqrt(3 * gw) * (2*gw**2 - (rs**2 + 2*gw**2)*torch.exp(-rs*rs/(2*gw*gw))) / (rs*rs * np.pi**.75) # (nr, ng)
+            y1small = np.sqrt(3) / np.pi**.75 * rs*rs/gw
+            smallidx = rs < 1e-3*gw
+            y1[smallidx] = y1small[smallidx]
             y2 = np.sqrt(1.5) * rs * (1 - torch.erf(rs/np.sqrt(2)/gw)) / np.pi**.25 / gw**.5
             y = -(y1 + y2) / 3.0 * costheta
             return y
