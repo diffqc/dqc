@@ -71,6 +71,11 @@ def runtest_poisson(grid, prof, poisson, rtol, atol):
     pois = pois - pois[-1:,:]
     poisson = poisson - poisson[-1:,:]
     # check if shape and magnitude matches
+    # import matplotlib.pyplot as plt
+    # plt.plot(grid.radial_grid.rgrid[:,0], pois[10::74,0].numpy())
+    # plt.plot(grid.radial_grid.rgrid[:,0], poisson[10::74,0].numpy())
+    # plt.gca().set_xscale("log")
+    # plt.show()
     assert torch.allclose(pois, poisson, rtol=rtol, atol=atol)
     # normalize the scale to match the shape with stricter constraint (typically .abs().max() < 1)
     pois = pois / pois.abs().max(dim=0)[0]
