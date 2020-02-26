@@ -84,18 +84,10 @@ class LegendreRadialShiftExp(BaseRadialGrid):
     def solve_poisson(self, f):
         # f: (nbatch, nr)
         # the expression below is used to make the operator symmetric
-
-        # the calculation is done by calculating the ratio of left and right
-        # first because this increases the accuracy by quite significant,
-        # although the runtime is slightly increases
-
-        rratio1 = self.rs.unsqueeze(-1) / self.rs
-        rratio = torch.min(rratio1, rratio1.transpose(-2,-1))
-        rratio2 = rratio * rratio
-
-        intgn1 = f.unsqueeze(-2) * rratio2 # (nbatch, nr, nr)
-        intgn2 = self.antiderivative(intgn1, dim=-1, zeroat="left").diagonal(dim1=-2, dim2=-1)
-
+        eps = 1e-12
+        intgn1 = f * self.rs * self.rs
+        int1 = self.antiderivative(intgn1, dim=-1, zeroat="left")
+        intgn2 = int1 / (self.rs * self.rs + eps)
         # this form of cumsum is the transpose of torch.cumsum
         int2 = self.antiderivative(intgn2, dim=-1, zeroat="right")
         return -int2
