@@ -70,6 +70,29 @@ class Lebedev(BaseRadialAngularGrid):
         basis_integrate = basis * self.wphitheta
         frad_lm = torch.bmm(basis_integrate.unsqueeze(0).expand(nbatch,-1,-1), f1.transpose(-2,-1)) # (nbatch, nsh, nrad)
 
+        # angmoms = self._get_angmoms().unsqueeze(-1) # (nsh,1)
+        # intgn1 = frad_lm * self.radrgrid**(angmoms+2)
+        # intgn2 = frad_lm / self.radrgrid**(angmoms-1)
+        # int1 = self.radgrid.antiderivative(intgn1, dim=-1, zeroat="left")
+        # int2 = self.radgrid.antiderivative(intgn2, dim=-1, zeroat="right")
+        #
+        # vrad_lm1 = int1 / self.radrgrid**(angmoms+1)
+        # vrad_lm2 = int2 * self.radrgrid**angmoms
+        #
+        # # calculate the limit
+        # vrad_lm1_small = frad_lm * self.radrgrid**2 / (angmoms + 1)
+        # vrad_lm2_large = frad_lm * self.radrgrid**2 / angmoms # (nbatch, nsh, nrad)
+        # idx_small = self.radrgrid**(angmoms+1) < 1e-8 # (nsh, nrad)
+        # idx_large = self.radrgrid**(angmoms) > 1e1
+        # vrad_lm1[:, idx_small] = vrad_lm1_small[:, idx_small]
+        # vrad_lm2[:, idx_large] = vrad_lm2_large[:, idx_large]
+        #
+        # vrad_lm = (vrad_lm1 + vrad_lm2) / (2*angmoms + 1)
+        #
+        # v = torch.matmul(vrad_lm.transpose(-2,-1), basis)
+        # v = v.view(nbatch, nr)
+        # return -v
+
         # the computation is done by computing the ratio of rless/rgreat first
         # then integrate it
         # it is done this way to prevent numerical instability, although the
