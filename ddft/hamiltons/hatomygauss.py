@@ -48,7 +48,7 @@ class HamiltonAtomYGauss(BaseHamilton):
                        maxangmom=5):
         ng = gwidths.shape[0]
         nsh = (maxangmom+1)**2
-        ns = ng*nsh
+        ns = int(ng*nsh)
         self.ng = ng
         self.nsh = nsh
         self._grid = grid

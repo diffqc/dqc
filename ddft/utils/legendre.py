@@ -42,6 +42,8 @@ def legval(x, order):
         return (231*x**6 - 315*x**4 + 105*x**2 - 5) / 16
     elif order == 7:
         return (429*x**7 - 693*x**5 + 315*x**3 - 35*x) / 16
+    elif order == 8:
+        return (6435*x**8 - 12012*x**6 + 6930*x**4 - 1260*x**2 + 35) / 128
     else:
         raise RuntimeError("The legendre polynomial order %d has not been implemented" % order)
 

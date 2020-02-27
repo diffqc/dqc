@@ -3,7 +3,9 @@ import numpy as np
 from ddft.dft.dft import DFT, DFTMulti
 from ddft.utils.misc import set_default_option
 from ddft.hamiltons.hatomradial import HamiltonAtomRadial
-from ddft.grids.radialshiftexp import RadialShiftExp, LegendreRadialShiftExp
+from ddft.hamiltons.hatomygauss import HamiltonAtomYGauss
+from ddft.grids.radialshiftexp import LegendreRadialShiftExp
+from ddft.grids.sphangulargrid import Lebedev
 from ddft.modules.equilibrium import EquilibriumModule
 from ddft.eks import BaseEKS, Hartree, xLDA
 
@@ -34,37 +36,42 @@ def atom(atomz, eks_model="lda",
     # get the atomic configuration
     orbitals = Orbitals(atomz, dtype, device)
 
+    # set up the basis and the radial grid
+    gwidths = torch.logspace(np.log10(gwmin), np.log10(gwmax), ng, dtype=dtype).to(device)
+    radgrid = LegendreRadialShiftExp(rmin, rmax, nr, dtype=dtype, device=device)
+    angmoms = orbitals.get_angmoms()
+
+    # setup the grids and the hamiltonians
     is_radial = _check_atom_is_radial(atomz)
     if not is_radial:
-        raise RuntimeError("Non-radial atom is not supported yet.")
+        maxangmom = angmoms.max()
+        grid = Lebedev(radgrid, prec=13, basis_maxangmom=maxangmom, dtype=dtype, device=device)
+        H_models = [HamiltonAtomYGauss(grid, gwidths, maxangmom=maxangmom).to(dtype).to(device)]
     else:
-        # setup the grids and the hamiltonians
-        gwidths = torch.logspace(np.log10(gwmin), np.log10(gwmax), ng, dtype=dtype).to(device)
-        grid = LegendreRadialShiftExp(rmin, rmax, nr, dtype=dtype, device=device)
-        angmoms = orbitals.get_angmoms()
+        grid = radgrid
         H_models = [HamiltonAtomRadial(grid, gwidths, angmom=angmom).to(dtype).to(device) for angmom in angmoms]
 
-        # setup the hamiltonian parameters and the occupation numbers
-        atomz_tensor = torch.tensor([atomz]).to(dtype).to(device)
-        hparams = [atomz_tensor]
-        vext = torch.zeros_like(grid.rgrid[:,0]).unsqueeze(0).to(dtype).to(device)
+    # setup the hamiltonian parameters and the occupation numbers
+    atomz_tensor = torch.tensor([atomz]).to(dtype).to(device)
+    hparams = [atomz_tensor]
+    vext = torch.zeros_like(grid.rgrid[:,0]).unsqueeze(0).to(dtype).to(device)
 
-        # setup the modules
-        nlowests = orbitals.get_nlowests()
-        all_eks_models = Hartree(grid)
-        if eks_model is not None:
-            all_eks_models = all_eks_models + eks_model
-        dft_model = DFTMulti(H_models, all_eks_models, nlowests, **eig_options)
-        scf_model = EquilibriumModule(dft_model, forward_options=scf_options, backward_options=bck_options)
+    # setup the modules
+    nlowests = orbitals.get_nlowests()
+    all_eks_models = Hartree(grid)
+    if eks_model is not None:
+        all_eks_models = all_eks_models + eks_model
+    dft_model = DFTMulti(H_models, all_eks_models, nlowests, **eig_options)
+    scf_model = EquilibriumModule(dft_model, forward_options=scf_options, backward_options=bck_options)
 
-        # calculate the density
-        foccs = orbitals.get_foccs()
-        density0 = torch.zeros_like(vext).to(device)
-        all_hparams = [hparams for _ in range(len(H_models))]
-        density = scf_model(density0, vext, foccs, all_hparams)
-        energy = dft_model.energy()
+    # calculate the density
+    foccs = orbitals.get_foccs()
+    density0 = torch.zeros_like(vext).to(device)
+    all_hparams = [hparams for _ in range(len(H_models))]
+    density = scf_model(density0, vext, foccs, all_hparams)
+    energy = dft_model.energy()
 
-        return energy, density
+    return energy, density
 
 class Orbitals(object):
     def __init__(self, atomz, dtype, device):
@@ -129,7 +136,7 @@ def get_max_occ_angmom(orbital):
     }[orbital[-1]]
 
 def _check_atom_is_radial(atomz):
-    return atomz in [1,2,3,4,10,12,18,20,25,30,36,54,86]
+    return atomz in [1,2,3,4,7,10,11,12,15,18,19,20,25,30,33,36,37,38,43,48,51,54,55,56,86] # 56 is 6s2
 
 def _normalize_device(device):
     if isinstance(device, str):
