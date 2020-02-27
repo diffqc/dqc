@@ -112,8 +112,14 @@ class HamiltonAtomYGauss(BaseHamilton):
 
         # create the angular momentum factor
         lhat = []
+        eps = 1e-9
         for angmom in range(maxangmom+1):
-            lhat = lhat + [angmom*(angmom+1)]*(2*angmom+1)
+            for j in range(-angmom, angmom+1):
+                # small noise epsilon to avoid degeneracy and improve the
+                # numerical stability in avoiding complex eigenvalues
+                noise = j * eps
+                lhat.append(angmom*(angmom+1)+noise)
+            # lhat = lhat + [angmom*(angmom+1)]*(2*angmom+1)
         self.lhat = torch.tensor(lhat, dtype=dtype, device=device) # (nsh,)
 
     ############################# basis part #############################
