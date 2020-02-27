@@ -8,7 +8,7 @@ from ddft.grids.sphangulargrid import Lebedev
 radial_gridnames = ["radialshiftexp", "legradialshiftexp"]
 radial_fcnnames = ["gauss1", "exp1"]
 sph_gridnames = ["lebedev"]
-sph_fcnnames = ["gauss-l1", "gauss-l2"]
+sph_fcnnames = ["gauss-l1", "gauss-l2", "gauss-l1m1", "gauss-l2m2"]
 
 dtype = torch.float64
 device = torch.device("cpu")
@@ -31,6 +31,7 @@ def test_spherical_integralbox():
         sphgrid = get_spherical_grid(spgridname, radgrid, dtype, device)
         prof1 = get_fcn(fcnname, sphgrid.rgrid)
         rtol, atol = get_rtol_atol("integralbox", spgridname, radgridname)
+        print(spgridname, radgridname, fcnname)
         runtest_integralbox(sphgrid, prof1, rtol=rtol, atol=atol)
 
     for gridname, radgridname, fcnname in product(sph_gridnames, radial_gridnames, radial_fcnnames+sph_fcnnames):
@@ -67,6 +68,8 @@ def runtest_integralbox(grid, prof, rtol, atol):
     assert torch.allclose(int1, ones, rtol=rtol, atol=atol)
 
 def runtest_poisson(grid, prof, poisson, rtol, atol):
+    if poisson is None: return
+
     pois = grid.solve_poisson(prof.transpose(-2,-1)).transpose(-2,-1)
     # boundary condition
     pois = pois - pois[-1:,:]
@@ -154,6 +157,14 @@ def get_fcn(fcnname, rgrid):
             unnorm_basis = torch.exp(-rs*rs/(2*gw*gw)) * (3*costheta*costheta - 1)/2.0 # (nr,1)
             norm = np.sqrt(5) / gw**1.5 / np.pi**.75 # (ng)
             return unnorm_basis * norm
+        elif fcnname == "gauss-l1m1":
+            unnorm_basis = torch.exp(-rs*rs/(2*gw*gw)) * sintheta * torch.cos(phi)
+            norm = np.sqrt(3) / gw**1.5 / np.pi**.75
+            return unnorm_basis * norm
+        elif fcnname == "gauss-l2m2":
+            unnorm_basis = torch.exp(-rs*rs/(2*gw*gw)) * (3*sintheta**2)*torch.cos(2*phi) # (nr,1)
+            norm = np.sqrt(5/12.0) / gw**1.5 / np.pi**.75 # (ng)
+            return unnorm_basis * norm
 
     raise RuntimeError("Unknown function name: %s" % fcnname)
 
@@ -198,3 +209,5 @@ def get_poisson(fcnname, rgrid):
             y1[smallidx] = y1small[smallidx]
             y2 = np.sqrt(5) * rs*rs * gamma2 / (2*np.pi**.75*gw**1.5)
             return -(y1 + y2) / 5.0 * (3*costheta*costheta - 1)/2.0
+
+    return None

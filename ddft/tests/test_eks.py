@@ -21,6 +21,8 @@ def test_vks_radial_legendre():
 def test_vks_lebedev():
     run_vks_test("lebedev", "gauss-l1")
     run_vks_test("lebedev", "gauss-l2")
+    run_vks_test("lebedev", "gauss-l1m1")
+    run_vks_test("lebedev", "gauss-l2m2")
 
 def test_hartree_radial():
     run_hartree_test("radialshiftexp", "exp")
@@ -31,6 +33,8 @@ def test_hartree_radial_legendre():
 def test_hartree_lebedev():
     run_hartree_test("lebedev", "gauss-l1", rtol=1e-3, atol=1e-3)
     run_hartree_test("lebedev", "gauss-l2", rtol=1e-3, atol=1e-3)
+    run_hartree_test("lebedev", "gauss-l1m1", rtol=1e-3, atol=1e-3)
+    run_hartree_test("lebedev", "gauss-l2m2", rtol=2e-3, atol=1e-3)
 
 def run_vks_test(gridname, fcnname, rtol=1e-5, atol=1e-8):
     dtype = torch.float64
@@ -77,14 +81,18 @@ def _setup_density(gridname, fcnname, dtype=torch.float64):
 
     rgrid = grid.rgrid
     rs = rgrid[:,0]
+    phi = rgrid[:,1]
+    theta = rgrid[:,2]
     if fcnname == "exp":
         density = torch.exp(-rs)
     elif fcnname == "gauss-l1":
-        theta = rgrid[:,2]
         density = torch.exp(-rs*rs/2) * torch.cos(theta)
     elif fcnname == "gauss-l2":
-        theta = rgrid[:,2]
         density = torch.exp(-rs*rs/2) * (3*torch.cos(theta)**2-1)/2.0
+    elif fcnname == "gauss-l1m1":
+        density = torch.exp(-rs*rs/2) * torch.sin(theta) * torch.cos(phi)
+    elif fcnname == "gauss-l2m2":
+        density = torch.exp(-rs*rs/2) * 3*torch.sin(theta)**2 * torch.cos(2*phi) # (nr,1)
     else:
         raise RuntimeError("Unknown fcnname: %s" % fcnname)
 
