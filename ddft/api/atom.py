@@ -187,7 +187,7 @@ if __name__ == "__main__":
     # a = torch.tensor([-0.9312]).to(dtype).requires_grad_()
     # p = torch.tensor([1.077]).to(dtype).requires_grad_()
     eks_model = PseudoLDA(a, p)
-    mode = "opt"
+    mode = "fwd"
 
     def getloss(a, p, eks_model=None):
         if eks_model is None:
@@ -198,7 +198,14 @@ if __name__ == "__main__":
             loss = loss + ((energy - expdata[i]) / expdata[i])**2
         return loss
 
-    if mode == "grad":
+    if mode == "fwd":
+        t0 = time.time()
+        for i,atomz in enumerate(atomzs):
+            energy, _ = atom(atomz, eks_model)
+            print("Atom %d: %.5e" % (atomz, energy))
+        t1 = time.time()
+        print("Forward done in %fs" % (t1-t0))
+    elif mode == "grad":
         t0 = time.time()
         loss = getloss(a, p, eks_model)
         t1 = time.time()
