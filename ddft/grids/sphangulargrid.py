@@ -70,55 +70,23 @@ class Lebedev(BaseRadialAngularGrid):
         basis_integrate = basis * self.wphitheta
         frad_lm = torch.bmm(basis_integrate.unsqueeze(0).expand(nbatch,-1,-1), f1.transpose(-2,-1)) # (nbatch, nsh, nrad)
 
-        # angmoms = self._get_angmoms().unsqueeze(-1) # (nsh,1)
-        # intgn1 = frad_lm * self.radrgrid**(angmoms+2)
-        # intgn2 = frad_lm / self.radrgrid**(angmoms-1)
-        # int1 = self.radgrid.antiderivative(intgn1, dim=-1, zeroat="left")
-        # int2 = self.radgrid.antiderivative(intgn2, dim=-1, zeroat="right")
-        #
-        # vrad_lm1 = int1 / self.radrgrid**(angmoms+1)
-        # vrad_lm2 = int2 * self.radrgrid**angmoms
-        #
-        # # calculate the limit
-        # vrad_lm1_small = frad_lm * self.radrgrid**2 / (angmoms + 1)
-        # vrad_lm2_large = frad_lm * self.radrgrid**2 / angmoms # (nbatch, nsh, nrad)
-        # idx_small = self.radrgrid**(angmoms+1) < 1e-8 # (nsh, nrad)
-        # idx_large = self.radrgrid**(angmoms) > 1e1
-        # vrad_lm1[:, idx_small] = vrad_lm1_small[:, idx_small]
-        # vrad_lm2[:, idx_large] = vrad_lm2_large[:, idx_large]
-        #
-        # vrad_lm = (vrad_lm1 + vrad_lm2) / (2*angmoms + 1)
-        #
-        # v = torch.matmul(vrad_lm.transpose(-2,-1), basis)
-        # v = v.view(nbatch, nr)
-        # return -v
-
         # the computation is done by computing the ratio of rless/rgreat first
         # then integrate it
         # it is done this way to prevent numerical instability, although the
         # computation is slightly more expensive
 
         # calculate the matrix rless / rgreat
-        rlg1 = self.radrgrid.unsqueeze(-1) / self.radrgrid
-        rratio = torch.min(rlg1, rlg1.transpose(-2,-1)) # (nrad, nrad) symmetric
-
-        # get the power of the ratio
         angmoms = self._get_angmoms().unsqueeze(-1) # (nsh,1)
         angmoms1 = angmoms.unsqueeze(-1)
-        rratiol = rratio**angmoms1
-        rratiol2 = rratiol * rratio*rratio
+        rless = torch.min(self.radrgrid.unsqueeze(-1), self.radrgrid) # (nrad, nrad)
+        rgreat = torch.max(self.radrgrid.unsqueeze(-1), self.radrgrid)
+        rratio = (rless / rgreat)**angmoms1 / rgreat # (nsh, nrad, nrad)
 
-        # multiply the spharmonics component to make it an integrand
-        frad1 = frad_lm.unsqueeze(-2) * rratiol2 # (nbatch, nsh, nrad, nrad)
-        frad2 = (frad_lm * self.radrgrid).unsqueeze(-2) * rratiol # (nbatch, nsh, nrad, nrad)
-
-        # integrate over the r dimension
-        int1 = self.radgrid.antiderivative(frad1, dim=-1, zeroat="left").diagonal(dim1=-2, dim2=-1) # (nbatch, nsh, nrad)
-        int2 = self.radgrid.antiderivative(frad2, dim=-1, zeroat="right").diagonal(dim1=-2, dim2=-1) # (nbatch, nsh, nrad)
-
-        vrad_lm1 = int1 * self.radrgrid
-        vrad_lm2 = int2
-        vrad_lm = (vrad_lm1 + vrad_lm2) / (2*angmoms+1) # (nbatch, nsh, nrad)
+        # the integralbox for radial grid is integral[4*pi*r^2 f(r) dr] while here
+        # we only need to do integral[f(r) dr]. That's why it is divided by (4*np.pi)
+        # and it is not multiplied with (self.radrgrid**2) in the lines below
+        intgn = (frad_lm).unsqueeze(-2) * rratio # (nbatch, nsh, nrad, nrad)
+        vrad_lm = self.radgrid.integralbox(intgn / (4*np.pi), dim=-1) / (2*angmoms+1)
 
         # convert back to the spatial basis
         v = torch.matmul(vrad_lm.transpose(-2,-1), basis) # (nbatch, nrad, nphitheta)

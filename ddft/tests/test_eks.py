@@ -31,10 +31,10 @@ def test_hartree_radial_legendre():
     run_hartree_test("legradialshiftexp", "exp")
 
 def test_hartree_lebedev():
-    run_hartree_test("lebedev", "gauss-l1", rtol=1e-3, atol=1e-3)
-    run_hartree_test("lebedev", "gauss-l2", rtol=1e-3, atol=1e-3)
-    run_hartree_test("lebedev", "gauss-l1m1", rtol=1e-3, atol=1e-3)
-    run_hartree_test("lebedev", "gauss-l2m2", rtol=2e-3, atol=1e-3)
+    run_hartree_test("lebedev", "gauss-l1")
+    run_hartree_test("lebedev", "gauss-l2")
+    run_hartree_test("lebedev", "gauss-l1m1")
+    run_hartree_test("lebedev", "gauss-l2m2")
 
 def run_vks_test(gridname, fcnname, rtol=1e-5, atol=1e-8):
     dtype = torch.float64
