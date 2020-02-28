@@ -52,7 +52,7 @@ def assoclegval(cost, l, m):
     assert m <= l, "m must not be greater than l"
     assert l >= 0 and m >= 0, "l and m must be non-negative"
     if l == 0:
-        return cost*0 + 1
+        return torch.ones_like(cost).to(cost.device)
     elif l == 1:
         if m == 0:
             return cost

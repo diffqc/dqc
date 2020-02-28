@@ -81,8 +81,9 @@ def _setup_density(gridname, fcnname, dtype=torch.float64):
 
     rgrid = grid.rgrid
     rs = rgrid[:,0]
-    phi = rgrid[:,1]
-    theta = rgrid[:,2]
+    if rgrid.shape[1] == 3:
+        phi = rgrid[:,1]
+        theta = rgrid[:,2]
     if fcnname == "exp":
         density = torch.exp(-rs)
     elif fcnname == "gauss-l1":

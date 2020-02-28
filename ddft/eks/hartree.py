@@ -11,11 +11,15 @@ class Hartree(BaseEKS):
 
     def forward(self, density):
         # density: (nbatch, nr)
-        vks = self.grid.solve_poisson(-4.0*np.pi*density)
+        vks = self.potential(density)
         # dirichlet boundary
         # vks = vks - vks[:,-1]
         eks = 0.5 * vks * density
         return eks
+
+    def potential(self, density):
+        vks = self.grid.solve_poisson(-4.0*np.pi*density)
+        return vks
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
