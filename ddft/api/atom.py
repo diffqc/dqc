@@ -12,7 +12,7 @@ from ddft.eks import BaseEKS, Hartree, xLDA
 __all__ = ["atom"]
 
 def atom(atomz, eks_model="lda",
-         gwmin=1e-5, gwmax=1e2, ng=100,
+         gwmin=1e-5, gwmax=1e2, ng=60,
          rmin=1e-6, rmax=1e4, nr=200,
          dtype=torch.float64, device="cpu",
          eig_options=None, scf_options=None, bck_options=None):
@@ -34,7 +34,8 @@ def atom(atomz, eks_model="lda",
     eks_model = _normalize_eks(eks_model)
 
     # get the atomic configuration
-    orbitals = Orbitals(atomz, dtype, device)
+    is_radial = _check_atom_is_radial(atomz)
+    orbitals = Orbitals(atomz, dtype, device, radial_symmetric=is_radial)
 
     # set up the basis and the radial grid
     gwidths = torch.logspace(np.log10(gwmin), np.log10(gwmax), ng, dtype=dtype).to(device)
@@ -42,7 +43,6 @@ def atom(atomz, eks_model="lda",
     angmoms = orbitals.get_angmoms()
 
     # setup the grids and the hamiltonians
-    is_radial = _check_atom_is_radial(atomz)
     if not is_radial:
         maxangmom = angmoms.max()
         grid = Lebedev(radgrid, prec=13, basis_maxangmom=maxangmom, dtype=dtype, device=device)
@@ -74,7 +74,7 @@ def atom(atomz, eks_model="lda",
     return energy, density
 
 class Orbitals(object):
-    def __init__(self, atomz, dtype, device):
+    def __init__(self, atomz, dtype, device, radial_symmetric=True):
         self.atomz = atomz
         self.elocc, self.elangmom = get_occupation(atomz)
 
@@ -83,18 +83,33 @@ class Orbitals(object):
         self.angmoms = np.arange(self.max_angmom+1)
 
         # calculate the occupation numbers
-        foccs = []
-        nlowests = []
-        occ_nums = [2, 6, 10, 14]
-        for angmom in self.angmoms:
-            eltot = np.sum(self.elocc[self.elangmom == angmom])
-            occ = occ_nums[angmom]
-            nlowest = int(np.ceil(eltot*1.0/occ))
-            focc = torch.ones(nlowest, device=device, dtype=dtype) * occ
-            if eltot % occ != 0:
-                focc[-1] = 1.0 * (eltot % occ)
-            foccs.append(focc.unsqueeze(0))
-            nlowests.append(nlowest)
+        if not radial_symmetric:
+            focc = []
+            for elocc, elangmom in zip(self.elocc, self.elangmom):
+                maxocc = (elangmom + 1) * 2
+                if elocc == maxocc:
+                    focc.append(elocc)
+                else:
+                    norb = (2*elangmom+1)
+                    for m in range(norb):
+                        nel = (elocc+norb - (m+1)) // norb
+                        if nel == 0: break
+                        focc.append(nel)
+            foccs = [torch.tensor(focc, dtype=dtype, device=device).unsqueeze(0)]
+            nlowests = [len(foccs[0])]
+        else:
+            foccs = []
+            nlowests = []
+            occ_nums = [2, 6, 10, 14]
+            for angmom in self.angmoms:
+                eltot = np.sum(self.elocc[self.elangmom == angmom])
+                occ = occ_nums[angmom]
+                nlowest = int(np.ceil(eltot*1.0/occ))
+                focc = torch.ones(nlowest, device=device, dtype=dtype) * occ
+                if eltot % occ != 0:
+                    focc[-1] = 1.0 * (eltot % occ)
+                foccs.append(focc.unsqueeze(0))
+                nlowests.append(nlowest)
 
         self.foccs = foccs
         self.nlowests = nlowests
@@ -174,8 +189,8 @@ if __name__ == "__main__":
             return self.a * safepow(density.abs(), self.p)
 
     # experimental data
-    natoms = 6
-    atomzs = [2,4,10,12,18,20,30,36][:natoms]
+    natoms = 1
+    atomzs = [5,2,4,10,12,18,20,30,36][:natoms]
     expdata = torch.tensor([-2.904601242647059, -14.674582216911766,
                             -129.10649963235295, -200.32232950000002,
                             -529.4431757977941, -680.2348059195,
