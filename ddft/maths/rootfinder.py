@@ -272,7 +272,7 @@ def lbfgs(f, x0, jinv0=1.0, **options):
 
     if stop_reason != "min_eps":
         msg = "The L-BFGS iteration does not converge to the required accuracy."
-        msg += "\nRequired: %.3e. Achieved: %.3e" % (min_eps, gk.abs().max())
+        msg += "\nRequired: %.3e. Achieved: %.3e" % (min_eps, bestgk)
         warnings.warn(msg)
 
     return bestx
