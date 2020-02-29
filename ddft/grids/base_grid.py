@@ -102,19 +102,3 @@ class BaseRadialAngularGrid(BaseGrid):
         Returns the radial grid associated with the parent grid.
         """
         pass
-
-    @abstractmethod
-    def get_dsolidangle(self):
-        """
-        Returns the d\Omega with size (nphitheta,)
-        """
-        pass
-
-    def integralang(self, p, dim=-1):
-        integrand = p.transpose(dim, -1) * self.get_dsolidangle()
-        res = torch.sum(integrand, dim=-1)
-        return res.transpose(dim, -1)
-
-    def mmintegralang(self, p1, p2):
-        pleft = p1 * self.get_dsolidangle()
-        return torch.matmul(pleft, p2)

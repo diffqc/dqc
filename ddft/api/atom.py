@@ -1,9 +1,7 @@
-import functools
 import torch
 import numpy as np
 from ddft.dft.dft import DFT, DFTMulti
 from ddft.utils.misc import set_default_option
-from ddft.utils.spharmonics import spharmonics
 from ddft.hamiltons.hatomradial import HamiltonAtomRadial
 from ddft.hamiltons.hatomygauss import HamiltonAtomYGauss
 from ddft.grids.radialshiftexp import LegendreRadialShiftExp
@@ -37,7 +35,7 @@ def atom(atomz, eks_model="lda",
 
     # get the atomic configuration
     is_radial = _check_atom_is_radial(atomz)
-    orbitals = Orbitals(atomz, dtype, device)
+    orbitals = Orbitals(atomz, dtype, device, radial_symmetric=is_radial)
 
     # set up the basis and the radial grid
     gwidths = torch.logspace(np.log10(gwmin), np.log10(gwmax), ng, dtype=dtype).to(device)
@@ -48,15 +46,10 @@ def atom(atomz, eks_model="lda",
     if not is_radial:
         maxangmom = angmoms.max()
         grid = Lebedev(radgrid, prec=13, basis_maxangmom=maxangmom, dtype=dtype, device=device)
-        H_models = [HamiltonAtomRadial(radgrid, gwidths, angmom=angmom).to(dtype).to(device) for angmom in angmoms]
-        mdft = SphericalMultiDFT(grid, maxangmom)
-        vext_transform = mdft.vext_transform
-        dens_transform = mdft.dens_transform
+        H_models = [HamiltonAtomYGauss(grid, gwidths, maxangmom=maxangmom).to(dtype).to(device)]
     else:
         grid = radgrid
         H_models = [HamiltonAtomRadial(grid, gwidths, angmom=angmom).to(dtype).to(device) for angmom in angmoms]
-        vext_transform = None
-        dens_transform = None
 
     # setup the hamiltonian parameters and the occupation numbers
     atomz_tensor = torch.tensor([atomz]).to(dtype).to(device)
@@ -68,11 +61,7 @@ def atom(atomz, eks_model="lda",
     all_eks_models = Hartree(grid)
     if eks_model is not None:
         all_eks_models = all_eks_models + eks_model
-    dft_model = DFTMulti(H_models, all_eks_models, nlowests,
-        grid=grid,
-        vext_transform=vext_transform,
-        dens_transform=dens_transform,
-        **eig_options)
+    dft_model = DFTMulti(H_models, all_eks_models, nlowests, **eig_options)
     scf_model = EquilibriumModule(dft_model, forward_options=scf_options, backward_options=bck_options)
 
     # calculate the density
@@ -136,34 +125,6 @@ class Orbitals(object):
 
     def get_foccs(self):
         return self.foccs
-
-class SphericalMultiDFT(object):
-    def __init__(self, grid, maxangmom):
-        self.grid = grid
-        self.radgrid = grid.radial_grid
-        self.nrad = self.radgrid.rgrid.shape[0]
-        self.nphitheta = self.grid.rgrid.shape[0] // self.nrad
-        rgrid2 = self.grid.rgrid.view(self.nrad, self.nphitheta, grid.rgrid.shape[-1]) # (nrad, nphitheta, ndim)
-        phi = rgrid2[0,:,1]
-        costheta = torch.cos(rgrid2[0,:,2])
-        self.ang_basis = spharmonics(costheta, phi, maxangmom) # (nsh, nphitheta)
-
-    def vext_transform(self, vext):
-        # vext: (nbatch, nr)
-        vext2 = vext.view(vext.shape[0], self.nrad, self.nphitheta) # (nbatch, nrad, nphitheta)
-        vlmlm = self.grid.mmintegralang(vext2.unsqueeze(-2) * self.ang_basis,
-                                        self.ang_basis.transpose(-2,-1)) # (nbatch, nrad, nsh, nsh)
-        vlm = vlmlm.sum(dim=-1) # (nbatch, nrad, nsh)
-        vlm_list = [vlm[:,:,i] for i in range(vlm.shape[-1])]
-        return vlm_list # list of (nbatch, nrad)
-
-    def dens_transform(self, dens_list):
-        # dens_list: list of (nbatch, nrad)
-        nbatch = dens_list[0].shape[0]
-        dens2_list = [(dens.unsqueeze(-1) * ang_base).view(nbatch,-1) \
-                       for (dens, ang_base) in zip(dens_list, self.ang_basis)] # (nbatch, nr)
-        dens = functools.reduce(lambda x,y: x+y, dens2_list)
-        return dens
 
 def get_occupation(atomz):
     orbitals = ["1s", "2s", "2p", "3s", "3p", "4s", "3d", "4p", "5s", "4d", "5p", "6s", "4f"]

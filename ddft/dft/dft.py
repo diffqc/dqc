@@ -121,19 +121,6 @@ class DFTMulti(torch.nn.Module):
     * nlowests: list of int
         Indicates how many Kohn-Sham particles to be retrieved with the lowest
         energies during the diagonalization process.
-    * grid: BaseGrid
-        The grid for global spatial grid. This grid is used to calculate the
-        Kohn-Sham potential from the 3D profile of the density.
-    * vext_transform: callable or None
-        Transform the global external potential into different external
-        potentials for each hamiltonians.
-        The input of the function is tensor (nbatch, nr) and the output is
-        list of (nbatch, nrhamilton)
-    * dens_transform: callable or None
-        Transform the list of density from each hamiltonians into one single
-        global density.
-        The input of the function is list of (nbatch, nrhamilton) and the output
-        is tensor (nbatch, nr)
     * **eigen_options: kwargs
         The options to be passed to the diagonalization algorithm.
 
@@ -156,18 +143,12 @@ class DFTMulti(torch.nn.Module):
         The new density calculated by one forward pass of the self-consistent
         field calculation.
     """
-    def __init__(self, H_models, eks_model, nlowests,
-                 grid=None,
-                 vext_transform=None,
-                 dens_transform=None,
-                 **eigen_options):
+    def __init__(self, H_models, eks_model, nlowests, **eigen_options):
         super(DFTMulti, self).__init__()
         self.H_models = H_models
         self.eks_model = eks_model
-        self.grid = self.H_models[0].grid if grid is None else grid
+        self.grid = self.H_models[0].grid
         self.vks_model = VKS(eks_model, self.grid)
-        self.vext_transform = vext_transform
-        self.dens_transform = dens_transform
         self.eigen_models = [EigenModule(H_model, nlowest,
             rlinmodule=H_model.overlap, **eigen_options) \
             for (H_model, nlowest) in zip(self.H_models, nlowests)]
@@ -181,19 +162,14 @@ class DFTMulti(torch.nn.Module):
         vks = self.vks_model(density) # (nbatch, nr)
         vext_tot = vext + vks
 
-        if self.vext_transform is None:
-            vext_tots = [vext_tot for _ in range(len(self.H_models))]
-        else:
-            vext_tots = self.vext_transform(vext_tot)
-
         # compute the eigenpairs
         # all_evals: list of (nbatch, nlowest)
         # all_evecs: list of (nbatch, nr, nlowest)
         if all_rparams == []:
             all_rparams = [[] for _ in range(len(self.H_models))]
         rs = [eigen_model((vext_tot, *hparams), rparams=rparams) \
-              for (eigen_model, vext_tot, hparams, rparams) \
-              in zip(self.eigen_models, vext_tots, all_hparams, all_rparams)]
+              for (eigen_model, hparams, rparams) \
+              in zip(self.eigen_models, all_hparams, all_rparams)]
         all_eigvals = [r[0] for r in rs]
         all_eigvecs = [r[1] for r in rs]
 
@@ -202,12 +178,7 @@ class DFTMulti(torch.nn.Module):
         dens = [(H_model.getdens(eigvecs) * focc.unsqueeze(1)).sum(dim=-1) \
             for (H_model, eigvecs, focc)\
             in zip(self.H_models, all_eigvecs, foccs)] # (nbatch, nr, nlowest)
-
-        # sum all the densities calculated into the total density in the global grid
-        if self.dens_transform is None:
-            new_density = functools.reduce(lambda x,y: x+y, dens)
-        else:
-            new_density = self.dens_transform(dens)
+        new_density = functools.reduce(lambda x,y: x + y, dens)
 
         # save variables for the post-process calculations
         self._lc_vks = vks

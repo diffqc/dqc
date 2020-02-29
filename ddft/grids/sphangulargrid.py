@@ -55,9 +55,6 @@ class Lebedev(BaseRadialAngularGrid):
         # assert torch.allclose(basis_olp, torch.eye(basis_olp.shape[0], dtype=basis_olp.dtype, device=basis_olp.device))
         # raise RuntimeError
 
-    def get_dsolidangle(self):
-        return self.wphitheta
-
     def get_dvolume(self):
         return self._dvolume
 
