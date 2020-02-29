@@ -96,7 +96,7 @@ class Orbitals(object):
                         if nel == 0: break
                         focc.append(nel)
             foccs = [torch.tensor(focc, dtype=dtype, device=device).unsqueeze(0)]
-            nlowests = [len(foccs[0])]
+            nlowests = [len(focc)]
         else:
             foccs = []
             nlowests = []
