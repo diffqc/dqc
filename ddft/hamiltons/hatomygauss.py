@@ -132,6 +132,7 @@ class HamiltonAtomYGauss(BaseHamilton):
         nbatch, ns, ncols = wf.shape
 
         # get the part that does not depend on angle (kin_rad and coulomb)
+        wf = wf.contiguous()
         wf1 = wf.view(nbatch, self.ng, -1) # (nbatch, ng, nsh*ncols)
         kin_rad = torch.matmul(self.kin_rad, wf1) # (nbatch, ng, nsh*ncols)
         coul = torch.matmul(self.coul * atomz.unsqueeze(-1).unsqueeze(-2), wf1) # (nbatch, ng, nsh*ncols)
