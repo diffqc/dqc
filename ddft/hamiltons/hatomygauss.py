@@ -142,7 +142,11 @@ class HamiltonAtomYGauss(BaseHamilton):
         kin_ang = kin_ang2.view(nbatch, self.ng, self.nsh*ncols)
 
         # vext part
+        # left part: (nbatch, ns, nr)
+        # right part: (nr, ns)
+        # extpot: (nbatch, ns, ns)
         extpot = self.grid.mmintegralbox(vext.unsqueeze(1) * self.basis, self.basis.transpose(-2,-1))
+        extpot = torch.bmm(extpot, wf) # (nbatch, ns, ncols)
 
         hwf = kin_rad + coul + kin_ang # (nbatch, ng, nsh*ncols)
         hwf = hwf.view(nbatch, -1, ncols) + extpot
