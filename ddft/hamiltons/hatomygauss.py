@@ -84,6 +84,7 @@ class HamiltonAtomYGauss(BaseHamilton):
 
         self.basis = self.radbasis.unsqueeze(1).unsqueeze(-1) * self.angbasis.unsqueeze(1) # (ng, nsh, nrad, nphitheta)
         self.basis = self.basis.view(self.ng*self.nsh, -1) # (ns, nr)
+        self.basis_dvolume = self.basis * self.grid.get_dvolume() # (ns, nr)
         # print(self.grid.integralbox(self.basis*self.basis)-1)
         # raise RuntimeError
 
@@ -134,8 +135,8 @@ class HamiltonAtomYGauss(BaseHamilton):
         # get the part that does not depend on angle (kin_rad and coulomb)
         wf = wf.contiguous()
         wf1 = wf.view(nbatch, self.ng, -1) # (nbatch, ng, nsh*ncols)
-        kin_rad = torch.matmul(self.kin_rad, wf1) # (nbatch, ng, nsh*ncols)
-        coul = torch.matmul(self.coul * atomz.unsqueeze(-1).unsqueeze(-2), wf1) # (nbatch, ng, nsh*ncols)
+        kin_rad_coul_mat = self.kin_rad + self.coul * atomz.unsqueeze(-1).unsqueeze(-2)
+        kin_rad_coul = torch.matmul(kin_rad_coul_mat, wf1)
 
         # get the angular momentum part
         kin_ang1 = torch.matmul(self.kin_ang, wf1) # (nbatch, ng, nsh*ncols)
@@ -143,13 +144,13 @@ class HamiltonAtomYGauss(BaseHamilton):
         kin_ang = kin_ang2.view(nbatch, self.ng, self.nsh*ncols)
 
         # vext part
-        # left part: (nbatch, ns, nr)
-        # right part: (nr, ns)
+        # self.basis: (ns, nr)
         # extpot: (nbatch, ns, ns)
-        extpot = self.grid.mmintegralbox(vext.unsqueeze(1) * self.basis, self.basis.transpose(-2,-1))
+        extpot = torch.matmul(vext.unsqueeze(1) * self.basis_dvolume, self.basis.transpose(-2,-1))
+        # extpot = self.grid.mmintegralbox(vext.unsqueeze(1) * self.basis, self.basis.transpose(-2,-1))
         extpot = torch.bmm(extpot, wf) # (nbatch, ns, ncols)
 
-        hwf = kin_rad + coul + kin_ang # (nbatch, ng, nsh*ncols)
+        hwf = kin_rad_coul + kin_ang # (nbatch, ng, nsh*ncols)
         hwf = hwf.view(nbatch, -1, ncols) + extpot
         return hwf
 
