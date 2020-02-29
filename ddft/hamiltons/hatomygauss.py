@@ -163,18 +163,10 @@ class HamiltonAtomYGauss(BaseHamilton):
         return res.view(nbatch, -1, ncols)
 
     def torgrid(self, wfs, dim=-2):
-        # wfs: (..., ng, ...)
-        ndim = wfs.ndim
-        if dim < 0:
-            dim = ndim + dim
-
-        # unsqueeze basis ndim-dim-1 times
-        nunsq = ndim - dim - 1
-        basis = self.basis
-        for _ in range(nunsq):
-            basis = basis.unsqueeze(-1) # (nr, ...)
-        wfr = (wfs.unsqueeze(dim+1) * basis).sum(dim=dim) # (..., nr, ...)
-        return wfr
+        # wfs: (..., ns, ...)
+        wfs = wfs.transpose(dim, -1) # (..., ns)
+        wfr = torch.matmul(wfs, self.basis) # (..., nr)
+        return wfr.transpose(dim, -1)
 
     ############################# grid part #############################
     @property
