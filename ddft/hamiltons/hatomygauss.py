@@ -155,7 +155,30 @@ class HamiltonAtomYGauss(BaseHamilton):
         return hwf
 
     def precond(self, y, vext, atomz, biases=None, M=None, mparams=None):
-        return y # ???
+        # y: (nbatch, ns, ncols)
+        # biases: (nbatch, ncols)
+        return y
+
+        # extpot_diag = self.grid.integralbox(vext.unsqueeze(1) * self.basis*self.basis, dim=-1) # (nbatch, ns)
+        # kin_rad_diag = self.kin_rad.diagonal(dim1=-2, dim2=-1).unsqueeze(-1) # (1, ng, 1)
+        # coul_diag = (self.coul.diagonal(dim1=-2, dim2=-1) * atomz.unsqueeze(-1)).unsqueeze(-1) # (nbatch, ng, 1)
+        #
+        # kin_ang_diag1 = self.kin_ang.diagonal(dim1=-2, dim2=-1).unsqueeze(-1) # (1, ng, 1)
+        # kin_ang_diag = (kin_ang_diag1 * self.lhat) # (1, ng, nsh)
+        #
+        # diag1 = ((kin_rad_diag + coul_diag) + kin_ang_diag).view(y.shape[0], -1) # (nbatch, ns)
+        # # print(kin_ang_diag.shape, kin_rad_diag.shape, coul_diag.shape)
+        # diag = (diag1 + extpot_diag).unsqueeze(-1) # (nbatch, ns, 1)
+        #
+        # if biases is not None:
+        #     if M is None:
+        #         olp_diag = 1.0
+        #     else: # if M is not None, then it is the overlap without mparams
+        #         olp_diag = self.olp.diagonal(dim1=-2, dim2=-1).unsqueeze(-1).repeat(1,1,self.nsh) # (1, ng, nsh)
+        #         olp_diag = olp_diag.view(1, -1).unsqueeze(-1) # (1, ns, 1)
+        #     diag = diag - biases.unsqueeze(1) * olp_diag # (nbatch, ns, ncols)
+        #
+        # return y / diag
 
     def _overlap(self, wf):
         nbatch, ns, ncols = wf.shape
