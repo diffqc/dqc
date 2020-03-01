@@ -86,7 +86,7 @@ class Orbitals(object):
         if not radial_symmetric:
             focc = []
             for elocc, elangmom in zip(self.elocc, self.elangmom):
-                maxocc = (elangmom + 1) * 2
+                maxocc = (2*elangmom + 1) * 2
                 if elocc == maxocc:
                     focc.append(elocc)
                 else:
