@@ -1,7 +1,7 @@
 import torch
 import lintorch as lt
 from ddft.utils.misc import set_default_option
-from ddft.maths.rootfinder import lbfgs
+from ddft.maths.rootfinder import lbfgs, selfconsistent, broyden
 
 class EquilibriumModule(torch.nn.Module):
     """
@@ -36,6 +36,7 @@ class _Forward(torch.autograd.Function):
             "verbose": False,
             "linesearch": True,
             "jinv0": 0.5,
+            "method": "lbfgs",
         }, options)
 
         def loss(y):
@@ -62,7 +63,15 @@ class _Forward(torch.autograd.Function):
         # y = yvar.data
 
         jinv0 = config["jinv0"]
-        y = lbfgs(loss, y0, **config)
+        method = config["method"].lower()
+        if method == "lbfgs":
+            y = lbfgs(loss, y0, **config)
+        elif method == "selfconsistent":
+            y = selfconsistent(loss, y0, **config)
+        elif method == "broyden":
+            y = broyden(loss, y0, **config)
+        else:
+            raise RuntimeError("Unknown method: %s" % config["method"])
         return y
 
     @staticmethod
