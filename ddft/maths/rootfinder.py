@@ -28,6 +28,7 @@ def selfconsistent(f, x0, jinv0=1.0, **options):
         "max_niter": 20,
         "min_eps": 1e-6,
         "beta": 0.9, # contribution of the new delta_n to the total delta_n
+        "jinvdecay": 1.0,
         "verbose": False,
     }, options)
 
@@ -35,6 +36,7 @@ def selfconsistent(f, x0, jinv0=1.0, **options):
     min_eps = config["min_eps"]
     verbose = config["verbose"]
     beta = config["beta"]
+    jinvdecay = config["jinvdecay"]
 
     # pull out the parameters of x0
     nbatch, nfeat = x0.shape
@@ -49,6 +51,7 @@ def selfconsistent(f, x0, jinv0=1.0, **options):
     fx = f(x0) # (nbatch, nfeat)
     stop_reason = "max_niter"
     dx = torch.zeros_like(x).to(x.device)
+    bestcrit = float("inf")
     for i in range(config["max_niter"]):
         dxnew = -torch.bmm(jinv, fx.unsqueeze(-1)).squeeze(-1) # (nbatch, nfeat)
         dx = (1 - beta) * dx + beta * dxnew
@@ -59,20 +62,27 @@ def selfconsistent(f, x0, jinv0=1.0, **options):
         # update variables for the next iteration
         fx = fxnew
         x = xnew
+        jinv = jinv * jinvdecay
+
+        # get the best results
+        crit = fx.abs().max()
+        if crit < bestcrit:
+            bestcrit = crit
+            bestx = x
 
         # check the stopping condition
         if verbose:
-            print("Iter %3d: %.3e" % (i+1, fx.abs().max()))
+            print("Iter %3d: %.3e" % (i+1, crit))
         if torch.allclose(fx, torch.zeros_like(fx), atol=min_eps):
             stop_reason = "min_eps"
             break
 
     if stop_reason != "min_eps":
         msg = "The selfconsistent iteration does not converge to the required accuracy."
-        msg += "\nRequired: %.3e. Achieved: %.3e" % (min_eps, fx.abs().max())
+        msg += "\nRequired: %.3e. Achieved: %.3e" % (min_eps, bestcrit)
         warnings.warn(msg)
 
-    return x
+    return bestx
 
 def broyden(f, x0, jinv0=1.0, **options):
     """
