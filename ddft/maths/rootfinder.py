@@ -27,12 +27,14 @@ def selfconsistent(f, x0, jinv0=1.0, **options):
     config = set_default_option({
         "max_niter": 20,
         "min_eps": 1e-6,
+        "beta": 0.9, # contribution of the new delta_n to the total delta_n
         "verbose": False,
     }, options)
 
     # pull out the options for fast access
     min_eps = config["min_eps"]
     verbose = config["verbose"]
+    beta = config["beta"]
 
     # pull out the parameters of x0
     nbatch, nfeat = x0.shape
@@ -46,9 +48,11 @@ def selfconsistent(f, x0, jinv0=1.0, **options):
     x = x0
     fx = f(x0) # (nbatch, nfeat)
     stop_reason = "max_niter"
+    dx = torch.zeros_like(x).to(x.device)
     for i in range(config["max_niter"]):
-        dxnew = -torch.bmm(jinv, fx.unsqueeze(-1)) # (nbatch, nfeat, 1)
-        xnew = x + dxnew.squeeze(-1) # (nbatch, nfeat)
+        dxnew = -torch.bmm(jinv, fx.unsqueeze(-1)).squeeze(-1) # (nbatch, nfeat)
+        dx = (1 - beta) * dx + beta * dxnew
+        xnew = x + dx # (nbatch, nfeat)
         fxnew = f(xnew)
         dfnew = fxnew - fx
 
