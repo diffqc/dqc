@@ -12,8 +12,8 @@ from ddft.eks import BaseEKS, Hartree, xLDA
 __all__ = ["atom"]
 
 def atom(atomz, eks_model="lda",
-         gwmin=1e-5, gwmax=1e2, ng=60,
-         rmin=1e-6, rmax=1e4, nr=200,
+         gwmin=1e-5, gwmax=1e3, ng=60,
+         rmin=1e-6, rmax=1e2, nr=200,
          dtype=torch.float64, device="cpu",
          eig_options=None, scf_options=None, bck_options=None):
 
@@ -21,9 +21,10 @@ def atom(atomz, eks_model="lda",
         "method": "exacteig",
     }, eig_options)
     scf_options = set_default_option({
-        "min_eps": 1e-9,
+        "min_eps": 1e-5,
         "jinv0": 0.5,
         "alpha0": 1.0,
+        "method": "selfconsistent",
     }, scf_options)
     bck_options = set_default_option({
         "min_eps": 1e-9,
@@ -191,7 +192,7 @@ if __name__ == "__main__":
 
     # experimental data
     natoms = 1
-    atomzs = [5,2,4,10,12,18,20,30,36][:natoms]
+    atomzs = [21,2,4,10,12,18,20,30,36][:natoms]
     expdata = torch.tensor([-2.904601242647059, -14.674582216911766,
                             -129.10649963235295, -200.32232950000002,
                             -529.4431757977941, -680.2348059195,
