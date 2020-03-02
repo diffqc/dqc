@@ -84,6 +84,114 @@ def selfconsistent(f, x0, jinv0=1.0, **options):
 
     return bestx
 
+def diis(f, x0, jinv0=1.0, **options):
+    """
+    Solve the root finder problem with DIIS method.
+
+    Arguments
+    ---------
+    * f: callable
+        Callable that takes params as the input and output nfeat-outputs.
+    * x0: torch.tensor (nbatch, nfeat)
+        Initial value of parameters to be put in the function, f.
+    * jinv0: float or torch.tensor (nbatch, nfeat, nfeat)
+        The initial inverse of the Jacobian. If float, it will be the diagonal.
+    * options: dict or None
+        Options of the function.
+
+    Returns
+    -------
+    * x: torch.tensor (nbatch, nfeat)
+        The x that approximate f(x) = 0.
+    """
+    # set up the default options
+    config = set_default_option({
+        "max_niter": 20,
+        "min_eps": 1e-6,
+        "max_memory": 20,
+        "minit": 10,
+        "verbose": False,
+    }, options)
+
+    # pull out the options for fast access
+    min_eps = config["min_eps"]
+    verbose = config["verbose"]
+    max_memory = config["max_memory"]
+    minit = config["minit"]
+
+    # pull out the parameters of x0
+    nbatch, nfeat = x0.shape
+    device = x0.device
+    dtype = x0.dtype
+
+    # set up the initial jinv
+    jinv = _set_jinv0(jinv0, x0)
+
+    # perform the iterations
+    x = x0
+    fx = f(x0) # (nbatch, nfeat)
+    stop_reason = "max_niter"
+    bestcrit = float("inf")
+    nbatch, nfeat = fx.shape
+    x_history = torch.empty((nbatch, max_memory, nfeat), dtype=x.dtype, device=x.device)
+    e_history = torch.empty((nbatch, max_memory, nfeat), dtype=x.dtype, device=x.device)
+    mfill = 0
+    midx = 0
+    for i in range(config["max_niter"]):
+        if mfill < 2:
+            dxnew = -torch.bmm(jinv, fx.unsqueeze(-1)).squeeze(-1) # (nbatch, nfeat)
+            xnew = x + dxnew # (nbatch, nfeat)
+        else:
+            # construct the matrix B
+            fx_tensor = e_history[:,:mfill,:] # (nbatch, m, nfeat)
+            Bul = torch.matmul(fx_tensor, fx_tensor.transpose(-2,-1)) # (nbatch, m, m)
+            Bu = torch.cat((Bul, -torch.ones(Bul.shape[0],Bul.shape[1],1, dtype=Bul.dtype, device=Bul.device)), dim=-1) # (nbatch, m, m+1)
+            B = torch.cat((Bu, -torch.ones(Bu.shape[0],1,Bu.shape[-1], dtype=Bu.dtype, device=Bu.device)), dim=-2) # (nbatch, m+1, m+1)
+            B[:,-1,-1] = 0.0
+
+            # solve the linear equation to get the coefficients
+            a = torch.zeros(B.shape[0], B.shape[1], 1, dtype=B.dtype, device=B.device) # (nbatch, m+1, 1)
+            a[:,-1] = -1.0
+            c = torch.solve(a, B)[0].squeeze(-1)[:,:mfill] # (nbatch, m)
+
+            x_tensor = x_history[:,:mfill,:] # (nbatch, m, nfeat)
+            xnew = (x_tensor * c.unsqueeze(-1)).sum(dim=1) # (nbatch, m)
+
+        fxnew = f(xnew) # (nbatch, nfeat)
+        dx = xnew - x
+
+        # update variables for the next iteration
+        fx = fxnew
+        x = xnew
+
+        # add the history
+        if i >= minit:
+            x_history[:,midx,:] = x
+            # e_history[:,midx,:] = dx
+            e_history[:,midx,:] = fx
+            midx = (midx + 1) % max_memory
+            mfill = (mfill + 1) if mfill < max_memory else mfill
+
+        # get the best results
+        crit = fx.abs().max()
+        if crit < bestcrit:
+            bestcrit = crit
+            bestx = x
+
+        # check the stopping condition
+        if verbose:
+            print("Iter %3d: %.3e" % (i+1, crit))
+        if torch.allclose(fx, torch.zeros_like(fx), atol=min_eps):
+            stop_reason = "min_eps"
+            break
+
+    if stop_reason != "min_eps":
+        msg = "The DIIS iteration does not converge to the required accuracy."
+        msg += "\nRequired: %.3e. Achieved: %.3e" % (min_eps, bestcrit)
+        warnings.warn(msg)
+
+    return bestx
+
 def broyden(f, x0, jinv0=1.0, **options):
     """
     Solve the root finder problem with Broyden's method.

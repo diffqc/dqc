@@ -1,7 +1,7 @@
 import torch
 import lintorch as lt
 from ddft.utils.misc import set_default_option
-from ddft.maths.rootfinder import lbfgs, selfconsistent, broyden
+from ddft.maths.rootfinder import lbfgs, selfconsistent, broyden, diis
 
 class EquilibriumModule(torch.nn.Module):
     """
@@ -70,6 +70,8 @@ class _Forward(torch.autograd.Function):
             y = selfconsistent(loss, y0, **config)
         elif method == "broyden":
             y = broyden(loss, y0, **config)
+        elif method == "diis":
+            y = diis(loss, y0, **config)
         else:
             raise RuntimeError("Unknown method: %s" % config["method"])
         return y
