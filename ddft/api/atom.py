@@ -88,7 +88,7 @@ class Orbitals(object):
             for elocc, elangmom in zip(self.elocc, self.elangmom):
                 maxocc = (2*elangmom + 1) * 2
                 if elocc == maxocc:
-                    focc.append(elocc)
+                    focc = focc + [2.0] * (2*elangmom+1)
                 else:
                     norb = (2*elangmom+1)
                     for m in range(norb):
