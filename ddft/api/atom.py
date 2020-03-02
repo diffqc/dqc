@@ -68,6 +68,7 @@ def atom(atomz, eks_model="lda",
     foccs = orbitals.get_foccs()
     density0 = torch.zeros_like(vext).to(device)
     all_hparams = [hparams for _ in range(len(H_models))]
+    density0 = dft_model(density0, vext, foccs, all_hparams).detach()
     density = scf_model(density0, vext, foccs, all_hparams)
     energy = dft_model.energy()
 
