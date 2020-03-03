@@ -88,7 +88,7 @@ class LegendreRadialShiftExp(BaseRadialGrid):
         # calculate the matrix rless / rgreat
         rless = torch.min(self.rs.unsqueeze(-1), self.rs) # (nr, nr)
         rgreat = torch.max(self.rs.unsqueeze(-1), self.rs)
-        rratio = (1. / rgreat) # (nr, nr)
+        rratio = (1. / rgreat) - (1. / self.rs.max()) # (nr, nr)
 
         # the integralbox for radial grid is integral[4*pi*r^2 f(r) dr] while here
         # we only need to do integral[f(r) dr]. That's why it is divided by (4*np.pi)

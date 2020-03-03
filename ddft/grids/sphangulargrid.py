@@ -80,7 +80,10 @@ class Lebedev(BaseRadialAngularGrid):
         angmoms1 = angmoms.unsqueeze(-1)
         rless = torch.min(self.radrgrid.unsqueeze(-1), self.radrgrid) # (nrad, nrad)
         rgreat = torch.max(self.radrgrid.unsqueeze(-1), self.radrgrid)
-        rratio = (rless / rgreat)**angmoms1 / rgreat # (nsh, nrad, nrad)
+        # the right-side subtraction is to make sure the integration is 0 at the right end
+        rmax = self.radrgrid.max()
+        rratio = (rless / rgreat)**angmoms1 * (1.0/rgreat - 1.0/rmax) # (nsh, nrad, nrad)
+        # rratio = (rless / rgreat)**angmoms1 * (1.0/rgreat - (rgreat/rmax)**angmoms1/rmax)
 
         # the integralbox for radial grid is integral[4*pi*r^2 f(r) dr] while here
         # we only need to do integral[f(r) dr]. That's why it is divided by (4*np.pi)
