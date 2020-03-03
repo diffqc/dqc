@@ -29,6 +29,7 @@ def selfconsistent(f, x0, jinv0=1.0, **options):
         "min_eps": 1e-6,
         "beta": 0.9, # contribution of the new delta_n to the total delta_n
         "jinvdecay": 1.0,
+        "decayevery": 1,
         "verbose": False,
     }, options)
 
@@ -37,6 +38,7 @@ def selfconsistent(f, x0, jinv0=1.0, **options):
     verbose = config["verbose"]
     beta = config["beta"]
     jinvdecay = config["jinvdecay"]
+    decayevery = config["decayevery"]
 
     # pull out the parameters of x0
     nbatch, nfeat = x0.shape
@@ -62,7 +64,8 @@ def selfconsistent(f, x0, jinv0=1.0, **options):
         # update variables for the next iteration
         fx = fxnew
         x = xnew
-        jinv = jinv * jinvdecay
+        if (i+1) % decayevery == 0:
+            jinv = jinv * jinvdecay
 
         # get the best results
         crit = fx.abs().max()
