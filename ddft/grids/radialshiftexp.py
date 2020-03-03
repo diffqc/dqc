@@ -85,25 +85,25 @@ class LegendreRadialShiftExp(BaseRadialGrid):
         # f: (nbatch, nr)
         # the expression below is used to make the operator symmetric
 
-        # calculate the matrix rless / rgreat
-        rless = torch.min(self.rs.unsqueeze(-1), self.rs) # (nr, nr)
-        rgreat = torch.max(self.rs.unsqueeze(-1), self.rs)
-        rratio = (1. / rgreat) - (1. / self.rs.max()) # (nr, nr)
+        # # calculate the matrix rless / rgreat
+        # rless = torch.min(self.rs.unsqueeze(-1), self.rs) # (nr, nr)
+        # rgreat = torch.max(self.rs.unsqueeze(-1), self.rs)
+        # rratio = (1. / rgreat) - (1. / self.rs.max()) # (nr, nr)
+        #
+        # # the integralbox for radial grid is integral[4*pi*r^2 f(r) dr] while here
+        # # we only need to do integral[f(r) dr]. That's why it is divided by (4*np.pi)
+        # # and it is not multiplied with (self.radrgrid**2) in the lines below
+        # intgn = (f).unsqueeze(-2) * rratio # (nbatch, nr, nr)
+        # vrad_lm = self.integralbox(intgn / (4*np.pi), dim=-1)
+        # return -vrad_lm
 
-        # the integralbox for radial grid is integral[4*pi*r^2 f(r) dr] while here
-        # we only need to do integral[f(r) dr]. That's why it is divided by (4*np.pi)
-        # and it is not multiplied with (self.radrgrid**2) in the lines below
-        intgn = (f).unsqueeze(-2) * rratio # (nbatch, nr, nr)
-        vrad_lm = self.integralbox(intgn / (4*np.pi), dim=-1)
-        return -vrad_lm
-
-        # eps = 1e-12
-        # intgn1 = f * self.rs * self.rs
-        # int1 = self.antiderivative(intgn1, dim=-1, zeroat="left")
-        # intgn2 = int1 / (self.rs * self.rs + eps)
-        # # this form of cumsum is the transpose of torch.cumsum
-        # int2 = self.antiderivative(intgn2, dim=-1, zeroat="right")
-        # return -int2
+        eps = 1e-12
+        intgn1 = f * self.rs * self.rs
+        int1 = self.antiderivative(intgn1, dim=-1, zeroat="left")
+        intgn2 = int1 / (self.rs * self.rs + eps)
+        # this form of cumsum is the transpose of torch.cumsum
+        int2 = self.antiderivative(intgn2, dim=-1, zeroat="right")
+        return -int2
 
     @property
     def rgrid(self):
