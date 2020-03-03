@@ -95,6 +95,15 @@ class LegendreRadialShiftExp(BaseRadialGrid):
         # and it is not multiplied with (self.radrgrid**2) in the lines below
         intgn = (f).unsqueeze(-2) * rratio # (nbatch, nr, nr)
         vrad_lm = self.integralbox(intgn / (4*np.pi), dim=-1)
+
+        # # block of code to check the consistency results
+        # rratio2 = 1./rgreat
+        # intgn2 = f.unsqueeze(-2) * rratio2
+        # vrad_lm2 = self.integralbox(intgn2 / (4*np.pi), dim=-1)
+        # vrad_lm2 = vrad_lm2 - vrad_lm2[:,-1:]
+        # print((vrad_lm - vrad_lm2).abs().max())
+        # assert torch.allclose(vrad_lm, vrad_lm2)
+
         return -vrad_lm
 
         # eps = 1e-12
