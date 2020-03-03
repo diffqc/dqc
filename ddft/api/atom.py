@@ -29,7 +29,7 @@ def atom(atomz, eks_model="lda",
     bck_options = set_default_option({
         "min_eps": 1e-9,
     }, bck_options)
-    cylsymm = True
+    cylsymm = False
 
     # normalize the device and eks_model
     device = _normalize_device(device)

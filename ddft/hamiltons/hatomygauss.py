@@ -22,7 +22,7 @@ class HamiltonAtomYGauss(BaseHamilton):
     * maxangmom: int
         The maximum angular momentum of the Hamiltonian
     * cylsymm: bool
-        Using cylindrical symmetry or not. Default: True
+        Using cylindrical symmetry or not. Default: False
 
     Forward arguments
     -----------------
@@ -47,7 +47,7 @@ class HamiltonAtomYGauss(BaseHamilton):
     """
 
     def __init__(self, grid, gwidths,
-                       maxangmom=5, cylsymm=True):
+                       maxangmom=5, cylsymm=False):
         ng = gwidths.shape[0]
         nsh = (maxangmom+1)**2 if not cylsymm else (maxangmom+1)
         ns = int(ng*nsh)
