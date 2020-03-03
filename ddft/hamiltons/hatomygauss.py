@@ -21,6 +21,8 @@ class HamiltonAtomYGauss(BaseHamilton):
         The tensor of Gaussian-widths of the basis.
     * maxangmom: int
         The maximum angular momentum of the Hamiltonian
+    * cylsymm: bool
+        Using cylindrical symmetry or not. Default: True
 
     Forward arguments
     -----------------
@@ -45,9 +47,9 @@ class HamiltonAtomYGauss(BaseHamilton):
     """
 
     def __init__(self, grid, gwidths,
-                       maxangmom=5):
+                       maxangmom=5, cylsymm=True):
         ng = gwidths.shape[0]
-        nsh = (maxangmom+1)**2
+        nsh = (maxangmom+1)**2 if not cylsymm else (maxangmom+1)
         ns = int(ng*nsh)
         self.ng = ng
         self.nsh = nsh
@@ -80,7 +82,7 @@ class HamiltonAtomYGauss(BaseHamilton):
         phi = rgrid1[0,:,1] # (nphitheta,)
         theta = rgrid1[0,:,2] # (nphitheta,)
         costheta = torch.cos(theta) # (nphitheta,)
-        self.angbasis = spharmonics(costheta, phi, maxangmom)
+        self.angbasis = spharmonics(costheta, phi, maxangmom, onlytheta=cylsymm)
 
         self.basis = self.radbasis.unsqueeze(1).unsqueeze(-1) * self.angbasis.unsqueeze(1) # (ng, nsh, nrad, nphitheta)
         self.basis = self.basis.view(self.ng*self.nsh, -1) # (ns, nr)
@@ -113,14 +115,18 @@ class HamiltonAtomYGauss(BaseHamilton):
 
         # create the angular momentum factor
         lhat = []
+        # small noise epsilon to avoid degeneracy and improve the
+        # numerical stability in avoiding complex eigenvalues
         eps = 1e-9
         eps2 = 1e-8
         for angmom in range(maxangmom+1):
-            for j in range(-angmom, angmom+1):
-                # small noise epsilon to avoid degeneracy and improve the
-                # numerical stability in avoiding complex eigenvalues
-                noise = j * eps + angmom * eps2
+            if cylsymm:
+                noise = angmom * eps2
                 lhat.append(angmom*(angmom+1)+noise)
+            else:
+                for j in range(-angmom, angmom+1):
+                    noise = j * eps + angmom * eps2
+                    lhat.append(angmom*(angmom+1)+noise)
             # lhat = lhat + [angmom*(angmom+1)]*(2*angmom+1)
         self.lhat = torch.tensor(lhat, dtype=dtype, device=device) # (nsh,)
 

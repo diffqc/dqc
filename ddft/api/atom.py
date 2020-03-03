@@ -29,6 +29,7 @@ def atom(atomz, eks_model="lda",
     bck_options = set_default_option({
         "min_eps": 1e-9,
     }, bck_options)
+    cylsymm = True
 
     # normalize the device and eks_model
     device = _normalize_device(device)
@@ -36,7 +37,8 @@ def atom(atomz, eks_model="lda",
 
     # get the atomic configuration
     is_radial = _check_atom_is_radial(atomz)
-    orbitals = Orbitals(atomz, dtype, device, radial_symmetric=is_radial)
+    orbitals = Orbitals(atomz, dtype, device,
+        radial_symmetric=is_radial, cylindrical_symmetric=cylsymm)
 
     # set up the basis and the radial grid
     gwidths = torch.logspace(np.log10(gwmin), np.log10(gwmax), ng, dtype=dtype).to(device)
@@ -47,7 +49,7 @@ def atom(atomz, eks_model="lda",
     if not is_radial:
         maxangmom = angmoms.max()
         grid = Lebedev(radgrid, prec=13, basis_maxangmom=maxangmom, dtype=dtype, device=device)
-        H_models = [HamiltonAtomYGauss(grid, gwidths, maxangmom=maxangmom).to(dtype).to(device)]
+        H_models = [HamiltonAtomYGauss(grid, gwidths, maxangmom=maxangmom, cylsymm=cylsymm).to(dtype).to(device)]
     else:
         grid = radgrid
         H_models = [HamiltonAtomRadial(grid, gwidths, angmom=angmom).to(dtype).to(device) for angmom in angmoms]
@@ -76,7 +78,8 @@ def atom(atomz, eks_model="lda",
     return energy, density
 
 class Orbitals(object):
-    def __init__(self, atomz, dtype, device, radial_symmetric=True):
+    def __init__(self, atomz, dtype, device, radial_symmetric=True,
+                 cylindrical_symmetric=True):
         self.atomz = atomz
         self.elocc, self.elangmom = get_occupation(atomz)
 
@@ -86,19 +89,23 @@ class Orbitals(object):
 
         # calculate the occupation numbers
         if not radial_symmetric:
-            focc = []
-            for elocc, elangmom in zip(self.elocc, self.elangmom):
-                maxocc = (2*elangmom + 1) * 2
-                if elocc == maxocc:
-                    focc = focc + [2.0] * (2*elangmom+1)
-                else:
-                    norb = (2*elangmom+1)
-                    for m in range(norb):
-                        nel = (elocc+norb - (m+1)) // norb
-                        if nel == 0: break
-                        focc.append(nel)
-            foccs = [torch.tensor(focc, dtype=dtype, device=device).unsqueeze(0)]
-            nlowests = [len(focc)]
+            if not cylindrical_symmetric:
+                focc = []
+                for elocc, elangmom in zip(self.elocc, self.elangmom):
+                    maxocc = (2*elangmom + 1) * 2
+                    if elocc == maxocc:
+                        focc = focc + [2.0] * (2*elangmom+1)
+                    else:
+                        norb = (2*elangmom+1)
+                        for m in range(norb):
+                            nel = (elocc+norb - (m+1)) // norb
+                            if nel == 0: break
+                            focc.append(nel)
+                foccs = [torch.tensor(focc, dtype=dtype, device=device).unsqueeze(0)]
+                nlowests = [len(focc)]
+            else:
+                foccs = [torch.tensor(self.elocc, dtype=dtype, device=device).unsqueeze(0)]
+                nlowests = [len(self.elocc)]
         else:
             foccs = []
             nlowests = []
