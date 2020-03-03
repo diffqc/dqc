@@ -182,6 +182,7 @@ class HamiltonAtomYGauss(BaseHamilton):
 
     def _overlap(self, wf):
         nbatch, ns, ncols = wf.shape
+        wf = wf.contiguous()
         wf = wf.view(nbatch, self.ng, -1) # (nbatch, ng, nsh*ncols)
         res = torch.matmul(self.olp, wf)  # (nbatch, ng, nsh*ncols)
         return res.view(nbatch, -1, ncols)
