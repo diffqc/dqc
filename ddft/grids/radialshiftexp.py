@@ -83,26 +83,23 @@ class LegendreRadialShiftExp(BaseRadialGrid):
 
     def solve_poisson(self, f):
         # f: (nbatch, nr)
-        # the expression below is used to make the operator symmetric
+        # the expression below is used to satisfy the following conditions:
+        # * symmetric operator (by doing the integral 1/|r-r1|)
+        # * 0 at r=\infinity, but not 0 at the bound (again, by doing the integral 1/|r-r1|)
+        # to satisfy all the above, we choose to do the integral of
+        #     Vlm(r) = integral_rmin^rmax (rless^l) / (rgreat^(l+1)) flm(r1) r1^2 dr1
+        # where rless = min(r,r1) and rgreat = max(r,r1)
 
         # calculate the matrix rless / rgreat
         rless = torch.min(self.rs.unsqueeze(-1), self.rs) # (nr, nr)
         rgreat = torch.max(self.rs.unsqueeze(-1), self.rs)
-        rratio = (1. / rgreat) - (1. / self.rs.max()) # (nr, nr)
+        rratio = 1. / rgreat
 
         # the integralbox for radial grid is integral[4*pi*r^2 f(r) dr] while here
         # we only need to do integral[f(r) dr]. That's why it is divided by (4*np.pi)
         # and it is not multiplied with (self.radrgrid**2) in the lines below
         intgn = (f).unsqueeze(-2) * rratio # (nbatch, nr, nr)
         vrad_lm = self.integralbox(intgn / (4*np.pi), dim=-1)
-
-        # # block of code to check the consistency results
-        # rratio2 = 1./rgreat
-        # intgn2 = f.unsqueeze(-2) * rratio2
-        # vrad_lm2 = self.integralbox(intgn2 / (4*np.pi), dim=-1)
-        # vrad_lm2 = vrad_lm2 - vrad_lm2[:,-1:]
-        # print((vrad_lm - vrad_lm2).abs().max())
-        # assert torch.allclose(vrad_lm, vrad_lm2)
 
         return -vrad_lm
 

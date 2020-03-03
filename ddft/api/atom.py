@@ -13,7 +13,7 @@ __all__ = ["atom"]
 
 def atom(atomz, eks_model="lda",
          gwmin=1e-5, gwmax=1e3, ng=60,
-         rmin=1e-6, rmax=1e2, nr=200,
+         rmin=1e-5, rmax=1e3, nr=200,
          dtype=torch.float64, device="cpu",
          eig_options=None, scf_options=None, bck_options=None):
 

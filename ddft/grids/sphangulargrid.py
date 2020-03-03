@@ -61,6 +61,12 @@ class Lebedev(BaseRadialAngularGrid):
     def solve_poisson(self, f):
         # f: (nbatch, nr)
         # nr = nrad * nphitheta
+        # the expression below is used to satisfy the following conditions:
+        # * symmetric operator (by doing the integral 1/|r-r1|)
+        # * 0 at r=\infinity, but not 0 at the bound (again, by doing the integral 1/|r-r1|)
+        # to satisfy all the above, we choose to do the integral of
+        #     Vlm(r) = integral_rmin^rmax (rless^l) / (rgreat^(l+1)) flm(r1) r1^2 dr1
+        # where rless = min(r,r1) and rgreat = max(r,r1)
 
         # get the spherical harmonics components of f as function of radius
         eps = 1e-12
@@ -80,25 +86,13 @@ class Lebedev(BaseRadialAngularGrid):
         angmoms1 = angmoms.unsqueeze(-1)
         rless = torch.min(self.radrgrid.unsqueeze(-1), self.radrgrid) # (nrad, nrad)
         rgreat = torch.max(self.radrgrid.unsqueeze(-1), self.radrgrid)
-        # the subtraction is to make sure the integration is 0 at the right end
-        rmax = self.radrgrid.max()
-        rratio = (rless / rgreat)**angmoms1 * (1.0/rgreat - 1.0/rmax) # (nsh, nrad, nrad)
+        rratio = (rless / rgreat)**angmoms1 * 1.0/rgreat # (nsh, nrad, nrad)
 
         # the integralbox for radial grid is integral[4*pi*r^2 f(r) dr] while here
         # we only need to do integral[f(r) dr]. That's why it is divided by (4*np.pi)
         # and it is not multiplied with (self.radrgrid**2) in the lines below
         intgn = (frad_lm).unsqueeze(-2) * rratio # (nbatch, nsh, nrad, nrad)
         vrad_lm = self.radgrid.integralbox(intgn / (4*np.pi), dim=-1) / (2*angmoms+1)
-
-        # # this is to check if the calculation gets the right hand side 0
-        # # the procedure below is not used because it could cause oscillatory
-        # # in the gradient
-        # rratio2 = (rless / rgreat)**angmoms1 * 1.0/rgreat # (nsh, nrad, nrad)
-        # intgn2 = (frad_lm).unsqueeze(-2) * rratio2 # (nbatch, nsh, nrad, nrad)
-        # vrad_lm2 = self.radgrid.integralbox(intgn2 / (4*np.pi), dim=-1) / (2*angmoms+1)
-        # vrad_lm2 = vrad_lm2 - vrad_lm2[:,:,-1:]
-        # print((vrad_lm - vrad_lm2).abs().max())
-        # assert torch.allclose(vrad_lm, vrad_lm2)
 
         # convert back to the spatial basis
         v = torch.matmul(vrad_lm.transpose(-2,-1), basis) # (nbatch, nrad, nphitheta)
