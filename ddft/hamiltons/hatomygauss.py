@@ -23,6 +23,13 @@ class HamiltonAtomYGauss(BaseHamilton):
         The maximum angular momentum of the Hamiltonian
     * cylsymm: bool
         Using cylindrical symmetry or not. Default: False
+    * coulexp: bool
+        If True, the coulomb potential is Z/r*exp(-r*r). If False, it is Z/r.
+        Default False.
+        If True, then the remaining coulomb potential part is added as external
+        potential internally in this object during the forward evaluation.
+        The reason of using this option is to avoid the long tail of Hartree
+        potential.
 
     Forward arguments
     -----------------
@@ -47,7 +54,8 @@ class HamiltonAtomYGauss(BaseHamilton):
     """
 
     def __init__(self, grid, gwidths,
-                       maxangmom=5, cylsymm=False):
+                       maxangmom=5, cylsymm=False,
+                       coulexp=False):
         ng = gwidths.shape[0]
         nsh = (maxangmom+1)**2 if not cylsymm else (maxangmom+1)
         ns = int(ng*nsh)
@@ -69,6 +77,7 @@ class HamiltonAtomYGauss(BaseHamilton):
         self.rs = grid.radial_grid.rgrid[:,0] # (nrad)
         nrad = self.rs.shape[0]
         self.maxangmom = maxangmom
+        self.coulexp = coulexp
 
         # get the radial basis in rgrid
         # (ng, nrad)
@@ -105,6 +114,17 @@ class HamiltonAtomYGauss(BaseHamilton):
         coul = -16./(3*np.sqrt(np.pi)) * gwnet**4 / gwprod52
         kin_ang = 2 * np.sqrt(2) / 3 * gwnet**3 / gwprod52
         kin_rad = -2 * np.sqrt(2) / 3 * gwnet**3 / gw2sum**2 / gwprod52 * gwpoly
+
+        if self.coulexp:
+            coul = -16.0 / (3*np.sqrt(np.pi) * gwprod52 * (2+1./gwnet2)**2)
+
+            # the remaining part of the coulomb potential
+            rs = rgrid[:,0]
+            self.vext_coul = -1./rs * (1 - torch.exp(-rs*rs))
+            smidx = rs < 1e-3
+            smrs = rs[smidx]
+            self.vext_coul[smidx] = -smrs * (1.0 - smrs*smrs*0.5)
+            self.vext_coul = self.vext_coul.unsqueeze(0) # (1,nr)
 
         # create the batch dimension to the matrix to enable batched matmul
         # shape: (1, ng, ng)
@@ -152,6 +172,8 @@ class HamiltonAtomYGauss(BaseHamilton):
         # vext part
         # self.basis: (ns, nr)
         # extpot: (nbatch, ns, ns)
+        if self.coulexp:
+            vext = vext + self.vext_coul * atomz.unsqueeze(-1)
         extpot = torch.matmul(vext.unsqueeze(1) * self.basis_dvolume, self.basis.transpose(-2,-1))
         # extpot = self.grid.mmintegralbox(vext.unsqueeze(1) * self.basis, self.basis.transpose(-2,-1))
         extpot = torch.bmm(extpot, wf) # (nbatch, ns, ncols)

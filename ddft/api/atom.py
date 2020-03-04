@@ -50,7 +50,7 @@ def atom(atomz, eks_model="lda",
     if not is_radial:
         maxangmom = angmoms.max()
         grid = Lebedev(radgrid, prec=13, basis_maxangmom=maxangmom, dtype=dtype, device=device)
-        H_models = [HamiltonAtomYGauss(grid, gwidths, maxangmom=maxangmom, cylsymm=cylsymm).to(dtype).to(device)]
+        H_models = [HamiltonAtomYGauss(grid, gwidths, maxangmom=maxangmom, cylsymm=cylsymm, coulexp=coulexp).to(dtype).to(device)]
     else:
         grid = radgrid
         H_models = [HamiltonAtomRadial(grid, gwidths, angmom=angmom, coulexp=coulexp).to(dtype).to(device) for angmom in angmoms]
