@@ -25,7 +25,7 @@ class HamiltonAtomYGauss(BaseHamilton):
         Using cylindrical symmetry or not. Default: False
     * coulexp: bool
         If True, the coulomb potential is Z/r*exp(-r*r). If False, it is Z/r.
-        Default False.
+        Default True.
         If True, then the remaining coulomb potential part is added as external
         potential internally in this object during the forward evaluation.
         The reason of using this option is to avoid the long tail of Hartree
@@ -55,7 +55,7 @@ class HamiltonAtomYGauss(BaseHamilton):
 
     def __init__(self, grid, gwidths,
                        maxangmom=5, cylsymm=False,
-                       coulexp=False):
+                       coulexp=True):
         ng = gwidths.shape[0]
         nsh = (maxangmom+1)**2 if not cylsymm else (maxangmom+1)
         ns = int(ng*nsh)

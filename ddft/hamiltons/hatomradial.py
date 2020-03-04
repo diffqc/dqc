@@ -36,7 +36,7 @@ class HamiltonAtomRadial(BaseHamilton):
         The atomic number of the central atom.
     * coulexp: bool
         If True, the coulomb potential is Z/r*exp(-r*r). If False, it is Z/r.
-        Default False.
+        Default True.
         If True, then the remaining coulomb potential part is added as external
         potential internally in this object during the forward evaluation.
         The reason of using this option is to avoid the long tail of Hartree
@@ -55,7 +55,7 @@ class HamiltonAtomRadial(BaseHamilton):
     """
 
     def __init__(self, grid, gwidths,
-                       angmom=0,coulexp=False):
+                       angmom=0,coulexp=True):
         ng = gwidths.shape[0]
         self._grid = grid
         super(HamiltonAtomRadial, self).__init__(
