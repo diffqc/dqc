@@ -30,6 +30,7 @@ def atom(atomz, eks_model="lda",
         "min_eps": 1e-9,
     }, bck_options)
     cylsymm = False
+    coulexp = True
 
     # normalize the device and eks_model
     device = _normalize_device(device)
@@ -52,7 +53,7 @@ def atom(atomz, eks_model="lda",
         H_models = [HamiltonAtomYGauss(grid, gwidths, maxangmom=maxangmom, cylsymm=cylsymm).to(dtype).to(device)]
     else:
         grid = radgrid
-        H_models = [HamiltonAtomRadial(grid, gwidths, angmom=angmom).to(dtype).to(device) for angmom in angmoms]
+        H_models = [HamiltonAtomRadial(grid, gwidths, angmom=angmom, coulexp=coulexp).to(dtype).to(device) for angmom in angmoms]
 
     # setup the hamiltonian parameters and the occupation numbers
     atomz_tensor = torch.tensor([atomz]).to(dtype).to(device)

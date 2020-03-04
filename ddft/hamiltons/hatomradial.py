@@ -34,6 +34,13 @@ class HamiltonAtomRadial(BaseHamilton):
         External radial potential other than the potential from the central atom.
     * atomz: torch.tensor (nbatch,)
         The atomic number of the central atom.
+    * coulexp: bool
+        If True, the coulomb potential is Z/r*exp(-r*r). If False, it is Z/r.
+        Default False.
+        If True, then the remaining coulomb potential part is added as external
+        potential internally in this object during the forward evaluation.
+        The reason of using this option is to avoid the long tail of Hartree
+        potential.
 
     Overlap arguments
     -----------------
@@ -48,7 +55,7 @@ class HamiltonAtomRadial(BaseHamilton):
     """
 
     def __init__(self, grid, gwidths,
-                       angmom=0):
+                       angmom=0,coulexp=False):
         ng = gwidths.shape[0]
         self._grid = grid
         super(HamiltonAtomRadial, self).__init__(
@@ -60,6 +67,7 @@ class HamiltonAtomRadial(BaseHamilton):
         self.gwidths = gwidths # torch.nn.Parameter(gwidths) # (ng)
         self.rs = grid.rgrid[:,0] # (nr,)
         self.angmom = angmom
+        self.coulexp = coulexp
 
         # get the basis in rgrid
         # (ng, nr)
@@ -73,7 +81,8 @@ class HamiltonAtomRadial(BaseHamilton):
 
         # construct the matrices provided ng is small enough
         gwprod = gw1 * self.gwidths
-        # gwprod32 = gwprod**1.5
+        gwprod32 = gwprod**1.5
+        gwprod2 = gwprod*gwprod
         gwprod12 = gwprod**0.5
         gwprod52 = gwprod**2.5
         gw2sum = gw1*gw1 + self.gwidths*self.gwidths
@@ -92,6 +101,16 @@ class HamiltonAtomRadial(BaseHamilton):
         kin_ang = 2 * np.sqrt(2) / 3 * gwnet**3 / gwprod52
         kin_rad = -2*np.sqrt(2) / 3 * gwnet**3 / gw2sum**2 / gwprod52 * gwpoly
         kin = kin_rad + kin_ang * angmom * (angmom+1)
+
+        if self.coulexp:
+            coul = -16.0 / (3*np.sqrt(np.pi) * gwprod52 * (2+1./gwnet2)**2)
+
+            # the remaining part of the coulomb potential
+            self.vext_coul = -1./self.rs * (1 - torch.exp(-self.rs*self.rs))
+            smidx = self.rs < 1e-3
+            smrs = self.rs[smidx]
+            self.vext_coul[smidx] = -smrs * (1.0 - smrs*smrs*0.5)
+            self.vext_coul = self.vext_coul.unsqueeze(0) # (1,nr)
 
         # create the batch dimension to the matrix to enable batched matmul
         # shape: (1, ns, ns)
@@ -114,6 +133,8 @@ class HamiltonAtomRadial(BaseHamilton):
 
     def fullmatrix(self, vext, atomz):
         # the external potential part
+        if self.coulexp:
+            vext = vext + self.vext_coul * atomz.unsqueeze(-1)
         extpot = self.grid.mmintegralbox(vext.unsqueeze(1) * self.basis, self.basis.transpose(-2,-1))
 
         # add all the matrix and apply the Hamiltonian
