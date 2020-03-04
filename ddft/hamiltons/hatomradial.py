@@ -67,7 +67,7 @@ class HamiltonAtomRadial(BaseHamilton):
         self.gwidths = gwidths # torch.nn.Parameter(gwidths) # (ng)
         self.rs = grid.rgrid[:,0] # (nr,)
         self.angmom = angmom
-        self.coulexp = coulexp
+        self.use_coulexp = coulexp
 
         # get the basis in rgrid
         # (ng, nr)
@@ -102,15 +102,16 @@ class HamiltonAtomRadial(BaseHamilton):
         kin_rad = -2*np.sqrt(2) / 3 * gwnet**3 / gw2sum**2 / gwprod52 * gwpoly
         kin = kin_rad + kin_ang * angmom * (angmom+1)
 
-        if self.coulexp:
-            coul = -16.0 / (3*np.sqrt(np.pi) * gwprod52 * (2+1./gwnet2)**2)
+        if self.use_coulexp:
+            coulexp = -16.0 / (3*np.sqrt(np.pi) * gwprod52 * (2+1./gwnet2)**2)
+            self.coulexp = coulexp.unsqueeze(0)
 
             # the remaining part of the coulomb potential
-            self.vext_coul = -1./self.rs * (1 - torch.exp(-self.rs*self.rs))
+            self.vext_coulexp = -1./self.rs * (1 - torch.exp(-self.rs*self.rs))
             smidx = self.rs < 1e-3
             smrs = self.rs[smidx]
-            self.vext_coul[smidx] = -smrs * (1.0 - smrs*smrs*0.5)
-            self.vext_coul = self.vext_coul.unsqueeze(0) # (1,nr)
+            self.vext_coulexp[smidx] = -smrs * (1.0 - smrs*smrs*0.5)
+            self.vext_coulexp = self.vext_coulexp.unsqueeze(0) # (1,nr)
 
         # create the batch dimension to the matrix to enable batched matmul
         # shape: (1, ns, ns)
@@ -119,26 +120,36 @@ class HamiltonAtomRadial(BaseHamilton):
         self.coul = coul.unsqueeze(0)
 
     ############################# basis part #############################
-    def forward(self, wf, vext, atomz):
+    def forward(self, wf, vext, atomz, charge):
         # wf: (nbatch, ns, ncols)
         # vext: (nbatch, nr)
         # atomz: (nbatch,)
+        # charge: (nbatch,)
 
-        fock = self.fullmatrix(vext, atomz)
+        fock = self.fullmatrix(vext, atomz, charge)
         hwf = torch.bmm(fock, wf)
         return hwf
 
     def precond(self, y, vext, atomz, biases=None, M=None, mparams=None):
         return y # ???
 
-    def fullmatrix(self, vext, atomz):
+    def fullmatrix(self, vext, atomz, charge):
         # the external potential part
-        if self.coulexp:
-            vext = vext + self.vext_coul * atomz.unsqueeze(-1)
+        numel = atomz - charge
+        if self.use_coulexp:
+            vext = vext + self.vext_coulexp * numel.unsqueeze(-1)
         extpot = self.grid.mmintegralbox(vext.unsqueeze(1) * self.basis, self.basis.transpose(-2,-1))
 
+        # the coulomb part
+        if self.use_coulexp:
+            pure_coul = self.coul * charge.unsqueeze(-1).unsqueeze(-1)
+            coulexp = self.coulexp * numel.unsqueeze(-1).unsqueeze(-1)
+            coul = pure_coul + coulexp
+        else:
+            coul = self.coul * atomz.unsqueeze(-1).unsqueeze(-1)
+
         # add all the matrix and apply the Hamiltonian
-        fock = self.kin + extpot + self.coul * atomz.unsqueeze(-1).unsqueeze(-1)
+        fock = self.kin + extpot + coul
         return fock
 
     def _overlap(self, wf):

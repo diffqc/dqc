@@ -77,7 +77,7 @@ class HamiltonAtomYGauss(BaseHamilton):
         self.rs = grid.radial_grid.rgrid[:,0] # (nrad)
         nrad = self.rs.shape[0]
         self.maxangmom = maxangmom
-        self.coulexp = coulexp
+        self.use_coulexp = coulexp
 
         # get the radial basis in rgrid
         # (ng, nrad)
@@ -115,16 +115,17 @@ class HamiltonAtomYGauss(BaseHamilton):
         kin_ang = 2 * np.sqrt(2) / 3 * gwnet**3 / gwprod52
         kin_rad = -2 * np.sqrt(2) / 3 * gwnet**3 / gw2sum**2 / gwprod52 * gwpoly
 
-        if self.coulexp:
-            coul = -16.0 / (3*np.sqrt(np.pi) * gwprod52 * (2+1./gwnet2)**2)
+        if self.use_coulexp:
+            coulexp = -16.0 / (3*np.sqrt(np.pi) * gwprod52 * (2+1./gwnet2)**2)
+            self.coulexp = coulexp.unsqueeze(0)
 
             # the remaining part of the coulomb potential
             rs = rgrid[:,0]
-            self.vext_coul = -1./rs * (1 - torch.exp(-rs*rs))
+            self.vext_coulexp = -1./rs * (1 - torch.exp(-rs*rs))
             smidx = rs < 1e-3
             smrs = rs[smidx]
-            self.vext_coul[smidx] = -smrs * (1.0 - smrs*smrs*0.5)
-            self.vext_coul = self.vext_coul.unsqueeze(0) # (1,nr)
+            self.vext_coulexp[smidx] = -smrs * (1.0 - smrs*smrs*0.5)
+            self.vext_coulexp = self.vext_coulexp.unsqueeze(0) # (1,nr)
 
         # create the batch dimension to the matrix to enable batched matmul
         # shape: (1, ng, ng)
@@ -151,17 +152,26 @@ class HamiltonAtomYGauss(BaseHamilton):
         self.lhat = torch.tensor(lhat, dtype=dtype, device=device) # (nsh,)
 
     ############################# basis part #############################
-    def forward(self, wf, vext, atomz):
+    def forward(self, wf, vext, atomz, charge):
         # wf: (nbatch, ns, ncols)
         # vext: (nbatch, nr)
         # atomz: (nbatch,)
 
         nbatch, ns, ncols = wf.shape
 
+        # coulomb matrix part
+        numel = atomz - charge
+        if self.use_coulexp:
+            pure_coul = self.coul * charge.unsqueeze(-1).unsqueeze(-1)
+            coulexp = self.coulexp * numel.unsqueeze(-1).unsqueeze(-1)
+            coul = pure_coul + coulexp
+        else:
+            coul = self.coul * atomz.unsqueeze(-1).unsqueeze(-1)
+
         # get the part that does not depend on angle (kin_rad and coulomb)
         wf = wf.contiguous()
         wf1 = wf.view(nbatch, self.ng, -1) # (nbatch, ng, nsh*ncols)
-        kin_rad_coul_mat = self.kin_rad + self.coul * atomz.unsqueeze(-1).unsqueeze(-2)
+        kin_rad_coul_mat = self.kin_rad + coul
         kin_rad_coul = torch.matmul(kin_rad_coul_mat, wf1)
 
         # get the angular momentum part
@@ -172,8 +182,8 @@ class HamiltonAtomYGauss(BaseHamilton):
         # vext part
         # self.basis: (ns, nr)
         # extpot: (nbatch, ns, ns)
-        if self.coulexp:
-            vext = vext + self.vext_coul * atomz.unsqueeze(-1)
+        if self.use_coulexp:
+            vext = vext + self.vext_coulexp * atomz.unsqueeze(-1)
         extpot = torch.matmul(vext.unsqueeze(1) * self.basis_dvolume, self.basis.transpose(-2,-1))
         # extpot = self.grid.mmintegralbox(vext.unsqueeze(1) * self.basis, self.basis.transpose(-2,-1))
         extpot = torch.bmm(extpot, wf) # (nbatch, ns, ncols)

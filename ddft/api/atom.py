@@ -11,7 +11,7 @@ from ddft.eks import BaseEKS, Hartree, xLDA
 
 __all__ = ["atom"]
 
-def atom(atomz, eks_model="lda",
+def atom(atomz, charge=0, eks_model="lda",
          gwmin=1e-5, gwmax=1e3, ng=60,
          rmin=1e-5, rmax=1e2, nr=200,
          dtype=torch.float64, device="cpu",
@@ -37,8 +37,10 @@ def atom(atomz, eks_model="lda",
     eks_model = _normalize_eks(eks_model)
 
     # get the atomic configuration
-    is_radial = _check_atom_is_radial(atomz)
-    orbitals = Orbitals(atomz, dtype, device,
+    numel = atomz - charge
+    is_radial = _check_atom_is_radial(numel)
+    print(numel, atomz, charge, is_radial)
+    orbitals = Orbitals(numel, dtype, device,
         radial_symmetric=is_radial, cylindrical_symmetric=cylsymm)
 
     # set up the basis and the radial grid
@@ -57,7 +59,8 @@ def atom(atomz, eks_model="lda",
 
     # setup the hamiltonian parameters and the occupation numbers
     atomz_tensor = torch.tensor([atomz]).to(dtype).to(device)
-    hparams = [atomz_tensor]
+    charge_tensor = torch.tensor([charge]).to(dtype).to(device)
+    hparams = [atomz_tensor, charge_tensor]
     vext = torch.zeros_like(grid.rgrid[:,0]).unsqueeze(0).to(dtype).to(device)
 
     # setup the modules
@@ -79,10 +82,10 @@ def atom(atomz, eks_model="lda",
     return energy, density
 
 class Orbitals(object):
-    def __init__(self, atomz, dtype, device, radial_symmetric=True,
+    def __init__(self, numel, dtype, device, radial_symmetric=True,
                  cylindrical_symmetric=True):
-        self.atomz = atomz
-        self.elocc, self.elangmom = get_occupation(atomz)
+        self.numel = numel
+        self.elocc, self.elangmom = get_occupation(numel)
 
         # get angular momentums
         self.max_angmom = np.max(self.elangmom)
@@ -136,19 +139,19 @@ class Orbitals(object):
     def get_foccs(self):
         return self.foccs
 
-def get_occupation(atomz):
+def get_occupation(numel):
     orbitals = ["1s", "2s", "2p", "3s", "3p", "4s", "3d", "4p", "5s", "4d", "5p", "6s", "4f"]
     idx = 0
     elocc = []
     elangmom = []
-    while atomz > 0:
+    while numel > 0:
         orbital = orbitals[idx]
         occ, angmom = get_max_occ_angmom(orbital)
-        if atomz < occ:
-            occ = atomz
+        if numel < occ:
+            occ = numel
         elocc.append(occ)
         elangmom.append(angmom)
-        atomz = atomz - occ
+        numel = numel - occ
         idx = idx + 1
     return np.array(elocc), np.array(elangmom)
 
@@ -160,8 +163,8 @@ def get_max_occ_angmom(orbital):
         "f": (14, 3)
     }[orbital[-1]]
 
-def _check_atom_is_radial(atomz):
-    return atomz in [1,2,3,4,7,10,11,12,15,18,19,20,25,30,33,36,37,38,43,48,51,54,55,56,86] # 56 is 6s2
+def _check_atom_is_radial(numel):
+    return numel in [1,2,3,4,7,10,11,12,15,18,19,20,25,30,33,36,37,38,43,48,51,54,55,56,86] # 56 is 6s2
 
 def _normalize_device(device):
     if isinstance(device, str):
@@ -219,14 +222,14 @@ if __name__ == "__main__":
             eks_model = PseudoLDA(a, p)
         loss = 0
         for i,atomz in enumerate(atomzs):
-            energy, density = atom(atomz, eks_model)
+            energy, density = atom(atomz, eks_model=eks_model)
             loss = loss + ((energy - expdata[i]) / expdata[i])**2
         return loss
 
     if mode == "fwd":
         t0 = time.time()
         for i,atomz in enumerate(atomzs):
-            energy, _ = atom(atomz, eks_model)
+            energy, _ = atom(atomz, eks_model=eks_model)
             print("Atom %d: %.5e" % (atomz, energy))
         t1 = time.time()
         print("Forward done in %fs" % (t1-t0))
