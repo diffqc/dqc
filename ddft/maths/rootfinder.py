@@ -29,7 +29,7 @@ def selfconsistent(f, x0, jinv0=1.0, **options):
         "min_eps": 1e-6,
         "beta": 0.9, # contribution of the new delta_n to the total delta_n
         "jinvdecay": 1.0,
-        "decayevery": 1,
+        "decayevery": 100,
         "verbose": False,
     }, options)
 
@@ -55,7 +55,7 @@ def selfconsistent(f, x0, jinv0=1.0, **options):
     dx = torch.zeros_like(x).to(x.device)
     bestcrit = float("inf")
     for i in range(config["max_niter"]):
-        dxnew = -torch.bmm(jinv, fx.unsqueeze(-1)).squeeze(-1) # (nbatch, nfeat)
+        dxnew = -jinv0 * fx # (nbatch, nfeat)
         dx = (1 - beta) * dx + beta * dxnew
         xnew = x + dx # (nbatch, nfeat)
         fxnew = f(xnew)
@@ -142,7 +142,7 @@ def diis(f, x0, jinv0=1.0, **options):
     midx = 0
     for i in range(config["max_niter"]):
         if mfill < 2:
-            dxnew = -torch.bmm(jinv, fx.unsqueeze(-1)).squeeze(-1) # (nbatch, nfeat)
+            dxnew = -jinv * fx # (nbatch, nfeat)
             xnew = x + dxnew # (nbatch, nfeat)
         else:
             # construct the matrix B
@@ -215,6 +215,8 @@ def broyden(f, x0, jinv0=1.0, **options):
     * x: torch.tensor (nbatch, nfeat)
         The x that approximate f(x) = 0.
     """
+    raise RuntimeError("This method is unfinished. Please use other methods.")
+
     # set up the default options
     config = set_default_option({
         "max_niter": 20,
@@ -239,8 +241,8 @@ def broyden(f, x0, jinv0=1.0, **options):
     fx = f(x0) # (nbatch, nfeat)
     stop_reason = "max_niter"
     for i in range(config["max_niter"]):
-        dxnew = -torch.bmm(jinv, fx.unsqueeze(-1)) # (nbatch, nfeat, 1)
-        xnew = x + dxnew.squeeze(-1) # (nbatch, nfeat)
+        dxnew = -jinv * fx # (nbatch, nfeat)
+        xnew = x + dxnew # (nbatch, nfeat)
         fxnew = f(xnew)
         dfnew = fxnew - fx
 
@@ -409,8 +411,7 @@ def _set_jinv0(jinv0, x0):
     if type(jinv0) == torch.Tensor:
         jinv = jinv0
     else:
-        jinv = torch.eye(nfeat).unsqueeze(0).repeat(nbatch, 1, 1).to(dtype).to(device)
-        jinv = jinv * jinv0
+        jinv = torch.zeros(1,nfeat).to(dtype).to(device) + jinv0 # (1, nfeat)
     return jinv
 
 def _set_jinv0_diag(jinv0, x0):
