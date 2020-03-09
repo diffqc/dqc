@@ -114,7 +114,7 @@ class HamiltonMoleculeC0Gauss(BaseHamilton):
         self.olp_mat = self.olp_mat * norm_mat
 
         # get the basis
-        self.rgrid = self.grid.rgrid # (nr, 3)
+        self.rgrid = self.grid.rgrid_in_xyz # (nr, 3)
         dist_sq = ((self.rgrid - centres.unsqueeze(1))**2).sum(dim=-1) # (nbasis*nelmts, nr)
         basis_all = torch.exp(-alphas.unsqueeze(-1) * dist_sq) # (nbasis*nelmts, nr)
         basis = (basis_all * coeffs.unsqueeze(-1)).view(self.nbasis, self.nelmts, -1).sum(dim=1) # (nbasis, nr)

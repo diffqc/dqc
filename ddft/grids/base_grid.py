@@ -87,6 +87,14 @@ class BaseGrid(object):
         pleft = p1 * self.get_dvolume()
         return torch.matmul(pleft, p2)
 
+class Base3DGrid(BaseGrid):
+    @abstractproperty
+    def rgrid_in_xyz(self):
+        """
+        Returns the rgrid in Cartesian coordinate.
+        """
+        pass
+
 class BaseRadialGrid(BaseGrid):
     @abstractmethod
     def antiderivative(self, intgn, dim=-1, zeroat="left"):
@@ -95,7 +103,7 @@ class BaseRadialGrid(BaseGrid):
         """
         pass
 
-class BaseRadialAngularGrid(BaseGrid):
+class BaseRadialAngularGrid(Base3DGrid):
     @abstractproperty
     def radial_grid(self):
         """

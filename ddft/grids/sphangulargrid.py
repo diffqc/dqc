@@ -42,6 +42,7 @@ class Lebedev(BaseRadialAngularGrid):
         rg = self.radrgrid.unsqueeze(-1).repeat(1, nphitheta).unsqueeze(-1) # (nrad, nphitheta, 1)
         ptg = self.phithetargrid.unsqueeze(0).repeat(nrad, 1, 1) # (nrad, nphitheta, 2)
         self._rgrid = torch.cat((rg, ptg), dim=-1).view(-1, 3) # (nrad*nphitheta, 3)
+        self._rgrid_xyz = None
 
         # get the integration part
         self._dvolume_rad = self.radgrid.get_dvolume() # (nrad,)
@@ -106,6 +107,20 @@ class Lebedev(BaseRadialAngularGrid):
     @property
     def rgrid(self):
         return self._rgrid
+
+    @property
+    def rgrid_in_xyz(self):
+        if self._rgrid_xyz is None:
+            r = self._rgrid[:,0]
+            phi = self._rgrid[:,1]
+            theta = self._rgrid[:,2]
+
+            rsintheta = r * torch.sin(theta)
+            x = (rsintheta * torch.cos(phi)).unsqueeze(-1)
+            y = (rsintheta * torch.sin(phi)).unsqueeze(-1)
+            z = (r*torch.cos(theta)).unsqueeze(-1)
+            self._rgrid_xyz = torch.cat((x,y,z), dim=-1)
+        return self._rgrid_xyz
 
     @property
     def boxshape(self):
