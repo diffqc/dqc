@@ -110,3 +110,19 @@ class BaseRadialAngularGrid(Base3DGrid):
         Returns the radial grid associated with the parent grid.
         """
         pass
+
+class BaseMultiAtomsGrid(Base3DGrid):
+    @abstractproperty
+    def atom_grid(self):
+        """
+        Returns the grid for individual atom.
+        """
+        pass
+
+    @abstractmethod
+    def get_atom_weights(self):
+        """
+        Returns the weights associated with the integration grid per atom.
+        Shape: (natoms, nr//natoms)
+        """
+        pass
