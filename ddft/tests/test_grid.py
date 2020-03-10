@@ -61,6 +61,17 @@ def test_spherical_poisson():
     for gridname, radgridname, fcnname in product(sph_gridnames, radial_gridnames, radial_fcnnames+sph_fcnnames): # ["gauss-l2"]):
         runtest(gridname, radgridname, fcnname)
 
+def test_radial_interpolate():
+    def runtest(gridname, fcnname):
+        grid = get_radial_grid(gridname, dtype, device)
+        prof1 = get_fcn(fcnname, grid.rgrid).transpose(-2, -1)
+        prof1 = prof1 / prof1.max(dim=-1, keepdim=True)[0]
+        rtol, atol = get_rtol_atol("interpolate", gridname)
+        runtest_interpolate(grid, prof1, rtol=rtol, atol=atol)
+
+    for gridname, fcnname in product(radial_gridnames, radial_fcnnames):
+        runtest(gridname, fcnname)
+
 ############################## helper functions ##############################
 def runtest_integralbox(grid, prof, rtol, atol):
     ones = torch.tensor([1.0], dtype=prof.dtype, device=prof.device)
@@ -86,6 +97,19 @@ def runtest_poisson(grid, prof, poisson, rtol, atol):
     poisson = poisson / poisson.abs().max(dim=0)[0]
     assert torch.allclose(pois, poisson, rtol=rtol, atol=atol)
 
+def runtest_interpolate(grid, prof, rtol, atol):
+    # interpolated at the exact position must be equal
+    prof1 = grid.interpolate(prof, grid.rgrid)
+    assert torch.allclose(prof, prof1)
+
+    # interpolate at the half point
+    alphas = [0.05, 0.95]
+    for alpha in alphas:
+        grid2 = grid.rgrid[1:,:] * (1-alpha) + grid.rgrid[:-1,:] * (alpha)
+        prof2 = grid.interpolate(prof, grid2)
+        prof2_estimate = prof[:,1:] * (1-alpha) + prof[:,:-1] * (alpha)
+        assert torch.allclose(prof2_estimate, prof2, rtol=rtol, atol=atol)
+
 def get_rtol_atol(taskname, gridname1, gridname2=None):
     rtolatol = {
         "integralbox": {
@@ -96,6 +120,12 @@ def get_rtol_atol(taskname, gridname1, gridname2=None):
             }
         },
         "poisson": {
+            "legradialshiftexp": [0.0, 8e-4],
+            "lebedev": {
+                "legradialshiftexp": [0.0, 2e-3],
+            }
+        },
+        "interpolate": {
             "legradialshiftexp": [0.0, 8e-4],
             "lebedev": {
                 "legradialshiftexp": [0.0, 2e-3],
