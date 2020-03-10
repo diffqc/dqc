@@ -62,6 +62,42 @@ class LegendreRadialTransform(BaseRadialGrid):
     def rgrid(self):
         return self._rgrid
 
+    def interpolate(self, f, rq, extrap=None):
+        # f: (nbatch, nr)
+        # rq: (nrq, ndim)
+        # return: (nbatch, nrq)
+        nbatch, nr = f.shape
+        nrq = rq.shape[0]
+
+        rmax = self.rgrid.max()
+        idxinterp = rq <= rmax
+        idxextrap = rq > rmax
+        allinterp = torch.all(idxinterp)
+        if allinterp:
+            rqinterp = rq[:,0]
+        else:
+            rqinterp = rq[idxinterp,0]
+
+        coeff = torch.matmul(f, self.inv_basis) # (nbatch, nr)
+        xq = self.invtransform(rqinterp) # (nrq,)
+        basis = torch.tensor(legvander(xq, nr-1), dtype=rq.dtype, device=rq.device) # (nrq, nr)
+        frqinterp = torch.matmul(coeff, basis.transpose(-2,-1))
+
+        if allinterp:
+            return frqinterp
+
+        # extrapolate
+        if extrap is not None:
+            frqextrap = extrap(rq[idxextrap,:])
+
+        # combine the interpolation and extrapolation
+        frq = torch.zeros((nbatch, nrq), dtype=rq.dtype, device=rq.device)
+        frq[idxinterp] = frqinterp
+        if extrap is not None:
+            frq[idxextrap] = frqextrap
+
+        return frq
+
     def antiderivative(self, intgn, dim=-1, zeroat="left"):
         # intgn: (..., nr, ...)
         intgn = intgn.transpose(dim, -1) # (..., nr)
@@ -84,6 +120,9 @@ class LegendreRadialShiftExp(LegendreRadialTransform):
 
     def transform(self, xlg):
         return torch.exp((xlg + 1)*0.5 * self.logrmm + self.logrmin) - self.rmin
+
+    def invtransform(self, rs):
+        return (torch.log(rs + self.rmin) - self.logrmin) / (0.5 * self.logrmm) - 1.0
 
     def get_scaling(self, rs):
         return (rs + self.rmin) * self.logrmm * 0.5
