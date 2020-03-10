@@ -100,6 +100,29 @@ class Lebedev(BaseRadialAngularGrid):
         v = v.view(nbatch, nr)
         return -v
 
+    def interpolate(self, f, rq):
+        # f: (nbatch, nr)
+        # rq: (nr2, ndim)
+        # return (nbatch, nr2)
+
+        # obtain the basis part of f
+        nbatch = f.shape[0]
+        f1 = f.view(nbatch, self.nrad, -1) # (nbatch, nrad, nphitheta)
+        basis = self._get_basis() # (nsh, nphitheta)
+        basis_integrate = basis * self.wphitheta
+        frad_lm = torch.bmm(basis_integrate.unsqueeze(0).expand(nbatch,-1,-1), f1.transpose(-2,-1)) # (nbatch, nsh, nrad)
+
+        # interpolate f in r-direction
+        rqrad = rq[:,0] # (nr2)
+        frqrad = self.radgrid.interpolate(frad_lm.view(-1, frad_lm.shape[-1]), rqrad).view(nbatch, -1, rqrad.shape[0]) # (nbatch, nsh, nr2)
+
+        # get the basis Y as function of rq
+        rqbasis = self._get_basis(rq[:,1:]) # (nsh, nr2)
+
+        # get the value by multiplying and sum the radial function and the basis
+        frq = (frqrad * rqbasis).sum(dim=1) # (nbatch, nr2)
+        return frq
+
     @property
     def radial_grid(self):
         return self.radgrid
@@ -126,12 +149,17 @@ class Lebedev(BaseRadialAngularGrid):
     def boxshape(self):
         warnings.warn("Boxshape is obsolete. Please refrain in using it.")
 
-    def _get_basis(self):
-        if not hasattr(self, "_basis_"):
-            phi = self.phithetargrid[:,0]
-            costheta = torch.cos(self.phithetargrid[:,1])
-            self._basis_ = spharmonics(costheta, phi, self.basis_maxangmom)
-        return self._basis_
+    def _get_basis(self, phitheta=None):
+        if phitheta is None:
+            if not hasattr(self, "_basis_"):
+                phi = self.phithetargrid[:,0]
+                costheta = torch.cos(self.phithetargrid[:,1])
+                self._basis_ = spharmonics(costheta, phi, self.basis_maxangmom)
+            return self._basis_
+        else:
+            phi = phitheta[:,0]
+            costheta = torch.cos(phitheta[:,1])
+            return spharmonics(costheta, phi, self.basis_maxangmom)
 
     def _get_angmoms(self):
         if not hasattr(self, "_angmoms_"):

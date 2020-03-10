@@ -87,6 +87,25 @@ class BaseGrid(object):
         pleft = p1 * self.get_dvolume()
         return torch.matmul(pleft, p2)
 
+    def interpolate(self, f, rq):
+        """
+        Interpolate the function f to any point rq.
+
+        Arguments
+        ---------
+        * f: torch.tensor (nbatch, nr)
+            The function to be interpolated.
+        * rq: torch.tensor (nrq, ndim)
+            The position where the interpolated value is queried.
+
+        Returns
+        -------
+        * fq: torch.tensor (nbatch, nrq)
+            The interpolated function at the given queried position.
+        """
+        raise RuntimeError("Unimplemented interpolate function for class %s" % \
+                           (self.__class__.__name__))
+
 class Base3DGrid(BaseGrid):
     @abstractproperty
     def rgrid_in_xyz(self):
