@@ -25,6 +25,27 @@ class LegendreRadialTransform(BaseRadialGrid):
         self.basis = torch.tensor(basis.T).to(dtype).to(device)
         self.inv_basis = self.basis.inverse()
 
+    @abstractmethod
+    def transform(self, xlg):
+        """
+        Transform the coordinate from [-1,1] to the intended coordinate.
+        """
+        pass
+
+    @abstractmethod
+    def invtransform(self, rs):
+        """
+        Transform back from the intended coordinate to the coordinate [-1,1].
+        """
+        pass
+
+    @abstractmethod
+    def get_scaling(self, rs):
+        """
+        Obtain the scaling dr/dx for the integration.
+        """
+        pass
+
     def get_dvolume(self):
         return self._dvolume
 
