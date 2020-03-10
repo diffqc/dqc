@@ -72,6 +72,19 @@ def test_radial_interpolate():
     for gridname, fcnname in product(radial_gridnames, radial_fcnnames):
         runtest(gridname, fcnname)
 
+def test_spherical_interpolate():
+    def runtest(spgridname, radgridname, fcnname):
+        radgrid = get_radial_grid(radgridname, dtype, device)
+        sphgrid = get_spherical_grid(spgridname, radgrid, dtype, device)
+        prof1 = get_fcn(fcnname, sphgrid.rgrid).transpose(-2,-1)
+        prof1 = prof1 / prof1.max(dim=-1, keepdim=True)[0]
+        rtol, atol = get_rtol_atol("interpolate", spgridname, radgridname)
+        print(fcnname, spgridname, radgridname)
+        runtest_interpolate(sphgrid, prof1, rtol=rtol, atol=atol)
+
+    for gridname, radgridname, fcnname in product(sph_gridnames, radial_gridnames, radial_fcnnames+sph_fcnnames):
+        runtest(gridname, radgridname, fcnname)
+
 ############################## helper functions ##############################
 def runtest_integralbox(grid, prof, rtol, atol):
     ones = torch.tensor([1.0], dtype=prof.dtype, device=prof.device)
@@ -102,8 +115,8 @@ def runtest_interpolate(grid, prof, rtol, atol):
     prof1 = grid.interpolate(prof, grid.rgrid)
     assert torch.allclose(prof, prof1)
 
-    # interpolate at the half point
-    alphas = [0.05, 0.95]
+    # interpolate at the nearby points
+    alphas = [0.001, 0.999]
     for alpha in alphas:
         grid2 = grid.rgrid[1:,:] * (1-alpha) + grid.rgrid[:-1,:] * (alpha)
         prof2 = grid.interpolate(prof, grid2)
@@ -126,9 +139,9 @@ def get_rtol_atol(taskname, gridname1, gridname2=None):
             }
         },
         "interpolate": {
-            "legradialshiftexp": [0.0, 8e-4],
+            "legradialshiftexp": [0.0, 2e-5],
             "lebedev": {
-                "legradialshiftexp": [0.0, 2e-3],
+                "legradialshiftexp": [0.0, 1e-2],
             }
         }
     }

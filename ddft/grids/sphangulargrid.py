@@ -120,10 +120,10 @@ class Lebedev(BaseRadialAngularGrid):
         idxextrap = rqrad > rmax
         allinterp = torch.all(idxinterp)
         if allinterp:
-            rqradinterp = rqrad
+            rqradinterp = rq[:,:1]
             phithetaqinterp = rq[:,1:]
         else:
-            rqradinterp = rqrad[idxinterp]
+            rqradinterp = rq[idxinterp,:1]
             phithetaqinterp = rq[idxinterp,1:]
 
         # interpolate f in r-direction
