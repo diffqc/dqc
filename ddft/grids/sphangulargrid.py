@@ -3,16 +3,16 @@ import warnings
 import torch
 import numpy as np
 import ddft
-from ddft.grids.base_grid import BaseGrid, BaseRadialGrid, BaseRadialAngularGrid
+from ddft.grids.base_grid import BaseGrid, BaseTransformed1DGrid, BaseRadialAngularGrid
 from ddft.utils.spharmonics import spharmonics
 
 class Lebedev(BaseRadialAngularGrid):
     def __init__(self, radgrid, prec, basis_maxangmom=None, dtype=torch.float, device=torch.device('cpu')):
         super(Lebedev, self).__init__()
 
-        # radgrid must be a BaseRadialGrid
-        if not isinstance(radgrid, BaseRadialGrid):
-            raise TypeError("Argument radgrid must be a BaseRadialGrid")
+        # radgrid must be a BaseTransformed1DGrid
+        if not isinstance(radgrid, BaseTransformed1DGrid):
+            raise TypeError("Argument radgrid must be a BaseTransformed1DGrid")
 
         # the precision must be an odd number in range [3, 131]
         self.prec = prec

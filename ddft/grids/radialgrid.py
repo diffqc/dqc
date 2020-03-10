@@ -2,10 +2,10 @@ from abc import abstractmethod
 import torch
 import numpy as np
 from numpy.polynomial.legendre import leggauss, legvander
-from ddft.grids.base_grid import BaseGrid, BaseRadialGrid
+from ddft.grids.base_grid import BaseGrid, BaseTransformed1DGrid
 from ddft.utils.legendre import legint
 
-class LegendreRadialTransform(BaseRadialGrid):
+class LegendreRadialTransform(BaseTransformed1DGrid):
     def __init__(self, nx, dtype=torch.float, device=torch.device('cpu')):
         xleggauss, wleggauss = leggauss(nx)
         self.xleggauss = torch.tensor(xleggauss, dtype=dtype, device=device)
@@ -24,27 +24,6 @@ class LegendreRadialTransform(BaseRadialGrid):
         basis = legvander(xleggauss, nx-1) # (nr, nr)
         self.basis = torch.tensor(basis.T).to(dtype).to(device)
         self.inv_basis = self.basis.inverse()
-
-    @abstractmethod
-    def transform(self, xlg):
-        """
-        Transform the coordinate from [-1,1] to the intended coordinate.
-        """
-        pass
-
-    @abstractmethod
-    def invtransform(self, rs):
-        """
-        Transform back from the intended coordinate to the coordinate [-1,1].
-        """
-        pass
-
-    @abstractmethod
-    def get_scaling(self, rs):
-        """
-        Obtain the scaling dr/dx for the integration.
-        """
-        pass
 
     def get_dvolume(self):
         return self._dvolume
@@ -118,16 +97,6 @@ class LegendreRadialTransform(BaseRadialGrid):
             frq[idxextrap] = frqextrap
 
         return frq
-
-    def antiderivative(self, intgn, dim=-1, zeroat="left"):
-        # intgn: (..., nr, ...)
-        intgn = intgn.transpose(dim, -1) # (..., nr)
-        intgn = intgn * self._scaling
-        coeff = torch.matmul(intgn, self.inv_basis) # (..., nr)
-        intcoeff = legint(coeff, dim=dim, zeroat=zeroat)[..., :-1] # (nbatch, nr)
-        res = torch.matmul(intcoeff, self.basis) # (..., nr)
-        res = res.transpose(dim, -1)
-        return res
 
 class LegendreRadialShiftExp(LegendreRadialTransform):
     def __init__(self, rmin, rmax, nr, dtype=torch.float, device=torch.device('cpu')):

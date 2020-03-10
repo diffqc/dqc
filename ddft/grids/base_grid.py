@@ -116,11 +116,25 @@ class Base3DGrid(BaseGrid):
         """
         pass
 
-class BaseRadialGrid(BaseGrid):
+class BaseTransformed1DGrid(BaseGrid):
     @abstractmethod
-    def antiderivative(self, intgn, dim=-1, zeroat="left"):
+    def transform(self, xlg):
         """
-        Perform an integration along the specified dimension.
+        Transform the coordinate from [-1,1] to the intended coordinate.
+        """
+        pass
+
+    @abstractmethod
+    def invtransform(self, rs):
+        """
+        Transform back from the intended coordinate to the coordinate [-1,1].
+        """
+        pass
+
+    @abstractmethod
+    def get_scaling(self, rs):
+        """
+        Obtain the scaling dr/dx for the integration.
         """
         pass
 
