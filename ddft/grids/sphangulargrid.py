@@ -100,27 +100,53 @@ class Lebedev(BaseRadialAngularGrid):
         v = v.view(nbatch, nr)
         return -v
 
-    def interpolate(self, f, rq):
+    def interpolate(self, f, rq, extrap=None):
         # f: (nbatch, nr)
         # rq: (nr2, ndim)
         # return (nbatch, nr2)
 
         # obtain the basis part of f
         nbatch = f.shape[0]
+        nr2 = rq.shape[0]
         f1 = f.view(nbatch, self.nrad, -1) # (nbatch, nrad, nphitheta)
         basis = self._get_basis() # (nsh, nphitheta)
         basis_integrate = basis * self.wphitheta
         frad_lm = torch.bmm(basis_integrate.unsqueeze(0).expand(nbatch,-1,-1), f1.transpose(-2,-1)) # (nbatch, nsh, nrad)
 
-        # interpolate f in r-direction
+        # obtain the points to be interpolated and extrapolated
         rqrad = rq[:,0] # (nr2)
-        frqrad = self.radgrid.interpolate(frad_lm.view(-1, frad_lm.shape[-1]), rqrad).view(nbatch, -1, rqrad.shape[0]) # (nbatch, nsh, nr2)
+        rmax = self.radrgrid.max()
+        idxinterp = rqrad <= rmax
+        idxextrap = rqrad > rmax
+        allinterp = torch.all(idxinterp)
+        if allinterp:
+            rqradinterp = rqrad
+            phithetaqinterp = rq[:,1:]
+        else:
+            rqradinterp = rqrad[idxinterp]
+            phithetaqinterp = rq[idxinterp,1:]
 
+        # interpolate f in r-direction
+        frqrad = self.radgrid.interpolate(frad_lm.view(-1, frad_lm.shape[-1]), rqradinterp).view(nbatch, -1, rqrad.shape[0]) # (nbatch, nsh, nr2interp)
         # get the basis Y as function of rq
-        rqbasis = self._get_basis(rq[:,1:]) # (nsh, nr2)
-
+        rqbasis = self._get_basis(phithetaqinterp) # (nsh, nr2interp)
         # get the value by multiplying and sum the radial function and the basis
-        frq = (frqrad * rqbasis).sum(dim=1) # (nbatch, nr2)
+        frqinterp = (frqrad * rqbasis).sum(dim=1) # (nbatch, nr2interp)
+
+        # if there is no extrapolation, then we're done here
+        if allinterp:
+            return frqinterp
+
+        # extrapolate the function
+        if extrap is not None:
+            frqextrap = extrap(rq[idxextrap,:])
+
+        # combine the interpolation and extrapolation
+        frq = torch.zeros((nbatch, nr2), dtype=rq.dtype, device=rq.device)
+        frq[idxinterp] = frqinterp
+        if extrap is not None:
+            frq[idxextrap] = frqextrap
+
         return frq
 
     @property

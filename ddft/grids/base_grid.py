@@ -87,7 +87,7 @@ class BaseGrid(object):
         pleft = p1 * self.get_dvolume()
         return torch.matmul(pleft, p2)
 
-    def interpolate(self, f, rq):
+    def interpolate(self, f, rq, extrap=None):
         """
         Interpolate the function f to any point rq.
 
@@ -97,6 +97,8 @@ class BaseGrid(object):
             The function to be interpolated.
         * rq: torch.tensor (nrq, ndim)
             The position where the interpolated value is queried.
+        * extrap: callable(torch.tensor) -> torch.tensor
+            The extrapolation function. If None, it will be filled with 0.
 
         Returns
         -------
