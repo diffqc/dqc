@@ -24,7 +24,7 @@ class Hartree(BaseEKS):
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     from ddft.eks.vks import VKS
-    from ddft.grids.radialshiftexp import RadialShiftExp, LegendreRadialShiftExp
+    from ddft.grids.radialgrid import LegendreRadialShiftExp
     from ddft.utils.fd import finite_differences
 
     dtype = torch.float64

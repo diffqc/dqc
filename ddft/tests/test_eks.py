@@ -12,9 +12,6 @@ class EKS1(BaseEKS):
     def forward(self, x):
         return self.a * x**self.p
 
-def test_vks_radial():
-    run_vks_test("radialshiftexp", "exp")
-
 def test_vks_radial_legendre():
     run_vks_test("legradialshiftexp", "exp")
 
@@ -23,9 +20,6 @@ def test_vks_lebedev():
     run_vks_test("lebedev", "gauss-l2")
     run_vks_test("lebedev", "gauss-l1m1")
     run_vks_test("lebedev", "gauss-l2m2")
-
-def test_hartree_radial():
-    run_hartree_test("radialshiftexp", "exp")
 
 def test_hartree_radial_legendre():
     run_hartree_test("legradialshiftexp", "exp")
@@ -66,12 +60,10 @@ def run_hartree_test(gridname, fcnname, rtol=1e-5, atol=1e-8):
     assert torch.allclose(vks_hartree, vks_poisson, rtol=rtol, atol=atol)
 
 def _setup_density(gridname, fcnname, dtype=torch.float64):
-    from ddft.grids.radialshiftexp import RadialShiftExp, LegendreRadialShiftExp
+    from ddft.grids.radialgrid import LegendreRadialShiftExp
     from ddft.grids.sphangulargrid import Lebedev
 
-    if gridname == "radialshiftexp":
-        grid = RadialShiftExp(1e-6, 1e4, 2000, dtype=dtype)
-    elif gridname == "legradialshiftexp":
+    if gridname == "legradialshiftexp":
         grid = LegendreRadialShiftExp(1e-6, 1e4, 200, dtype=dtype)
     elif gridname == "lebedev":
         radgrid = LegendreRadialShiftExp(1e-6, 1e4, 200, dtype=dtype)

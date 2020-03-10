@@ -237,7 +237,7 @@ class HamiltonAtomYGauss(BaseHamilton):
         return self._grid
 
 if __name__ == "__main__":
-    from ddft.grids.radialshiftexp import LegendreRadialShiftExp
+    from ddft.grids.radialgrid import LegendreRadialShiftExp
     from ddft.grids.sphangulargrid import Lebedev
 
     dtype = torch.float64

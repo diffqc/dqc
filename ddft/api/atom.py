@@ -4,7 +4,7 @@ from ddft.dft.dft import DFT, DFTMulti
 from ddft.utils.misc import set_default_option
 from ddft.hamiltons.hatomradial import HamiltonAtomRadial
 from ddft.hamiltons.hatomygauss import HamiltonAtomYGauss
-from ddft.grids.radialshiftexp import LegendreRadialShiftExp
+from ddft.grids.radialgrid import LegendreRadialShiftExp
 from ddft.grids.sphangulargrid import Lebedev
 from ddft.modules.equilibrium import EquilibriumModule
 from ddft.eks import BaseEKS, Hartree, xLDA

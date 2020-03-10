@@ -2,10 +2,10 @@ from itertools import product
 import torch
 import numpy as np
 from scipy.special import gamma, gammaincc
-from ddft.grids.radialshiftexp import RadialShiftExp, LegendreRadialShiftExp
+from ddft.grids.radialgrid import LegendreRadialShiftExp
 from ddft.grids.sphangulargrid import Lebedev
 
-radial_gridnames = ["radialshiftexp", "legradialshiftexp"]
+radial_gridnames = ["legradialshiftexp"]
 radial_fcnnames = ["gauss1", "exp1"]
 sph_gridnames = ["lebedev"]
 sph_fcnnames = ["gauss-l1", "gauss-l2", "gauss-l1m1", "gauss-l2m2"]
@@ -90,18 +90,14 @@ def get_rtol_atol(taskname, gridname1, gridname2=None):
     rtolatol = {
         "integralbox": {
             # this is compared to 1, so rtol has the same effect as atol
-            "radialshiftexp": [1e-4, 0.0],
             "legradialshiftexp": [1e-8, 0.0],
             "lebedev": {
-                "radialshiftexp": [1e-4, 0.0],
                 "legradialshiftexp": [1e-8, 0.0],
             }
         },
         "poisson": {
-            "radialshiftexp": [0.0, 2e-2],
             "legradialshiftexp": [0.0, 8e-4],
             "lebedev": {
-                "radialshiftexp": [0.0, 6e-2],
                 "legradialshiftexp": [0.0, 2e-3],
             }
         }
@@ -112,9 +108,7 @@ def get_rtol_atol(taskname, gridname1, gridname2=None):
         return rtolatol[taskname][gridname1][gridname2]
 
 def get_radial_grid(gridname, dtype, device):
-    if gridname == "radialshiftexp":
-        grid = RadialShiftExp(1e-6, 1e4, 400, dtype=dtype, device=device)
-    elif gridname == "legradialshiftexp":
+    if gridname == "legradialshiftexp":
         grid = LegendreRadialShiftExp(1e-6, 1e4, 400, dtype=dtype, device=device)
     else:
         raise RuntimeError("Unknown radial grid name: %s" % gridname)

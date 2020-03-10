@@ -237,7 +237,7 @@ if __name__ == "__main__":
     from ddft.hamiltons.hatomradial import HamiltonAtomRadial
     from ddft.modules.equilibrium import EquilibriumModule
     from ddft.grids.linearnd import LinearNDGrid
-    from ddft.grids.radialshiftexp import RadialShiftExp
+    from ddft.grids.radialgrid import LegendreRadialShiftExp
     from ddft.eks import BaseEKS, Hartree, xLDA
 
     class EKS1(BaseEKS):
@@ -271,7 +271,7 @@ if __name__ == "__main__":
 
     elif mode == "atom":
         gwidths = torch.logspace(np.log10(1e-5), np.log10(1e2), 100).to(dtype)
-        grid = RadialShiftExp(1e-6, 1e4, 2000, dtype=dtype)
+        grid = LegendreRadialShiftExp(1e-6, 1e4, 200, dtype=dtype)
         H_model = HamiltonAtomRadial(grid, gwidths, angmom=0)
 
         atomz = torch.tensor([1.0])
