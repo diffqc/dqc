@@ -11,7 +11,9 @@ from ddft.eks import BaseEKS, Hartree, xLDA
 
 __all__ = ["atom"]
 
-def atom(atomz, charge=0, eks_model="lda",
+def atom(atomz, charge=0,
+         is_radial=None,
+         eks_model="lda",
          gwmin=1e-5, gwmax=1e3, ng=60,
          rmin=1e-5, rmax=1e2, nr=200,
          dtype=torch.float64, device="cpu",
@@ -38,8 +40,8 @@ def atom(atomz, charge=0, eks_model="lda",
 
     # get the atomic configuration
     numel = atomz - charge
-    is_radial = _check_atom_is_radial(numel)
-    print(numel, atomz, charge, is_radial)
+    if is_radial is None:
+        is_radial = _check_atom_is_radial(numel)
     orbitals = Orbitals(numel, dtype, device,
         radial_symmetric=is_radial, cylindrical_symmetric=cylsymm)
 
