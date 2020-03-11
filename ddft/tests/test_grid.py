@@ -176,7 +176,7 @@ def get_rtol_atol(taskname, gridname1, gridname2=None):
             "lebedev": {
                 "legradialshiftexp": [0.0, 2e-3],
             },
-            "becke": [0.0, 2e-3],
+            "becke": [2e-3, 8e-3],
         },
         "interpolate": {
             "legradialshiftexp": [0.0, 8e-4],
@@ -307,7 +307,7 @@ def get_poisson(fcnname, rgrid):
     elif fcnname in multiatoms_fcnnames:
         ratoms = (atompos.unsqueeze(1) - rgrid).norm(dim=-1, keepdim=True) # (natoms, nr, 1)
         if fcnname == "gauss-2centers":
-            y = -gw*gw*(-np.sqrt(2*np.pi)*gw - 2*ratoms + gw*np.sqrt(2*np.pi)*torch.erf(ratoms/(np.sqrt(2)*gw)))/(2*ratoms)
+            y = -gw**3 * np.sqrt(np.pi/2) * torch.erf(ratoms / (np.sqrt(2)*gw)) / ratoms
             norm = 1./(2*np.sqrt(2)*np.pi**1.5*gw**3) # (ng,)
             f = (y * norm).mean(dim=0) # (nr, ng)
             return f
