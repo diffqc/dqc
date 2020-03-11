@@ -2,6 +2,7 @@ from itertools import product
 import torch
 import numpy as np
 from scipy.special import gamma, gammaincc
+from ddft.grids.base_grid import BaseRadialAngularGrid
 from ddft.grids.radialgrid import LegendreRadialShiftExp
 from ddft.grids.sphangulargrid import Lebedev
 
@@ -116,11 +117,10 @@ def runtest_interpolate(grid, prof, rtol, atol):
     assert torch.allclose(prof, prof1)
 
     # interpolate at the nearby points
-    alphas = [0.001, 0.999]
+    alphas = [0.05, 0.95]
     for alpha in alphas:
-        grid2 = grid.rgrid[1:,:] * (1-alpha) + grid.rgrid[:-1,:] * (alpha)
+        grid2, prof2_estimate = _get_new_grid_pts(grid, grid.rgrid, prof, alpha)
         prof2 = grid.interpolate(prof, grid2)
-        prof2_estimate = prof[:,1:] * (1-alpha) + prof[:,:-1] * (alpha)
         assert torch.allclose(prof2_estimate, prof2, rtol=rtol, atol=atol)
 
 def get_rtol_atol(taskname, gridname1, gridname2=None):
@@ -141,7 +141,7 @@ def get_rtol_atol(taskname, gridname1, gridname2=None):
         "interpolate": {
             "legradialshiftexp": [0.0, 2e-5],
             "lebedev": {
-                "legradialshiftexp": [0.0, 1e-2],
+                "legradialshiftexp": [0.0, 8e-4],
             }
         }
     }
@@ -248,3 +248,22 @@ def get_poisson(fcnname, rgrid):
             return -(y1 + y2) / 5.0 * (3*costheta*costheta - 1)/2.0
 
     return None
+
+def _get_new_grid_pts(grid, rgrid, prof, alpha):
+    # prof: (nbatch, nr)
+    # grid: (nr, 3)
+    ndim = rgrid.shape[1]
+    if ndim == 1:
+        grid2 = rgrid[1:,:] * (1-alpha) + rgrid[:-1,:] * alpha
+        prof2 = prof[:,1:] * (1-alpha) + prof[:,:-1] * alpha
+        return grid2, prof2
+    elif ndim == 3 and isinstance(grid, BaseRadialAngularGrid):
+        nrad = grid.radial_grid.rgrid.shape[0]
+        nphitheta = rgrid.shape[0] // nrad
+        rgrid = rgrid.view(nrad, nphitheta, -1) # (nrad, nphitheta, 3)
+        prof = prof.view(-1, nrad, nphitheta)
+
+        rgrid2 = rgrid[1:,:,:] * (1-alpha) + rgrid[:-1,:,:] * alpha
+        prof2 = prof[:,1:,:] * (1-alpha) + prof[:,:-1,:] * alpha
+
+        return rgrid2.view(-1, 3), prof2.view(prof.shape[0], -1)
