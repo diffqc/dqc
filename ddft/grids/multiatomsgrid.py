@@ -20,7 +20,7 @@ class BeckeMultiGrid(BaseMultiAtomsGrid):
         Type and device of the tensors involved in the calculations.
     """
     def __init__(self, atomgrid, atompos, dtype=torch.float, device=torch.device('cpu')):
-        super(SSWeights, self).__init__()
+        super(BeckeMultiGrid, self).__init__()
 
         # atomgrid must be a 3DGrid
         if not isinstance(atomgrid, Base3DGrid):
@@ -43,7 +43,7 @@ class BeckeMultiGrid(BaseMultiAtomsGrid):
 
     @property
     def atom_grid(self):
-        return _atomgrid
+        return self._atomgrid
 
     def get_atom_weights(self):
         xyz = self.rgrid_in_xyz # (nr, 3)
@@ -67,12 +67,28 @@ class BeckeMultiGrid(BaseMultiAtomsGrid):
     def solve_poisson(self, f):
         # f: (nbatch, nr)
         # split the f first
+        nbatch = f.shape[0]
         fatoms = f.view(nbatch, self.natoms, -1) * self.get_atom_weights() # (nbatch, natoms, ngrid)
+        natoms = self.atom_grid.integralbox(-fatoms / (4*np.pi), dim=-1) # (nbatch, natoms)
         fatoms = fatoms.view(-1, fatoms.shape[-1]) # (nbatch*natoms, ngrid)
 
-        Vatoms = self.atom_grid.solve_poisson(fatoms) # (nbatch*natoms, ngrid)
-        # how to merge it back to V?
-        pass
+        Vatoms = self.atom_grid.solve_poisson(fatoms).view(nbatch, self.natoms, -1) # (nbatch, natoms, ngrid)
+        def get_extrap_fcn(iatom):
+            natom = natoms[:,iatom]
+            extrapfcn = lambda rgrid: natom / (rgrid[:,0] + 1e-12)
+            return extrapfcn
+
+        # combine the potentials with interpolation and extrapolation
+        Vtot = torch.zeros_like(Vatoms).to(Vatoms.device)
+        for i in range(self.natoms):
+            gridxyz = self._rgrid - self.atompos[i,:] # (nr, 3)
+            gridi = self.atom_grid.xyz_to_rgrid(gridxyz)
+            Vinterp = self.atom_grid.interpolate(Vatoms[:,i,:], gridi,
+                extrap=get_extrap_fcn(i)) # (nbatch, natoms*ngrid)
+            Vinterp = Vinterp.view(nbatch, self.natoms, -1)
+            Vtot += Vinterp
+
+        return Vtot
 
     @property
     def rgrid(self):
