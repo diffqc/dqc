@@ -88,7 +88,7 @@ class HamiltonAtomRadial(BaseHamilton):
         gw2sum = gw1*gw1 + self.gwidths*self.gwidths
         gwnet2 = gwprod*gwprod / gw2sum
         gwnet = torch.sqrt(gwnet2)
-        gwpoly = 2*gw1**4 - 11*gw1*gw1*self.gwidths*self.gwidths + 2*self.gwidths**4
+        gwpoly = 2*(gw1**4 + self.gwidths**4) - 11*(gw1*gw1)*(self.gwidths*self.gwidths)
 
         # kin_rad = 3.0/np.sqrt(2.0) * gwnet**3 / gwprod32 / gw2sum
         # kin_ang = gwnet / gwprod32 / np.sqrt(2.0)
