@@ -160,16 +160,30 @@ class Lebedev(BaseRadialAngularGrid):
     @property
     def rgrid_in_xyz(self):
         if self._rgrid_xyz is None:
-            r = self._rgrid[:,0]
-            phi = self._rgrid[:,1]
-            theta = self._rgrid[:,2]
-
-            rsintheta = r * torch.sin(theta)
-            x = (rsintheta * torch.cos(phi)).unsqueeze(-1)
-            y = (rsintheta * torch.sin(phi)).unsqueeze(-1)
-            z = (r*torch.cos(theta)).unsqueeze(-1)
-            self._rgrid_xyz = torch.cat((x,y,z), dim=-1)
+            self._rgrid_xyz = rgrid_to_xyz(self._rgrid)
         return self._rgrid_xyz
+
+    def rgrid_to_xyz(self, rg):
+        r = rg[:,0]
+        phi = rg[:,1]
+        theta = rg[:,2]
+
+        rsintheta = r * torch.sin(theta)
+        x = (rsintheta * torch.cos(phi)).unsqueeze(-1)
+        y = (rsintheta * torch.sin(phi)).unsqueeze(-1)
+        z = (r*torch.cos(theta)).unsqueeze(-1)
+        xyz = torch.cat((x,y,z), dim=-1)
+        return xyz
+
+    def xyz_to_rgrid(self, xyz):
+        x = xyz[:,0]
+        y = xyz[:,1]
+        z = xyz[:,2]
+        xy = torch.sqrt(x*x + y*y)
+        r = torch.sqrt(x*x + y*y + z*z).unsqueeze(-1)
+        theta = torch.atan2(xy, z).unsqueeze(-1)
+        phi = torch.atan2(y, x).unsqueeze(-1)
+        return torch.cat((r, phi, theta), dim=-1)
 
     @property
     def boxshape(self):

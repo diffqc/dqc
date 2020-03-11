@@ -116,6 +116,20 @@ class Base3DGrid(BaseGrid):
         """
         pass
 
+    @abstractmethod
+    def rgrid_to_xyz(self, rg):
+        """
+        Convert the coordinate rg (nrq, 3) to the cartesian coordinate (nrq, 3)
+        """
+        pass
+
+    @abstractmethod
+    def xyz_to_rgrid(self, xyz):
+        """
+        Convert the coordinate xyz (nrq, 3) to the rgrid coordinate (nrq, 3)
+        """
+        pass
+
 class BaseTransformed1DGrid(BaseGrid):
     @abstractmethod
     def transform(self, xlg):
