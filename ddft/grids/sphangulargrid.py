@@ -160,7 +160,7 @@ class Lebedev(BaseRadialAngularGrid):
     @property
     def rgrid_in_xyz(self):
         if self._rgrid_xyz is None:
-            self._rgrid_xyz = rgrid_to_xyz(self._rgrid)
+            self._rgrid_xyz = self.rgrid_to_xyz(self._rgrid)
         return self._rgrid_xyz
 
     def rgrid_to_xyz(self, rg):

@@ -69,7 +69,7 @@ class HamiltonMoleculeC0Gauss(BaseHamilton):
             device = device)
 
         # flatten the information about the basis
-        alphas = alphas.view(-1, ndim) # (nbasis*nelmts,)
+        alphas = alphas.view(-1) # (nbasis*nelmts,)
         centres = centres.view(-1, ndim) # (nbasis*nelmts, 3)
         coeffs = coeffs.view(-1) # (nbasis*nelmts,)
         self.coeffs = coeffs
@@ -79,13 +79,14 @@ class HamiltonMoleculeC0Gauss(BaseHamilton):
         qab_sq = ((centres - centres.unsqueeze(1))**2).sum(dim=-1) # (nbasis*nelmts, nbasis*nelmts)
         gamma = alphas + alphas.unsqueeze(1) # (nbasis*nelmts, nbasis*nelmts)
         kappa = alphas * alphas.unsqueeze(1) / gamma # (nbasis*nelmts, nbasis*nelmts)
+        # print(alphas.shape, gamma.shape, kappa.shape, qab_sq.shape)
         mab = torch.exp(-kappa * qab_sq) # (nbasis*nelmts, nbasis*nelmts)
         ra = alphas.unsqueeze(-1) * centres # (nbasis*nelmts, 3)
         rc = (ra + ra.unsqueeze(1)) / gamma.unsqueeze(-1) # (nbasis*nelmts, nbasis*nelmts, 3)
         self.coeffs2 = coeffs * coeffs.unsqueeze(1) # (nbasis*nelmts, nbasis*nelmts)
 
         # overlap part
-        olp = (mab * (np.pi/gamma)**)1.5) # (nbasis*nelmts, nbasis*nelmts)
+        olp = (mab * (np.pi/gamma)**1.5) # (nbasis*nelmts, nbasis*nelmts)
         self.olp_elmts = olp.unsqueeze(0) # (1, nbasis*nelmts, nbasis*nelmts)
 
         # kinetics part
@@ -95,19 +96,20 @@ class HamiltonMoleculeC0Gauss(BaseHamilton):
         # coulomb part
         rcd = rc - atompos.unsqueeze(-2).unsqueeze(-2) # (natoms, nbasis*nelmts, nbasis*nelmts, 3)
         q0 = torch.sqrt((rcd*rcd).sum(dim=-1)) # (natoms, nbasis*nelmts, nbasis*nelmts)
-        coul = olp * (torch.erf(torch.sqrt(gamma) * q0) / q0) # (natoms, nbasis*nelmts, nbasis*nelmts)
+        coul = -olp * (torch.erf(torch.sqrt(gamma) * (q0+1e-12)) / (q0+1e-12)) # (natoms, nbasis*nelmts, nbasis*nelmts)
+        coul_small = olp * torch.sqrt(gamma) * 2/np.sqrt(np.pi)
         self.coul_elmts = coul * atomzs.unsqueeze(-1).unsqueeze(-1) # (natoms, nbasis*nelmts, nbasis*nelmts)
 
         # combine the kinetics and coulomb elements
-        self.kin_coul_elmts = self.kin_elmts + self.coul_elms.sum(dim=0, keepdim=True) # (1, nbasis*nelmts, nbasis*nelmts)
+        self.kin_coul_elmts = self.kin_elmts + self.coul_elmts.sum(dim=0, keepdim=True) # (1, nbasis*nelmts, nbasis*nelmts)
 
         # get the contracted part
         self.kin_coul_mat = self._contract(self.kin_coul_elmts) # (1, nbasis, nbasis)
         self.olp_mat = self._contract(self.olp_elmts) # (1, nbasis, nbasis)
 
         # get the normalization constant
-        norm = 1. / torch.sqrt(self.olp_mat.diagonal(dim1=-2, dim2=-1)) # (1, nbasis)
-        norm_mat = norm * norm.unsqueeze(1) # (1, nbasis, nbasis)
+        norm = 1. / torch.sqrt(self.olp_mat.diagonal(dim1=-2, dim2=-1)) # (1,nbasis)
+        norm_mat = norm.unsqueeze(-1) * norm.unsqueeze(1) # (1, nbasis, nbasis)
 
         # normalize the contracted matrix
         self.kin_coul_mat = self.kin_coul_mat * norm_mat
@@ -129,6 +131,7 @@ class HamiltonMoleculeC0Gauss(BaseHamilton):
 
         nbatch, ns, ncols = wf.shape
         kin_coul = torch.matmul(self.kin_coul_mat, wf) # (nbatch, nbasis, ncols)
+        return kin_coul
 
         # vext part
         # self.basis: (nbasis, nr)
@@ -171,5 +174,37 @@ class HamiltonMoleculeC0Gauss(BaseHamilton):
         mat = mat.view(-1, self.nbasis, self.nelmts, self.nbasis, self.nelmts)
 
         # sum the nelmts to get the basis
-        cmat = mat.sum(dim=-2).sum(dim=1) # (-1, nbasis, nbasis)
+        cmat = mat.sum(dim=-1).sum(dim=-2) # (-1, nbasis, nbasis)
         return cmat.view(*batch_size, self.nbasis, self.nbasis)
+
+if __name__ == "__main__":
+    from ddft.grids.radialgrid import LegendreRadialShiftExp
+    from ddft.grids.sphangulargrid import Lebedev
+    from ddft.grids.multiatomsgrid import BeckeMultiGrid
+
+    dtype = torch.float64
+    atompos = torch.tensor([[0.0, 0.0, 0.0]], dtype=dtype) # (natoms, ndim)
+    atomzs = torch.tensor([1.0], dtype=dtype)
+    radgrid = LegendreRadialShiftExp(1e-6, 1e2, 200, dtype=dtype)
+    atomgrid = Lebedev(radgrid, prec=13, basis_maxangmom=4, dtype=dtype)
+    grid = BeckeMultiGrid(atomgrid, atompos, dtype=dtype)
+    nr = grid.rgrid.shape[0]
+
+    nbasis = 30
+    alphas = torch.logspace(np.log10(1e-4), np.log10(1e6), nbasis).unsqueeze(-1).to(dtype) # (nbasis, 1)
+    centres = atompos.unsqueeze(1).repeat(nbasis, 1, 1)
+    coeffs = torch.ones((nbasis, 1))
+    h = HamiltonMoleculeC0Gauss(grid, alphas, centres, coeffs, atompos, atomzs, False).to(dtype)
+
+    vext = torch.zeros(1, nr).to(dtype)
+    H = h.fullmatrix(vext)
+    olp = h.overlap.fullmatrix()
+    # check symmetricity
+    assert torch.allclose(olp-olp.transpose(-2,-1), torch.zeros_like(olp))
+    assert torch.allclose(H-H.transpose(-2,-1), torch.zeros_like(H))
+    print(torch.symeig(olp)[0])
+    print(torch.symeig(H)[0])
+    mat = torch.solve(H[0], olp[0])[0]
+    evals, evecs = torch.eig(mat)
+    evals = torch.sort(evals.view(-1))[0]
+    print(evals[:20])

@@ -59,7 +59,7 @@ class BeckeMultiGrid(BaseMultiAtomsGrid):
         p = p / p.sum(dim=0, keepdim=True) # (natoms, nr)
 
         watoms = p.view(self.natoms, self.natoms, -1) # (natoms, natoms, ngrid)
-        return watoms.diagonal(dim0=0, dim1=1) # (natoms, ngrid)
+        return watoms.diagonal(dim1=0, dim2=1) # (natoms, ngrid)
 
     def get_dvolume(self):
         return self._dvolume
