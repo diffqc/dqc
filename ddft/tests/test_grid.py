@@ -139,7 +139,7 @@ def get_rtol_atol(taskname, gridname1, gridname2=None):
             }
         },
         "interpolate": {
-            "legradialshiftexp": [0.0, 2e-5],
+            "legradialshiftexp": [0.0, 8e-4],
             "lebedev": {
                 "legradialshiftexp": [0.0, 8e-4],
             }
