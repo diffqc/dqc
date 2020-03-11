@@ -185,7 +185,7 @@ if __name__ == "__main__":
     dtype = torch.float64
     atompos = torch.tensor([[0.0, 0.0, 0.0]], dtype=dtype) # (natoms, ndim)
     atomzs = torch.tensor([1.0], dtype=dtype)
-    radgrid = LegendreRadialShiftExp(1e-6, 1e2, 200, dtype=dtype)
+    radgrid = LegendreRadialShiftExp(1e-6, 1e3, 200, dtype=dtype)
     atomgrid = Lebedev(radgrid, prec=13, basis_maxangmom=4, dtype=dtype)
     grid = BeckeMultiGrid(atomgrid, atompos, dtype=dtype)
     nr = grid.rgrid.shape[0]
