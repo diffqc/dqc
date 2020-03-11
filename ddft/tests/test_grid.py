@@ -5,14 +5,21 @@ from scipy.special import gamma, gammaincc
 from ddft.grids.base_grid import BaseRadialAngularGrid
 from ddft.grids.radialgrid import LegendreRadialShiftExp
 from ddft.grids.sphangulargrid import Lebedev
+from ddft.grids.multiatomsgrid import BeckeMultiGrid
 
 radial_gridnames = ["legradialshiftexp"]
 radial_fcnnames = ["gauss1", "exp1"]
 sph_gridnames = ["lebedev"]
 sph_fcnnames = ["gauss-l1", "gauss-l2", "gauss-l1m1", "gauss-l2m2"]
 
+# the multiple atoms are placed on -0.5 and 0.5 on x axis
+multiatoms_gridnames = ["becke"]
+multiatoms_fcnnames = ["gauss-2centers"]
+
 dtype = torch.float64
 device = torch.device("cpu")
+# atompos = torch.tensor([[-0.5, 0.0, 0.0]], dtype=dtype, device=device)
+atompos = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype, device=device)
 
 def test_radial_integralbox():
     # test if the integral (basis^2) dVolume in the given grid should be
@@ -37,6 +44,20 @@ def test_spherical_integralbox():
 
     for gridname, radgridname, fcnname in product(sph_gridnames, radial_gridnames, radial_fcnnames+sph_fcnnames):
         runtest(gridname, radgridname, fcnname)
+
+def test_multiatoms_integralbox():
+    def runtest(multiatomsgridname, spgridname, radgridname, fcnname):
+        radgrid = get_radial_grid(radgridname, dtype, device)
+        sphgrid = get_spherical_grid(spgridname, radgrid, dtype, device)
+        grid = get_multiatoms_grid(multiatomsgridname, sphgrid, dtype, device)
+        prof1 = get_fcn(fcnname, grid.rgrid)
+        rtol, atol = get_rtol_atol("integralbox", multiatomsgridname)
+
+        print(multiatomsgridname, fcnname)
+        runtest_integralbox(grid, prof1, rtol=rtol, atol=atol, profsq=False)
+
+    for gridname, fcnname in product(multiatoms_gridnames, multiatoms_fcnnames):
+        runtest(gridname, sph_gridnames[0], radial_gridnames[0], fcnname)
 
 def test_radial_poisson():
     def runtest(gridname, fcnname):
@@ -87,9 +108,11 @@ def test_spherical_interpolate():
         runtest(gridname, radgridname, fcnname)
 
 ############################## helper functions ##############################
-def runtest_integralbox(grid, prof, rtol, atol):
+def runtest_integralbox(grid, prof, rtol, atol, profsq=True):
     ones = torch.tensor([1.0], dtype=prof.dtype, device=prof.device)
-    int1 = grid.integralbox(prof*prof, dim=0)
+    if profsq:
+        prof = prof*prof
+    int1 = grid.integralbox(prof, dim=0)
     assert torch.allclose(int1, ones, rtol=rtol, atol=atol)
 
 def runtest_poisson(grid, prof, poisson, rtol, atol):
@@ -130,7 +153,8 @@ def get_rtol_atol(taskname, gridname1, gridname2=None):
             "legradialshiftexp": [1e-8, 0.0],
             "lebedev": {
                 "legradialshiftexp": [1e-8, 0.0],
-            }
+            },
+            "becke": [5e-4, 0.0],
         },
         "poisson": {
             "legradialshiftexp": [0.0, 8e-4],
@@ -162,6 +186,13 @@ def get_spherical_grid(gridname, radgrid, dtype, device):
         grid = Lebedev(radgrid, prec=13, basis_maxangmom=3, dtype=dtype, device=device)
     else:
         raise RuntimeError("Unknown spherical grid name: %s" % gridname)
+    return grid
+
+def get_multiatoms_grid(gridname, sphgrid, dtype, device):
+    if gridname == "becke":
+        grid = BeckeMultiGrid(sphgrid, atompos, dtype=dtype, device=device)
+    else:
+        raise RuntimeError("Unknown multiatoms grid name: %s" % gridname)
     return grid
 
 def get_fcn(fcnname, rgrid):
@@ -202,6 +233,16 @@ def get_fcn(fcnname, rgrid):
             unnorm_basis = torch.exp(-rs*rs/(2*gw*gw)) * (3*sintheta**2)*torch.cos(2*phi) # (nr,1)
             norm = np.sqrt(5/12.0) / gw**1.5 / np.pi**.75 # (ng)
             return unnorm_basis * norm
+
+    # note that the function below is not supposed to be squared when integrated
+    elif fcnname in multiatoms_fcnnames:
+        # rgrid: xyz (nr, 3)
+        # global atompos: (natoms, 3)
+        ratoms = (atompos.unsqueeze(1) - rgrid).norm(dim=-1, keepdim=True) # (natoms, nr, 1)
+        if fcnname == "gauss-2centers":
+            unnorm_basis = torch.exp(-ratoms*ratoms / (2*gw*gw)) # (natoms, nr, ng)
+            norm = 1./(2*np.sqrt(2)*np.pi**1.5*gw**3) # (ng,)
+            return (unnorm_basis * norm).mean(dim=0) # (nr, ng)
 
     raise RuntimeError("Unknown function name: %s" % fcnname)
 
