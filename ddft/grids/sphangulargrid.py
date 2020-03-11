@@ -127,7 +127,7 @@ class Lebedev(BaseRadialAngularGrid):
             phithetaqinterp = rq[idxinterp,1:]
 
         # interpolate f in r-direction
-        frqrad = self.radgrid.interpolate(frad_lm.view(-1, frad_lm.shape[-1]), rqradinterp).view(nbatch, -1, rqrad.shape[0]) # (nbatch, nsh, nr2interp)
+        frqrad = self.radgrid.interpolate(frad_lm.view(-1, frad_lm.shape[-1]), rqradinterp).view(nbatch, -1, rqradinterp.shape[0]) # (nbatch, nsh, nr2interp)
         # get the basis Y as function of rq
         rqbasis = self._get_basis(phithetaqinterp) # (nsh, nr2interp)
         # get the value by multiplying and sum the radial function and the basis
@@ -139,13 +139,13 @@ class Lebedev(BaseRadialAngularGrid):
 
         # extrapolate the function
         if extrap is not None:
-            frqextrap = extrap(rq[idxextrap,:])
+            frqextrap = extrap(rq[idxextrap,:]) # (nbatch, nr2extrap)
 
         # combine the interpolation and extrapolation
         frq = torch.zeros((nbatch, nr2), dtype=rq.dtype, device=rq.device)
-        frq[idxinterp] = frqinterp
+        frq[:,idxinterp] = frqinterp
         if extrap is not None:
-            frq[idxextrap] = frqextrap
+            frq[:,idxextrap] = frqextrap
 
         return frq
 

@@ -83,6 +83,21 @@ def test_spherical_poisson():
     for gridname, radgridname, fcnname in product(sph_gridnames, radial_gridnames, radial_fcnnames+sph_fcnnames): # ["gauss-l2"]):
         runtest(gridname, radgridname, fcnname)
 
+def test_multiatoms_poisson():
+    def runtest(multiatomsgridname, spgridname, radgridname, fcnname):
+        radgrid = get_radial_grid(radgridname, dtype, device)
+        sphgrid = get_spherical_grid(spgridname, radgrid, dtype, device)
+        grid = get_multiatoms_grid(multiatomsgridname, sphgrid, dtype, device)
+        prof1 = get_fcn(fcnname, grid.rgrid)
+        poisson1 = get_poisson(fcnname, grid.rgrid)
+        rtol, atol = get_rtol_atol("poisson", multiatomsgridname)
+
+        print(multiatomsgridname, fcnname)
+        runtest_poisson(grid, prof1, poisson1, rtol=rtol, atol=atol)
+
+    for gridname, fcnname in product(multiatoms_gridnames, multiatoms_fcnnames):
+        runtest(gridname, sph_gridnames[0], radial_gridnames[0], fcnname)
+
 def test_radial_interpolate():
     def runtest(gridname, fcnname):
         grid = get_radial_grid(gridname, dtype, device)
@@ -160,7 +175,8 @@ def get_rtol_atol(taskname, gridname1, gridname2=None):
             "legradialshiftexp": [0.0, 8e-4],
             "lebedev": {
                 "legradialshiftexp": [0.0, 2e-3],
-            }
+            },
+            "becke": [0.0, 2e-3],
         },
         "interpolate": {
             "legradialshiftexp": [0.0, 8e-4],
@@ -287,6 +303,14 @@ def get_poisson(fcnname, rgrid):
             y1[smallidx] = y1small[smallidx]
             y2 = np.sqrt(5) * rs*rs * gamma2 / (2*np.pi**.75*gw**1.5)
             return -(y1 + y2) / 5.0 * (3*costheta*costheta - 1)/2.0
+
+    elif fcnname in multiatoms_fcnnames:
+        ratoms = (atompos.unsqueeze(1) - rgrid).norm(dim=-1, keepdim=True) # (natoms, nr, 1)
+        if fcnname == "gauss-2centers":
+            y = -gw*gw*(-np.sqrt(2*np.pi)*gw - 2*ratoms + gw*np.sqrt(2*np.pi)*torch.erf(ratoms/(np.sqrt(2)*gw)))/(2*ratoms)
+            norm = 1./(2*np.sqrt(2)*np.pi**1.5*gw**3) # (ng,)
+            f = (y * norm).mean(dim=0) # (nr, ng)
+            return f
 
     return None
 

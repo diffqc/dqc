@@ -77,22 +77,22 @@ class BeckeMultiGrid(BaseMultiAtomsGrid):
         nbatch = f.shape[0]
         fatoms = f.view(nbatch, self.natoms, -1) * self.get_atom_weights() # (nbatch, natoms, ngrid)
         natoms = self.atom_grid.integralbox(-fatoms / (4*np.pi), dim=-1) # (nbatch, natoms)
-        fatoms = fatoms.view(-1, fatoms.shape[-1]) # (nbatch*natoms, ngrid)
+        fatoms = fatoms.contiguous().view(-1, fatoms.shape[-1]) # (nbatch*natoms, ngrid)
 
         Vatoms = self.atom_grid.solve_poisson(fatoms).view(nbatch, self.natoms, -1) # (nbatch, natoms, ngrid)
         def get_extrap_fcn(iatom):
-            natom = natoms[:,iatom]
-            extrapfcn = lambda rgrid: natom / (rgrid[:,0] + 1e-12)
+            natom = natoms[:,iatom] # (nbatch,)
+            # rgrid: (nrextrap, ndim)
+            extrapfcn = lambda rgrid: natom.unsqueeze(-1) / (rgrid[:,0] + 1e-12)
             return extrapfcn
 
         # combine the potentials with interpolation and extrapolation
-        Vtot = torch.zeros_like(Vatoms).to(Vatoms.device)
+        Vtot = torch.zeros_like(Vatoms).to(Vatoms.device).view(nbatch, -1) # (nbatch, natoms*ngrid)
         for i in range(self.natoms):
             gridxyz = self._rgrid - self.atompos[i,:] # (nr, 3)
             gridi = self.atom_grid.xyz_to_rgrid(gridxyz)
             Vinterp = self.atom_grid.interpolate(Vatoms[:,i,:], gridi,
                 extrap=get_extrap_fcn(i)) # (nbatch, natoms*ngrid)
-            Vinterp = Vinterp.view(nbatch, self.natoms, -1)
             Vtot += Vinterp
 
         return Vtot
