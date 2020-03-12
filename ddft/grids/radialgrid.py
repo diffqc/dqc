@@ -7,6 +7,9 @@ from ddft.utils.legendre import legint, legvander
 
 class LegendreRadialTransform(BaseTransformed1DGrid):
     def __init__(self, nx, dtype=torch.float, device=torch.device('cpu')):
+        # cache variables
+        self._spline_mat_inv_ = None
+
         xleggauss, wleggauss = leggauss(nx)
         self.xleggauss = torch.tensor(xleggauss, dtype=dtype, device=device)
         self.wleggauss = torch.tensor(wleggauss, dtype=dtype, device=device)
@@ -77,8 +80,10 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
         else:
             rqinterp = rq[idxinterp,0]
 
-        coeff = torch.matmul(f, self.inv_basis) # (nbatch, nr)
+        # doing the interpolation
         xq = self.invtransform(rqinterp) # (nrq,)
+        # frqinterp = self._cubic_spline(xq, self.xleggauss, f) # cubic spline
+        coeff = torch.matmul(f, self.inv_basis) # (nbatch, nr)
         basis = legvander(xq, nr-1, orderfirst=True)
         frqinterp = torch.matmul(coeff, basis)
 
@@ -96,6 +101,74 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
             frq[idxextrap] = frqextrap
 
         return frq
+
+    def _get_spline_mat_inverse(self):
+        if self._spline_mat_inv_ is None:
+            nx = self.xleggauss.shape[0]
+            device = self.xleggauss.device
+            dtype = self.xleggauss.dtype
+
+            # construct the matrix for the left hand side
+            dxinv0 = 1./(self.xleggauss[1:] - self.xleggauss[:-1]) # (nx-1,)
+            dxinv = torch.cat((dxinv0[:1]*0, dxinv0, dxinv0[-1:]*0), dim=0)
+            diag = (dxinv[:-1] + dxinv[1:]) * 2 # (nx,)
+            offdiag = dxinv0 # (nx-1,)
+            spline_mat = torch.zeros(nx, nx, dtype=dtype, device=device)
+            spdiag = spline_mat.diagonal()
+            spudiag = spline_mat.diagonal(offset=1)
+            spldiag = spline_mat.diagonal(offset=-1)
+            spdiag[:] = diag
+            spudiag[:] = offdiag
+            spldiag[:] = offdiag
+
+            # construct the matrix on the right hand side
+            dxinv2 = (dxinv * dxinv) * 3
+            diagr = (dxinv2[:-1] - dxinv2[1:])
+            udiagr = dxinv2[1:-1]
+            ldiagr = -udiagr
+            matr = torch.zeros(nx, nx, dtype=dtype, device=device)
+            matrdiag = matr.diagonal()
+            matrudiag = matr.diagonal(offset=1)
+            matrldiag = matr.diagonal(offset=-1)
+            matrdiag[:] = diagr
+            matrudiag[:] = udiagr
+            matrldiag[:] = ldiagr
+
+            # solve the matrix inverse
+            spline_mat_inv, _ = torch.solve(matr, spline_mat)
+            self._spline_mat_inv_ = spline_mat_inv
+        return self._spline_mat_inv_
+
+    def _cubic_spline(self, xq, x, y):
+        # xq: (nrq,)
+        # x: (nr,)
+        # y: (nbatch, nr)
+
+        # get the k-vector (i.e. the gradient at every points)
+        spline_mat_inv = self._get_spline_mat_inverse()
+        ks = torch.matmul(y, spline_mat_inv.transpose(-2,-1)) # (nbatch, nr)
+
+        # find the index location of xq
+        idxr = torch.sum((xq > x.unsqueeze(-1)).to(torch.int32), dim=0) # (nrq,) from (1 to nr-1)
+        idxl = idxr - 1 # (nrq,) from (0 to nr-2)
+        xl = x[idxl].contiguous()
+        xr = x[idxr].contiguous()
+        yl = y[:,idxl].contiguous()
+        yr = y[:,idxr].contiguous()
+        kl = ks[:,idxl].contiguous()
+        kr = ks[:,idxr].contiguous()
+        print(xl.shape, yl.shape, kl.shape)
+
+        dxrl = xr - xl # (nrq,)
+        dyrl = yr - yl # (nbatch, nrq)
+        t = (xq - xl) / dxrl # (nrq,)
+        tinv = 1 - t # nrq
+        a = kl * dxrl - dyrl
+        b = kr * (-dxrl) + dyrl
+        tta = t*tinv*tinv
+        ttb = t*tinv*t
+        yq = tinv * yl + t * yr + tta * a + ttb * b
+        return yq
 
 class LegendreRadialShiftExp(LegendreRadialTransform):
     def __init__(self, rmin, rmax, nr, dtype=torch.float, device=torch.device('cpu')):
