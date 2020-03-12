@@ -57,7 +57,8 @@ class BeckeMultiGrid(BaseMultiAtomsGrid):
         f = mu_ij
         for _ in range(3):
             f = 0.5 * f * (3 - f*f)
-        s = 0.5 * (1.0 - f) # (natoms, natoms, nr)
+        # small epsilon to avoid nan in the gradient
+        s = 0.5 * (1.+1e-12 - f) # (natoms, natoms, nr)
         sdiag = s.diagonal(dim1=0, dim2=1)
         sdiag.zero_()
         sdiag += 1.0

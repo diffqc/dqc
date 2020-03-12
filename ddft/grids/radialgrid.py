@@ -81,11 +81,12 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
             rqinterp = rq[idxinterp,0]
 
         # doing the interpolation
+        # cubic interpolation is slower, but more robust on backward gradient
         xq = self.invtransform(rqinterp) # (nrq,)
-        # frqinterp = self._cubic_spline(xq, self.xleggauss, f) # cubic spline
-        coeff = torch.matmul(f, self.inv_basis) # (nbatch, nr)
-        basis = legvander(xq, nr-1, orderfirst=True)
-        frqinterp = torch.matmul(coeff, basis)
+        frqinterp = self._cubic_spline(xq, self.xleggauss, f) # cubic spline
+        # coeff = torch.matmul(f, self.inv_basis) # (nbatch, nr)
+        # basis = legvander(xq, nr-1, orderfirst=True)
+        # frqinterp = torch.matmul(coeff, basis)
 
         if allinterp:
             return frqinterp
@@ -150,6 +151,7 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
 
         # find the index location of xq
         idxr = torch.sum((xq > x.unsqueeze(-1)).to(torch.int32), dim=0) # (nrq,) from (1 to nr-1)
+        idxr[idxr == 0] = 1
         idxl = idxr - 1 # (nrq,) from (0 to nr-2)
         xl = x[idxl].contiguous()
         xr = x[idxr].contiguous()
@@ -157,17 +159,21 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
         yr = y[:,idxr].contiguous()
         kl = ks[:,idxl].contiguous()
         kr = ks[:,idxr].contiguous()
-        print(xl.shape, yl.shape, kl.shape)
 
         dxrl = xr - xl # (nrq,)
         dyrl = yr - yl # (nbatch, nrq)
+
+        # calculate the coefficients of the large matrices
         t = (xq - xl) / dxrl # (nrq,)
         tinv = 1 - t # nrq
-        a = kl * dxrl - dyrl
-        b = kr * (-dxrl) + dyrl
         tta = t*tinv*tinv
         ttb = t*tinv*t
-        yq = tinv * yl + t * yr + tta * a + ttb * b
+        tyl = tinv + tta - ttb
+        tyr = t - tta + ttb
+        tkl = tta * dxrl
+        tkr = -ttb * dxrl
+
+        yq = yl*tyl + yr*tyr + kl*tkl + kr*tkr
         return yq
 
 class LegendreRadialShiftExp(LegendreRadialTransform):

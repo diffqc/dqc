@@ -35,6 +35,11 @@ def test_hartree_lebedev():
     run_hartree_test("lebedev", "gauss-l1m1")
     run_hartree_test("lebedev", "gauss-l2m2")
 
+def test_hartree_becke():
+    rtol, atol = 6e-3, 1e-2
+    run_hartree_test("becke", "exp", rtol=rtol, atol=atol)
+    run_hartree_test("becke", "exp-twocentres", rtol=rtol, atol=atol)
+
 def run_vks_test(gridname, fcnname, rtol=1e-5, atol=1e-8):
     dtype = torch.float64
     grid, density = _setup_density(gridname, fcnname, dtype=dtype)
