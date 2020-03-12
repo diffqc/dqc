@@ -192,7 +192,9 @@ def get_rtol_atol(taskname, gridname1, gridname2=None):
 
 def get_radial_grid(gridname, dtype, device):
     if gridname == "legradialshiftexp":
-        grid = LegendreRadialShiftExp(1e-6, 1e4, 400, dtype=dtype, device=device)
+        # the max radius is chosen to be quite small ~50 to test the tail of
+        # poisson with the extrapolation function for multiatomsgrid
+        grid = LegendreRadialShiftExp(1e-6, 5e1, 400, dtype=dtype, device=device)
     else:
         raise RuntimeError("Unknown radial grid name: %s" % gridname)
     return grid
