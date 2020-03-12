@@ -47,6 +47,26 @@ def legval(x, order):
     else:
         raise RuntimeError("The legendre polynomial order %d has not been implemented" % order)
 
+def legvander(x, order, orderfirst=False):
+    # x: (..., nx)
+    # order: int
+
+    assert order >= 0, "Order must be a non-negative integer"
+
+    # (order+1, *xshape)
+    y = torch.empty(order+1, *x.shape, dtype=x.dtype, device=x.device)
+    y[0] = 1.0
+    if order > 0:
+        y[1] = x
+        for i in range(2, order+1):
+            y[i] = (y[i-1] * x * ((2.0*i-1.0)/i) - y[i-2] * ((i-1.0)/i))
+
+    if not orderfirst:
+        # (*xshape, order+1)
+        return y.transpose(0,-1)
+    else:
+        return y
+
 def assoclegval(cost, l, m):
     sint = torch.sqrt(1-cost*cost)
     assert m <= l, "m must not be greater than l"

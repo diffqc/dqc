@@ -1,9 +1,9 @@
 from abc import abstractmethod
 import torch
 import numpy as np
-from numpy.polynomial.legendre import leggauss, legvander
+from numpy.polynomial.legendre import leggauss
 from ddft.grids.base_grid import BaseGrid, BaseTransformed1DGrid
-from ddft.utils.legendre import legint
+from ddft.utils.legendre import legint, legvander
 
 class LegendreRadialTransform(BaseTransformed1DGrid):
     def __init__(self, nx, dtype=torch.float, device=torch.device('cpu')):
@@ -21,8 +21,7 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
         self._dvolume = (4*np.pi*self.rs*self.rs) * self._dr
 
         # legendre basis (from tinydft/tinygrid.py)
-        basis = legvander(xleggauss, nx-1) # (nr, nr)
-        self.basis = torch.tensor(basis.T).to(dtype).to(device)
+        self.basis = legvander(self.xleggauss, nx-1, orderfirst=True) # (nr, nr)
         self.inv_basis = self.basis.inverse()
 
     def get_dvolume(self):
@@ -80,8 +79,8 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
 
         coeff = torch.matmul(f, self.inv_basis) # (nbatch, nr)
         xq = self.invtransform(rqinterp) # (nrq,)
-        basis = torch.tensor(legvander(xq, nr-1), dtype=rq.dtype, device=rq.device) # (nrq, nr)
-        frqinterp = torch.matmul(coeff, basis.transpose(-2,-1))
+        basis = legvander(xq, nr-1, orderfirst=True)
+        frqinterp = torch.matmul(coeff, basis)
 
         if allinterp:
             return frqinterp
