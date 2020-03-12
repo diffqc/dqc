@@ -64,9 +64,12 @@ class BaseGrid(object):
         * dim: int
             The dimension where it should be integrated.
         """
-        integrand = p.transpose(dim,-1) * self.get_dvolume()
-        res = torch.sum(integrand, dim=-1)
-        return res.transpose(dim,-1)
+        if dim != -1:
+            p = p.transpose(dim,-1)
+        res = torch.matmul(p, self.get_dvolume())
+        if dim != -1:
+            res = res.transpose(dim,-1)
+        return res
 
     def mmintegralbox(self, p1, p2):
         """

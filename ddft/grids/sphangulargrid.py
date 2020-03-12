@@ -14,6 +14,10 @@ class Lebedev(BaseRadialAngularGrid):
         if not isinstance(radgrid, BaseTransformed1DGrid):
             raise TypeError("Argument radgrid must be a BaseTransformed1DGrid")
 
+        # cached variables
+        self._basis_ = None
+        self._angmoms_ = None
+
         # the precision must be an odd number in range [3, 131]
         self.prec = prec
         self.basis_maxangmom = basis_maxangmom if basis_maxangmom is not None else prec
@@ -93,7 +97,7 @@ class Lebedev(BaseRadialAngularGrid):
         # we only need to do integral[f(r) dr]. That's why it is divided by (4*np.pi)
         # and it is not multiplied with (self.radrgrid**2) in the lines below
         intgn = (frad_lm).unsqueeze(-2) * rratio # (nbatch, nsh, nrad, nrad)
-        vrad_lm = self.radgrid.integralbox(intgn / (4*np.pi), dim=-1) / (2*angmoms+1)
+        vrad_lm = self.radgrid.integralbox(intgn, dim=-1) / ((2*angmoms+1) * (4*np.pi))
 
         # convert back to the spatial basis
         v = torch.matmul(vrad_lm.transpose(-2,-1), basis) # (nbatch, nrad, nphitheta)
@@ -191,7 +195,7 @@ class Lebedev(BaseRadialAngularGrid):
 
     def _get_basis(self, phitheta=None):
         if phitheta is None:
-            if not hasattr(self, "_basis_"):
+            if self._basis_ is None:
                 phi = self.phithetargrid[:,0]
                 costheta = torch.cos(self.phithetargrid[:,1])
                 self._basis_ = spharmonics(costheta, phi, self.basis_maxangmom)
@@ -202,7 +206,7 @@ class Lebedev(BaseRadialAngularGrid):
             return spharmonics(costheta, phi, self.basis_maxangmom)
 
     def _get_angmoms(self):
-        if not hasattr(self, "_angmoms_"):
+        if self._angmoms_ is None:
             lhat = []
             for angmom in range(self.basis_maxangmom+1):
                 lhat = lhat + [angmom]*(2*angmom+1)

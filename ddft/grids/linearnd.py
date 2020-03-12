@@ -28,7 +28,7 @@ class LinearNDGrid(BaseGrid):
             m *= allshape[i]
             idx += m
         pixsize = self._rgrid[idx,:] - self._rgrid[0,:] # (ndim,)
-        self.dr3 = torch.prod(pixsize)
+        self.dr3 = torch.prod(pixsize).unsqueeze(0).repeat(torch.prod(boxshape))
 
     def get_dvolume(self):
         return self.dr3
