@@ -131,7 +131,6 @@ class HamiltonMoleculeC0Gauss(BaseHamilton):
 
         nbatch, ns, ncols = wf.shape
         kin_coul = torch.matmul(self.kin_coul_mat, wf) # (nbatch, nbasis, ncols)
-        return kin_coul
 
         # vext part
         # self.basis: (nbasis, nr)
