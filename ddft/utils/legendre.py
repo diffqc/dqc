@@ -54,13 +54,14 @@ def legvander(x, order, orderfirst=False):
     assert order >= 0, "Order must be a non-negative integer"
 
     # (order+1, *xshape)
-    y = torch.empty(order+1, *x.shape, dtype=x.dtype, device=x.device)
-    y[0] = 1.0
+    yall = []
+    yall.append(x.unsqueeze(0)*0+1)
     if order > 0:
-        y[1] = x
+        yall.append(x.unsqueeze(0))
         for i in range(2, order+1):
-            y[i] = (y[i-1] * x * ((2.0*i-1.0)/i) - y[i-2] * ((i-1.0)/i))
+            yall.append(yall[i-1] * x * ((2.0*i-1.0)/i) - yall[i-2] * ((i-1.0)/i))
 
+    y = torch.cat(yall, dim=0)
     if not orderfirst:
         # (*xshape, order+1)
         return y.transpose(0,-1)
