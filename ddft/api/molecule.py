@@ -81,8 +81,10 @@ def ion_coulomb_energy(atomzs, atompos):
     # atompos: (natoms, ndim)
     r12 = (atompos - atompos.unsqueeze(1)).norm(dim=-1) # (natoms, natoms)
     z12 = atomzs * atomzs.unsqueeze(1) # (natoms, natoms)
-    r12diag = r12.diagonal()
-    r12diag[:] = float('inf')
+    infdiag = torch.eye(r12.shape[0], dtype=r12.dtype, device=r12.device)
+    idiag = infdiag.diagonal()
+    idiag[:] = float("inf")
+    r12 = r12 + infdiag
     return (z12 / r12).sum() * 0.5
 
 def _normalize_device(device):
