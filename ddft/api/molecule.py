@@ -164,9 +164,9 @@ if __name__ == "__main__":
         pgrad = eks_model.p.grad.data
         distgrad = distance.grad.data
 
-        afd = finite_differences(getloss, (a, p, distance), 0, eps=1e-6, step=1)
-        pfd = finite_differences(getloss, (a, p, distance), 1, eps=1e-6, step=1)
-        distfd = finite_differences(getloss, (a, p, distance), 2, eps=1e-6, step=1)
+        afd = finite_differences(getloss, (a, p, distance), 0, eps=1e-4, step=1)
+        pfd = finite_differences(getloss, (a, p, distance), 1, eps=1e-4, step=1)
+        distfd = finite_differences(getloss, (a, p, distance), 2, eps=1e-4, step=1)
         t3 = time.time()
         print("FD done in %fs" % (t3 - t2))
 
