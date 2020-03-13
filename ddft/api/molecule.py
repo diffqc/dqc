@@ -1,0 +1,185 @@
+import torch
+import numpy as np
+from ddft.dft.dft import DFT
+from ddft.utils.misc import set_default_option
+from ddft.hamiltons.hmolc0gauss import HamiltonMoleculeC0Gauss
+from ddft.grids.radialgrid import LegendreRadialShiftExp
+from ddft.grids.sphangulargrid import Lebedev
+from ddft.grids.multiatomsgrid import BeckeMultiGrid
+from ddft.modules.equilibrium import EquilibriumModule
+from ddft.eks import BaseEKS, Hartree, xLDA
+
+__all__ = ["molecule"]
+
+def molecule(atomzs, atompos,
+         eks_model="lda",
+         gwmin=1e-5, gwmax=1e2, ng=60,
+         rmin=1e-5, rmax=1e2, nr=100,
+         angprec=13, lmax_poisson=4,
+         dtype=torch.float64, device="cpu",
+         eig_options=None, scf_options=None, bck_options=None):
+
+    # atomzs: (natoms,)
+    # atompos: (natoms, ndim)
+
+    eig_options = set_default_option({
+        "method": "exacteig",
+    }, eig_options)
+    scf_options = set_default_option({
+        "min_eps": 1e-5,
+        "jinv0": 0.5,
+        "alpha0": 1.0,
+        "verbose": True,
+        "method": "selfconsistent",
+    }, scf_options)
+    bck_options = set_default_option({
+        "min_eps": 1e-9,
+    }, bck_options)
+
+    # normalize the device and eks_model
+    device = _normalize_device(device)
+    eks_model = _normalize_eks(eks_model)
+
+    # setup the grid
+    radgrid = LegendreRadialShiftExp(rmin, rmax, nr, dtype=dtype, device=device)
+    sphgrid = Lebedev(radgrid, prec=angprec, basis_maxangmom=lmax_poisson, dtype=dtype, device=device)
+    grid = BeckeMultiGrid(sphgrid, atompos, dtype=dtype, device=device)
+
+    # set up the basis
+    natoms = atompos.shape[0]
+    gwidths = torch.logspace(np.log10(gwmin), np.log10(gwmax), ng, dtype=dtype).to(device) # (ng,)
+    alphas = 1./(2*gwidths*gwidths).unsqueeze(-1).repeat(natoms, 1) # (natoms*ng, 1)
+    centres = atompos.unsqueeze(1).repeat_interleave(ng, dim=0) # (natoms*ng, 1, ndim)
+    coeffs = torch.ones_like(alphas, device=device)
+    H_model = HamiltonMoleculeC0Gauss(grid, alphas, centres, coeffs, atompos, atomzs).to(dtype).to(device)
+
+    # setup the hamiltonian forward parameters
+    hparams = []
+    vext = torch.zeros_like(grid.rgrid[:,0]).unsqueeze(0).to(device)
+
+    # setup the modules
+    nelectrons = int(atomzs.sum())
+    nlowest = (nelectrons // 2) + (nelectrons % 2)
+    all_eks_models = Hartree(grid)
+    if eks_model is not None:
+        all_eks_models = all_eks_models + eks_model
+    dft_model = DFT(H_model, all_eks_models, nlowest, **eig_options)
+    scf_model = EquilibriumModule(dft_model, forward_options=scf_options, backward_options=bck_options)
+
+    # calculate the density
+    focc = torch.ones(nlowest, dtype=dtype, device=device)
+    focc[:nelectrons//2] = 2.0
+    density0 = torch.zeros_like(vext).to(device)
+    density0 = dft_model(density0, vext, focc, hparams).detach()
+    density = scf_model(density0, vext, focc, hparams)
+    energy = dft_model.energy()
+
+    return energy, density
+
+def ion_coulomb_energy(atomzs, atompos):
+    # atomzs: (natoms,)
+    # atompos: (natoms, ndim)
+    r12 = (atompos - atompos.unsqueeze(1)).norm(dim=-1) # (natoms, natoms)
+    z12 = atomzs * atomzs.unsqueeze(1) # (natoms, natoms)
+    r12diag = r12.diagonal()
+    r12diag[:] = float('inf')
+    return (z12 / r12).sum() * 0.5
+
+def _normalize_device(device):
+    if isinstance(device, str):
+        return torch.device(device)
+    elif isinstance(device, torch.device):
+        return device
+    else:
+        raise TypeError("Unknown type of device: %s" % type(device))
+
+def _normalize_eks(eks):
+    if isinstance(eks, str):
+        ek = eks.lower()
+        if ek == "lda":
+            return xLDA()
+        else:
+            raise RuntimeError("Unknown EKS model: %s" % eks)
+    elif isinstance(eks, BaseEKS):
+        return eks
+    else:
+        raise RuntimeError("Unknown EKS input type: %s" % type(eks))
+
+if __name__ == "__main__":
+    import time
+    from ddft.utils.safeops import safepow
+    from ddft.utils.fd import finite_differences
+
+    dtype = torch.float64
+    class PseudoLDA(BaseEKS):
+        def __init__(self, a, p):
+            super(PseudoLDA, self).__init__()
+            self.a = torch.nn.Parameter(a)
+            self.p = torch.nn.Parameter(p)
+
+        def forward(self, density):
+            return self.a * safepow(density.abs(), self.p)
+
+    # setup the molecule's atoms positions
+    atomzs = torch.tensor([1.0, 1.0], dtype=dtype)
+    distance = torch.tensor([1e4], dtype=dtype)
+    atompos = torch.tensor([[-distance[0]/2.0, 0.0, 0.0], [distance[0]/2.0, 0.0, 0.0]], dtype=dtype)
+
+    # pseudo-lda eks model
+    a = torch.tensor([-0.7385587663820223]).to(dtype).requires_grad_()
+    p = torch.tensor([4./3]).to(dtype).requires_grad_()
+    eks_model = PseudoLDA(a, p)
+    mode = "fwd"
+
+    def getloss(a, p, eks_model=None):
+        if eks_model is None:
+            eks_model = PseudoLDA(a, p)
+        energy, _ = molecule(atomzs, atompos, eks_model=eks_model)
+        ion_energy = ion_coulomb_energy(atomzs, atompos)
+        loss = (energy).sum()
+        return loss
+
+    if mode == "fwd":
+        t0 = time.time()
+        energy, density = molecule(atomzs, atompos, eks_model=eks_model)
+        ion_energy = ion_coulomb_energy(atomzs, atompos)
+        print("Electron energy: %f" % energy)
+        print("Ion energy: %f" % ion_energy)
+        print("Total energy: %f" % (ion_energy + energy))
+        t1 = time.time()
+        print("Forward done in %fs" % (t1-t0))
+    elif mode == "grad":
+        t0 = time.time()
+        loss = getloss(a, p, eks_model)
+        t1 = time.time()
+        print("Forward done in %fs" % (t1 - t0))
+        loss.backward()
+        t2 = time.time()
+        print("Backward done in %fs" % (t2 - t1))
+        agrad = eks_model.a.grad.data
+        pgrad = eks_model.p.grad.data
+
+        afd = finite_differences(getloss, (a, p), 0, eps=1e-6, step=1)
+        pfd = finite_differences(getloss, (a, p), 1, eps=1e-6, step=1)
+        t3 = time.time()
+        print("FD done in %fs" % (t3 - t2))
+
+        print("grad of a:")
+        print(agrad)
+        print(afd)
+        print(agrad/afd)
+
+        print("grad of p:")
+        print(pgrad)
+        print(pfd)
+        print(pgrad/pfd)
+    elif mode == "opt":
+        nsteps = 1000
+        opt = torch.optim.SGD(eks_model.parameters(), lr=1e-2)
+        for i in range(nsteps):
+            opt.zero_grad()
+            loss = getloss(a, p, eks_model)
+            loss.backward()
+            opt.step()
+            print("Iter %d: (loss) %.3e (a) %.3e (p) %.3e" % \
+                (i, loss.data, eks_model.a.data, eks_model.p.data))
