@@ -72,8 +72,8 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
         nrq = rq.shape[0]
 
         rmax = self.rgrid.max()
-        idxinterp = rq <= rmax
-        idxextrap = rq > rmax
+        idxinterp = rq[:,0] <= rmax
+        idxextrap = rq[:,0] > rmax
         allinterp = torch.all(idxinterp)
         if allinterp:
             rqinterp = rq[:,0]
@@ -97,9 +97,9 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
 
         # combine the interpolation and extrapolation
         frq = torch.zeros((nbatch, nrq), dtype=rq.dtype, device=rq.device)
-        frq[idxinterp] = frqinterp
+        frq[:,idxinterp] = frqinterp
         if extrap is not None:
-            frq[idxextrap] = frqextrap
+            frq[:,idxextrap] = frqextrap
 
         return frq
 
@@ -150,8 +150,10 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
         ks = torch.matmul(y, spline_mat_inv.transpose(-2,-1)) # (nbatch, nr)
 
         # find the index location of xq
+        nr = x.shape[0]
         idxr = torch.sum((xq > x.unsqueeze(-1)).to(torch.int32), dim=0) # (nrq,) from (1 to nr-1)
         idxr[idxr == 0] = 1
+        idxr[idxr == nr] = nr-1
         idxl = idxr - 1 # (nrq,) from (0 to nr-2)
         xl = x[idxl].contiguous()
         xr = x[idxr].contiguous()
