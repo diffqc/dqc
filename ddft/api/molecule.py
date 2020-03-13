@@ -59,7 +59,7 @@ def molecule(atomzs, atompos,
 
     # setup the modules
     nelectrons = int(atomzs.sum())
-    nlowest = nelectrons
+    nlowest = (nelectrons // 2) + (nelectrons % 2)
     all_eks_models = Hartree(grid)
     if eks_model is not None:
         all_eks_models = all_eks_models + eks_model
@@ -68,6 +68,7 @@ def molecule(atomzs, atompos,
 
     # calculate the density
     focc = torch.ones(nlowest, dtype=dtype, device=device).unsqueeze(0)
+    focc[:,:nelectrons//2] = 2.0
     density0 = torch.zeros_like(vext).to(device)
     density0 = dft_model(density0, vext, focc, hparams).detach()
     density = scf_model(density0, vext, focc, hparams)
