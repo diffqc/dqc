@@ -122,25 +122,27 @@ if __name__ == "__main__":
 
     # setup the molecule's atoms positions
     atomzs = torch.tensor([1.0, 1.0], dtype=dtype)
-    distance = torch.tensor([1e4], dtype=dtype)
-    atompos = torch.tensor([[-distance[0]/2.0, 0.0, 0.0], [distance[0]/2.0, 0.0, 0.0]], dtype=dtype)
+    distance = torch.tensor([1.0], dtype=dtype).requires_grad_()
 
     # pseudo-lda eks model
     a = torch.tensor([-0.7385587663820223]).to(dtype).requires_grad_()
     p = torch.tensor([4./3]).to(dtype).requires_grad_()
     eks_model = PseudoLDA(a, p)
-    mode = "fwd"
+    mode = "grad"
 
-    def getloss(a, p, eks_model=None):
+    def getloss(a, p, distance, eks_model=None):
+        atompos = distance * torch.tensor([[-0.5], [0.5]], dtype=dtype) # (2,1)
+        atompos = torch.cat((atompos, torch.zeros((2,2), dtype=dtype)), dim=-1)
         if eks_model is None:
             eks_model = PseudoLDA(a, p)
         energy, _ = molecule(atomzs, atompos, eks_model=eks_model)
         ion_energy = ion_coulomb_energy(atomzs, atompos)
-        loss = (energy).sum()
+        loss = (energy+ion_energy).sum()
         return loss
 
     if mode == "fwd":
         t0 = time.time()
+        atompos = torch.tensor([[-distance[0]/2.0, 0.0, 0.0], [distance[0]/2.0, 0.0, 0.0]], dtype=dtype)
         energy, density = molecule(atomzs, atompos, eks_model=eks_model)
         ion_energy = ion_coulomb_energy(atomzs, atompos)
         print("Electron energy: %f" % energy)
@@ -150,7 +152,7 @@ if __name__ == "__main__":
         print("Forward done in %fs" % (t1-t0))
     elif mode == "grad":
         t0 = time.time()
-        loss = getloss(a, p, eks_model)
+        loss = getloss(a, p, distance, eks_model)
         t1 = time.time()
         print("Forward done in %fs" % (t1 - t0))
         loss.backward()
@@ -158,9 +160,11 @@ if __name__ == "__main__":
         print("Backward done in %fs" % (t2 - t1))
         agrad = eks_model.a.grad.data
         pgrad = eks_model.p.grad.data
+        distgrad = distance.grad.data
 
-        afd = finite_differences(getloss, (a, p), 0, eps=1e-6, step=1)
-        pfd = finite_differences(getloss, (a, p), 1, eps=1e-6, step=1)
+        afd = finite_differences(getloss, (a, p, distance), 0, eps=1e-6, step=1)
+        pfd = finite_differences(getloss, (a, p, distance), 1, eps=1e-6, step=1)
+        distfd = finite_differences(getloss, (a, p, distance), 2, eps=1e-6, step=1)
         t3 = time.time()
         print("FD done in %fs" % (t3 - t2))
 
@@ -173,6 +177,11 @@ if __name__ == "__main__":
         print(pgrad)
         print(pfd)
         print(pgrad/pfd)
+
+        print("grad of distance:")
+        print(distgrad)
+        print(distfd)
+        print(distgrad/distfd)
     elif mode == "opt":
         nsteps = 1000
         opt = torch.optim.SGD(eks_model.parameters(), lr=1e-2)
