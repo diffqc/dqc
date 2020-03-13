@@ -94,7 +94,7 @@ class HamiltonMoleculeC0Gauss(BaseHamilton):
         self.kin_elmts = kin.unsqueeze(0) # (1, nbasis*nelmts, nbasis*nelmts)
 
         # coulomb part
-        rcd = rc - atompos.unsqueeze(-2).unsqueeze(-2) # (natoms, nbasis*nelmts, nbasis*nelmts, 3)
+        rcd = (rc - atompos.unsqueeze(-2).unsqueeze(-2) + 1e-12) # (natoms, nbasis*nelmts, nbasis*nelmts, 3)
         q0 = torch.sqrt((rcd*rcd).sum(dim=-1)) # (natoms, nbasis*nelmts, nbasis*nelmts)
         coul = -olp * (torch.erf(torch.sqrt(gamma) * (q0+1e-12)) / (q0+1e-12)) # (natoms, nbasis*nelmts, nbasis*nelmts)
         coul_small = olp * torch.sqrt(gamma) * 2/np.sqrt(np.pi)
