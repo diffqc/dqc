@@ -26,6 +26,7 @@ def atom(atomz, charge=0,
         "min_eps": 1e-5,
         "jinv0": 0.5,
         "alpha0": 1.0,
+        "verbose": True,
         "method": "selfconsistent",
     }, scf_options)
     bck_options = set_default_option({
