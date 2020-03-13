@@ -85,6 +85,7 @@ class BeckeMultiGrid(BaseMultiAtomsGrid):
         # combine the potentials with interpolation and extrapolation
         Vtot = torch.zeros_like(Vatoms).to(Vatoms.device).view(nbatch, -1) # (nbatch, natoms*ngrid)
         for i in range(self.natoms):
+            # NOTE: the source of nan is here, but it requires to be added by a large number to solve the nan problem
             gridxyz = self._rgrid - self.atompos[i,:] # (nr, 3)
             gridi = self.atom_grid.xyz_to_rgrid(gridxyz)
             Vinterp = self.atom_grid.interpolate(Vatoms[:,i,:], gridi,
