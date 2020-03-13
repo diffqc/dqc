@@ -49,19 +49,14 @@ class BeckeMultiGrid(BaseMultiAtomsGrid):
         xyz = self.rgrid_in_xyz # (nr, 3)
         rgatoms = torch.norm(xyz - self.atompos.unsqueeze(1), dim=-1) # (natoms, nr)
         ratoms = torch.norm(self.atompos - self.atompos.unsqueeze(1), dim=-1) # (natoms, natoms)
-        mu_ij = (rgatoms - rgatoms.unsqueeze(1)) / ratoms.unsqueeze(-1) # (natoms, natoms, nr)
-        # avoid nan by filling the diagonal with zeros
-        muijdiag = mu_ij.diagonal(dim1=0, dim2=1)
-        muijdiag.zero_()
+        mu_ij = (rgatoms - rgatoms.unsqueeze(1)) / (ratoms.unsqueeze(-1) + 1e-12) # (natoms, natoms, nr)
 
         f = mu_ij
         for _ in range(3):
             f = 0.5 * f * (3 - f*f)
         # small epsilon to avoid nan in the gradient
         s = 0.5 * (1.+1e-12 - f) # (natoms, natoms, nr)
-        sdiag = s.diagonal(dim1=0, dim2=1)
-        sdiag.zero_()
-        sdiag += 1.0
+        s = s + 0.5*torch.eye(self.natoms).unsqueeze(-1)
         p = s.prod(dim=0) # (natoms, nr)
         p = p / p.sum(dim=0, keepdim=True) # (natoms, nr)
 
