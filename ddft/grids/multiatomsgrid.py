@@ -82,14 +82,23 @@ class BeckeMultiGrid(BaseMultiAtomsGrid):
             extrapfcn = lambda rgrid: natom.unsqueeze(-1) / (rgrid[:,0] + 1e-12)
             return extrapfcn
 
+        # get the grid outside the original grid for the indexed atom
+        def get_outside_rgrid(iatom):
+            rgrid = self._rgrid.view(self.natoms, -1, self._rgrid.shape[-1]) # (natoms, ngrid, ndim)
+            res = torch.cat((rgrid[:iatom,:,:], rgrid[iatom+1:,:,:]), dim=0) # (natoms-1, ngrid, ndim)
+            return res.view(-1, res.shape[-1]) # ((natoms-1) * ngrid, ndim)
+
         # combine the potentials with interpolation and extrapolation
         Vtot = torch.zeros_like(Vatoms).to(Vatoms.device).view(nbatch, -1) # (nbatch, natoms*ngrid)
         for i in range(self.natoms):
-            # NOTE: the source of nan is here, but it requires to be added by a large number to solve the nan problem
-            gridxyz = self._rgrid - self.atompos[i,:] # (nr, 3)
+            gridxyz = get_outside_rgrid(i) - self.atompos[i,:] # ((natoms-1)*ngrid, 3)
             gridi = self.atom_grid.xyz_to_rgrid(gridxyz)
             Vinterp = self.atom_grid.interpolate(Vatoms[:,i,:], gridi,
-                extrap=get_extrap_fcn(i)) # (nbatch, natoms*ngrid)
+                extrap=get_extrap_fcn(i)) # (nbatch, (natoms-1)*ngrid)
+            Vinterp = Vinterp.view(Vinterp.shape[0], self.natoms-1, -1) # (nbatch, natoms-1, ngrid)
+
+            # combine the interpolated function with the original function
+            Vinterp = torch.cat((Vinterp[:,:i,:], Vatoms[:,i:i+1,:], Vinterp[:,i:,:]), dim=1).view(Vinterp.shape[0], -1)
             Vtot += Vinterp
 
         return Vtot
