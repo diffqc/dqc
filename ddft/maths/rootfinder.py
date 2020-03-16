@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 import warnings
 from ddft.utils.misc import set_default_option
 from ddft.maths.linesearch import line_search
@@ -403,6 +404,52 @@ def lbfgs(f, x0, jinv0=1.0, **options):
         warnings.warn(msg)
 
     return bestx
+
+def gradrca(f, x0, jinv0=1.0, **options):
+    # set up the default options
+    config = set_default_option({
+        "max_niter": 20,
+        "min_eps": 1e-6,
+        "verbose": False,
+    }, options)
+
+    # pull out the options for fast access
+    min_eps = config["min_eps"]
+    verbose = config["verbose"]
+
+    # pull out the parameters of x0
+    nbatch, nfeat = x0.shape
+    device = x0.device
+    dtype = x0.dtype
+
+    # set up the initial jinv
+    jinv = _set_jinv0(jinv0, x0)
+
+    def get_grad_loss(xinp, stepsize):
+        xg = xinp.detach().requires_grad_()
+        with torch.enable_grad():
+            dx = f(xg)
+            vunit = (dx / dx.norm(dim=-1, keepdim=True)).detach() # (nbatch, nfeat)
+            loss = (dx * dx).sum(dim=-1)
+            dldx = torch.autograd.grad(loss.sum(), (xg,), create_graph=True)[0] # (nbatch, nfeat)
+            d2ldx2v = torch.autograd.grad(dldx, (xg,), grad_outputs=vunit)[0] # (nbatch, nfeat)
+
+            dldlmbda = (dldx * vunit).sum(dim=-1) # (nbatch)
+            d2ldlmbda2 = (d2ldx2v * vunit).sum(dim=-1) # (nbatch)
+
+        dstep = (-dldlmbda / d2ldlmbda2).unsqueeze(-1)
+        return loss.detach(), (stepsize * dstep * vunit).detach(), dx.detach()
+
+    x = x0
+    onesvec = torch.ones_like(x0).unsqueeze(-1).to(x0.device) / np.sqrt(nfeat) # (nbatch, nfeat, 1)
+    for i in range(config["max_niter"]):
+        loss0, dstep, dx = get_grad_loss(x, stepsize=jinv) # dldx0 & dx: (nbatch, nfeat)
+
+        if verbose:
+            print("Iter %d: %.3e" % (i+1, dx.detach().abs().max()))
+
+        x = x + dstep
+    return x
 
 def _set_jinv0(jinv0, x0):
     nbatch, nfeat = x0.shape
