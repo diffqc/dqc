@@ -409,6 +409,7 @@ def gradrca(f, x0, jinv0=1.0, **options):
     # set up the default options
     config = set_default_option({
         "max_niter": 20,
+        "norders": 2,
         "min_eps": 1e-6,
         "verbose": False,
     }, options)
@@ -416,6 +417,7 @@ def gradrca(f, x0, jinv0=1.0, **options):
     # pull out the options for fast access
     min_eps = config["min_eps"]
     verbose = config["verbose"]
+    norders = config["norders"]
 
     # pull out the parameters of x0
     nbatch, nfeat = x0.shape
@@ -431,14 +433,19 @@ def gradrca(f, x0, jinv0=1.0, **options):
             dx = f(xg)
             vunit = (dx / dx.norm(dim=-1, keepdim=True)).detach() # (nbatch, nfeat)
             loss = (dx * dx).sum(dim=-1)
-            dldx = torch.autograd.grad(loss.sum(), (xg,), create_graph=True)[0] # (nbatch, nfeat)
-            d2ldx2v = torch.autograd.grad(dldx, (xg,), grad_outputs=vunit)[0] # (nbatch, nfeat)
+            derivs = [loss]
+            for i in range(norders):
+                dldx = torch.autograd.grad(derivs[-1].sum(), (xg,), create_graph=(i<norders-1))[0]
+                dldlmbda = (dldx * vunit).sum(dim=-1)
+                derivs.append(dldlmbda)
 
-            dldlmbda = (dldx * vunit).sum(dim=-1) # (nbatch)
-            d2ldlmbda2 = (d2ldx2v * vunit).sum(dim=-1) # (nbatch)
-
-        dstep = (-dldlmbda / d2ldlmbda2).unsqueeze(-1)
-        return loss.detach(), (stepsize * dstep * vunit).detach(), dx.detach()
+        if norders == 2:
+            dstep = (-derivs[1] / derivs[2]) # (nbatch,)
+        elif norders == 3:
+            dstep = (-derivs[2] + torch.sqrt(derivs[2]*derivs[2] - 2*derivs[1]*derivs[3])) / (derivs[3])
+        else:
+            raise RuntimeError("Order 4 or higher is not defined.")
+        return loss.detach(), (stepsize * dstep.unsqueeze(-1) * vunit).detach(), dx.detach()
 
     x = x0
     onesvec = torch.ones_like(x0).unsqueeze(-1).to(x0.device) / np.sqrt(nfeat) # (nbatch, nfeat, 1)
