@@ -427,15 +427,17 @@ def gradrca(f, x0, jinv0=1.0, **options):
     # set up the initial jinv
     jinv = _set_jinv0(jinv0, x0)
 
-    def get_grad_loss(xinp, stepsize):
-        xg = xinp.detach().requires_grad_()
+    x = x0
+    onesvec = torch.ones_like(x0).unsqueeze(-1).to(x0.device) / np.sqrt(nfeat) # (nbatch, nfeat, 1)
+    for i in range(config["max_niter"]):
+        xg = x.detach().requires_grad_()
         with torch.enable_grad():
             dx = f(xg)
             vunit = (dx / dx.norm(dim=-1, keepdim=True)).detach() # (nbatch, nfeat)
             loss = (dx * dx).sum(dim=-1)
             derivs = [loss]
-            for i in range(norders):
-                dldx = torch.autograd.grad(derivs[-1].sum(), (xg,), create_graph=(i<norders-1))[0]
+            for j in range(norders):
+                dldx = torch.autograd.grad(derivs[-1].sum(), (xg,), create_graph=(j<norders-1))[0]
                 dldlmbda = (dldx * vunit).sum(dim=-1)
                 derivs.append(dldlmbda)
 
@@ -445,12 +447,7 @@ def gradrca(f, x0, jinv0=1.0, **options):
             dstep = (-derivs[2] + torch.sqrt(derivs[2]*derivs[2] - 2*derivs[1]*derivs[3])) / (derivs[3])
         else:
             raise RuntimeError("Order 4 or higher is not defined.")
-        return loss.detach(), (stepsize * dstep.unsqueeze(-1) * vunit).detach(), dx.detach()
-
-    x = x0
-    onesvec = torch.ones_like(x0).unsqueeze(-1).to(x0.device) / np.sqrt(nfeat) # (nbatch, nfeat, 1)
-    for i in range(config["max_niter"]):
-        loss0, dstep, dx = get_grad_loss(x, stepsize=jinv) # dldx0 & dx: (nbatch, nfeat)
+        dstep = (jinv * dstep.unsqueeze(-1) * vunit)
 
         if verbose:
             print("Iter %d: %.3e" % (i+1, dx.detach().abs().max()))
