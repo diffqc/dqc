@@ -67,6 +67,38 @@ def test_hamilton_molecule_cartesian_gauss():
     for atomz in [1.0,2.0]:
         runtest(atomz)
 
+def test_hamilton_molecule_cartesian_gauss1():
+    def runtest(atomz):
+        # setup grid
+        atompos = torch.tensor([[0.0, 0.0, 0.0]], dtype=dtype) # (natoms, ndim)
+        atomzs = torch.tensor([atomz], dtype=dtype)
+        radgrid = LegendreRadialShiftExp(1e-6, 1e3, 200, dtype=dtype)
+        atomgrid = Lebedev(radgrid, prec=13, basis_maxangmom=4, dtype=dtype)
+        grid = BeckeMultiGrid(atomgrid, atompos, dtype=dtype)
+
+        # setup basis
+        nbasis = 60
+        alphas = torch.logspace(np.log10(1e-4), np.log10(1e6), nbasis).repeat(4).unsqueeze(-1).to(dtype) # (4*nbasis, 1)
+        centres = atompos.unsqueeze(1).repeat(4*nbasis, 1, 1)
+        coeffs = torch.ones((4*nbasis, 1))
+        ijks = torch.zeros((4,nbasis, 1, 3), dtype=torch.int32)
+        # L=1
+        ijks[1,:,:,0] = 1
+        ijks[2,:,:,1] = 1
+        ijks[3,:,:,2] = 1
+        ijks = ijks.view(4*nbasis, 1, 3)
+        h = HamiltonMoleculeCGauss(grid, ijks, alphas, centres, coeffs, atompos, atomzs).to(dtype)
+
+        # compare the eigenvalues (there is degeneracy in p-orbitals)
+        nevals = 6
+        evals = get_evals(grid, h)[:nevals]
+        true_evals = -0.5*atomz*atomz/torch.tensor([1.0, 2.0, 2.0, 2.0, 2.0, 3.0]).to(dtype)**2
+        print(evals - true_evals)
+        assert torch.allclose(evals, true_evals)
+
+    for atomz in [1.0,2.0]:
+        runtest(atomz)
+
 def test_atom_gauss():
     def runtest(atomz, coulexp):
         # setup the grid and the basis
