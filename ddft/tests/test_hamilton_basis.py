@@ -2,6 +2,7 @@ from itertools import product
 import torch
 import numpy as np
 from ddft.hamiltons.hmolc0gauss import HamiltonMoleculeC0Gauss
+from ddft.hamiltons.hmolcgauss import HamiltonMoleculeCGauss
 from ddft.hamiltons.hatomygauss import HamiltonAtomYGauss
 from ddft.hamiltons.hatomradial import HamiltonAtomRadial
 from ddft.grids.radialgrid import LegendreRadialShiftExp
@@ -27,6 +28,34 @@ def test_hamilton_molecule_c0_gauss():
         centres = atompos.unsqueeze(1).repeat(nbasis, 1, 1)
         coeffs = torch.ones((nbasis, 1))
         h = HamiltonMoleculeC0Gauss(grid, alphas, centres, coeffs, atompos, atomzs, False).to(dtype)
+
+        # compare the eigenvalues (no degeneracy because the basis is all radial)
+        nevals = 5
+        evals = get_evals(grid, h)[:nevals]
+        true_evals = -0.5*atomz*atomz/(torch.arange(1, nevals+1).to(dtype)*1.0)**2
+        print(evals - true_evals)
+        assert torch.allclose(evals, true_evals)
+
+    for atomz in [1.0,2.0]:
+        runtest(atomz)
+
+
+def test_hamilton_molecule_cartesian_gauss():
+    def runtest(atomz):
+        # setup grid
+        atompos = torch.tensor([[0.0, 0.0, 0.0]], dtype=dtype) # (natoms, ndim)
+        atomzs = torch.tensor([atomz], dtype=dtype)
+        radgrid = LegendreRadialShiftExp(1e-6, 1e3, 200, dtype=dtype)
+        atomgrid = Lebedev(radgrid, prec=13, basis_maxangmom=4, dtype=dtype)
+        grid = BeckeMultiGrid(atomgrid, atompos, dtype=dtype)
+
+        # setup basis
+        nbasis = 60
+        alphas = torch.logspace(np.log10(1e-4), np.log10(1e6), nbasis).unsqueeze(-1).to(dtype) # (nbasis, 1)
+        centres = atompos.unsqueeze(1).repeat(nbasis, 1, 1)
+        coeffs = torch.ones((nbasis, 1))
+        ijks = torch.zeros((nbasis, 1, 3), dtype=torch.int32)
+        h = HamiltonMoleculeCGauss(grid, ijks, alphas, centres, coeffs, atompos, atomzs).to(dtype)
 
         # compare the eigenvalues (no degeneracy because the basis is all radial)
         nevals = 5

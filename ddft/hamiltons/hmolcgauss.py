@@ -74,14 +74,7 @@ class HamiltonMoleculeCGauss(BaseHamilton):
         ecoeff_obj = Ecoeff(ijks, centres, alphas, atompos)
         self.olp_elmts = ecoeff_obj.get_overlap().unsqueeze(0) # (1, nbasis*nelmts, nbasis*nelmts)
         self.kin_elmts = ecoeff_obj.get_kinetics().unsqueeze(0) # (1, nbasis*nelmts, nbasis*nelmts)
-
-        # coulomb part
-        # ???
-        # rcd = (rc - atompos.unsqueeze(-2).unsqueeze(-2) + 1e-12) # (natoms, nbasis*nelmts, nbasis*nelmts, 3)
-        # q0 = torch.sqrt((rcd*rcd).sum(dim=-1)) # (natoms, nbasis*nelmts, nbasis*nelmts)
-        # coul = -olp * (torch.erf(torch.sqrt(gamma) * (q0+1e-12)) / (q0+1e-12)) # (natoms, nbasis*nelmts, nbasis*nelmts)
-        # coul_small = olp * torch.sqrt(gamma) * 2/np.sqrt(np.pi)
-        self.coul_elmts = coul * atomzs.unsqueeze(-1).unsqueeze(-1) # (natoms, nbasis*nelmts, nbasis*nelmts)
+        self.coul_elmts = ecoeff_obj.get_coulomb() * atomzs.unsqueeze(-1).unsqueeze(-1) # (natoms, nbasis*nelmts, nbasis*nelmts)
 
         # combine the kinetics and coulomb elements
         self.kin_coul_elmts = self.kin_elmts + self.coul_elmts.sum(dim=0, keepdim=True) # (1, nbasis*nelmts, nbasis*nelmts)
@@ -180,7 +173,7 @@ class Ecoeff(object):
         gamma = (alphas + alphas.unsqueeze(1)) # (nbasis*nelmts, nbasis*nelmts)
         kappa = (alphas * alphas.unsqueeze(1)) / gamma # (nbasis*nelmts, nbasis*nelmts)
         # print(alphas.shape, gamma.shape, kappa.shape, qab_sq.shape)
-        mab = torch.exp(-kappa * qab_sq) # (nbasis*nelmts, nbasis*nelmts, 3)
+        mab = torch.exp(-kappa.unsqueeze(-1) * qab_sq) # (nbasis*nelmts, nbasis*nelmts, 3)
         ra = alphas.unsqueeze(-1) * centres # (nbasis*nelmts, 3)
         rc = (ra + ra.unsqueeze(1)) / gamma.unsqueeze(-1) # (nbasis*nelmts, nbasis*nelmts, 3)
         rcd = rc - atompos.unsqueeze(1).unsqueeze(1) # (natoms, nbasis*nelmts, nbasis*neltms, 3)
@@ -230,14 +223,14 @@ class Ecoeff(object):
     def get_overlap(self):
         if self.overlap is None:
             overlap_dim = torch.empty_like(self.qab).to(self.qab.device) # (nbasis*nelmts, nbasis*nelmts, 3)
-            for i in range(self.ijk_left_max):
-                for j in range(self.ijk_right_max):
+            for i in range(self.ijk_left_max+1):
+                for j in range(self.ijk_right_max+1):
                     idx = (self.ijk_pairs == (i*self.max_basis + j)) # (nbasis*nelmts, nbasis*nelmts, 3)
                     # if idx.sum() == 0: continue
                     for xyz in range(self.ndim):
                         idxx = idx[:,:,xyz]
                         coeff = self.get_coeff(i, j, 0, xyz) # (nbasis*nelmts, nbasis*nelmts)
-                        overlap_dim[idxx,xyz] = coeff[idxx]
+                        overlap_dim[:,:,xyz][idxx] = coeff[idxx]
             self.overlap = overlap_dim.prod(dim=-1) * (np.pi/self.gamma)**1.5 # (nbasis*nelmts, nbasis*nelmts)
         return self.overlap
 
@@ -246,8 +239,8 @@ class Ecoeff(object):
             kinetics_dim0 = torch.empty_like(self.qab).to(self.qab.device) # (nbasis*nelmts, nbasis*nelmts, 3)
             kinetics_dim1 = torch.empty_like(self.qab).to(self.qab.device) # (nbasis*nelmts, nbasis*nelmts, 3)
             kinetics_dim2 = torch.empty_like(self.qab).to(self.qab.device) # (nbasis*nelmts, nbasis*nelmts, 3)
-            for i in range(self.ijk_left_max):
-                for j in range(self.ijk_right_max):
+            for i in range(self.ijk_left_max+1):
+                for j in range(self.ijk_right_max+1):
                     idx = self.ijk_pairs == (i*self.max_basis + j)
                     for xyz in range(self.ndim):
                         idxx = idx[:,:,xyz]
@@ -257,17 +250,17 @@ class Ecoeff(object):
                               4*self.betas*self.betas*self.get_coeff(i,j+2,0,xyz) # (nbasis*nelmts, nbasis*nelmts)
                         sij_idxx = sij[idxx]
                         if xyz == 0:
-                            kinetics_dim0[idxx,xyz] = dij[idxx]
-                            kinetics_dim1[idxx,xyz] = sij_idxx
-                            kinetics_dim2[idxx,xyz] = sij_idxx
+                            kinetics_dim0[:,:,xyz][idxx] = dij[idxx]
+                            kinetics_dim1[:,:,xyz][idxx] = sij_idxx
+                            kinetics_dim2[:,:,xyz][idxx] = sij_idxx
                         elif xyz == 1:
-                            kinetics_dim0[idxx,xyz] = sij_idxx
-                            kinetics_dim1[idxx,xyz] = dij[idxx]
-                            kinetics_dim2[idxx,xyz] = sij_idxx
+                            kinetics_dim0[:,:,xyz][idxx] = sij_idxx
+                            kinetics_dim1[:,:,xyz][idxx] = dij[idxx]
+                            kinetics_dim2[:,:,xyz][idxx] = sij_idxx
                         elif xyz == 2:
-                            kinetics_dim0[idxx,xyz] = sij_idxx
-                            kinetics_dim1[idxx,xyz] = sij_idxx
-                            kinetics_dim2[idxx,xyz] = dij[idxx]
+                            kinetics_dim0[:,:,xyz][idxx] = sij_idxx
+                            kinetics_dim1[:,:,xyz][idxx] = sij_idxx
+                            kinetics_dim2[:,:,xyz][idxx] = dij[idxx]
             kinetics = kinetics_dim0.prod(dim=-1) + kinetics_dim1.prod(dim=-1) + \
                        kinetics_dim2.prod(dim=-1)
             self.kinetics = -0.5 * (np.pi/self.gamma)**1.5 * kinetics
@@ -282,15 +275,15 @@ class Ecoeff(object):
                 # idx: (nbasis*nelmts, nbasis*nelmts)
                 k, l, m, u, v, w = self._unpack_ijk_flat_value(ijk_flat_value)
 
-                for r in range(k+u):
+                for r in range(k+u+1):
                     Erku = self.get_coeff(k, u, r, 0)[idx] # flatten tensor
-                    for s in range(l+v):
+                    for s in range(l+v+1):
                         Eslv = self.get_coeff(l, v, s, 0)[idx]
-                        for t in range(m+w):
+                        for t in range(m+w+1):
                             Etmw = self.get_coeff(m, w, t, 0)[idx]
                             Rrst = self.get_rcoeff(r, s, t, 0)[:,idx] # (natoms, -1)
                             coulomb[:,idx] += (Erku * Eslv * Etmw) * Rrst
-            self.coulomb = (2*np.pi/self.gamma) * coulomb
+            self.coulomb = -(2*np.pi/self.gamma) * coulomb
         return self.coulomb
 
     def get_coeff(self, i, j, t, xyz):
@@ -320,7 +313,7 @@ class Ecoeff(object):
         # return: (natoms, nbasis*nelmts, nbasis*nelmts)
         if r < 0 or s < 0 or t < 0:
             return 0.0
-        coeff = self._access_rcoeff()
+        coeff = self._access_rcoeff(r, s, t, n)
         if coeff is not None:
             return coeff
 
@@ -356,6 +349,7 @@ class Ecoeff(object):
 
     def _boys(self, n, T):
         nhalf = n + 0.5
+        T = T + 1e-12 # add small noise
         return incgamma(nhalf, T) / (2*T**nhalf)
 
     def _access_coeff(self, i, j, t, xyz):
@@ -371,3 +365,36 @@ class Ecoeff(object):
             return self.r_memory[key]
         else:
             return None
+
+if __name__ == "__main__":
+    from ddft.grids.radialgrid import LegendreRadialShiftExp
+    from ddft.grids.sphangulargrid import Lebedev
+    from ddft.grids.multiatomsgrid import BeckeMultiGrid
+
+    dtype = torch.float64
+    atompos = torch.tensor([[0.0, 0.0, 0.0]], dtype=dtype) # (natoms, ndim)
+    atomzs = torch.tensor([1.0], dtype=dtype)
+    radgrid = LegendreRadialShiftExp(1e-6, 1e3, 200, dtype=dtype)
+    atomgrid = Lebedev(radgrid, prec=13, basis_maxangmom=4, dtype=dtype)
+    grid = BeckeMultiGrid(atomgrid, atompos, dtype=dtype)
+    nr = grid.rgrid.shape[0]
+
+    nbasis = 30
+    alphas = torch.logspace(np.log10(1e-4), np.log10(1e6), nbasis).unsqueeze(-1).to(dtype) # (nbasis, 1)
+    centres = atompos.unsqueeze(1).repeat(nbasis, 1, 1)
+    coeffs = torch.ones((nbasis, 1))
+    ijks = torch.zeros((nbasis, 1, 3), dtype=torch.int32)
+    h = HamiltonMoleculeCGauss(grid, ijks, alphas, centres, coeffs, atompos, atomzs).to(dtype)
+
+    vext = torch.zeros(1, nr).to(dtype)
+    H = h.fullmatrix(vext)
+    olp = h.overlap.fullmatrix()
+    # check symmetricity
+    assert torch.allclose(olp-olp.transpose(-2,-1), torch.zeros_like(olp))
+    assert torch.allclose(H-H.transpose(-2,-1), torch.zeros_like(H))
+    print(torch.symeig(olp)[0])
+    print(torch.symeig(H)[0])
+    mat = torch.solve(H[0], olp[0])[0]
+    evals, evecs = torch.eig(mat)
+    evals = torch.sort(evals.view(-1))[0]
+    print(evals[:20])
