@@ -1,14 +1,51 @@
+import torch
 from abc import abstractmethod
 
 class BaseContractedGaussian(object):
+    def __init__(self, dtype, device):
+        self._dtype = dtype
+        self._device = device
+
+    @property
+    def dtype(self):
+        return self._dtype
+
+    @property
+    def device(self):
+        return self._device
+
     @abstractmethod
     def loadbasis(self, atomz, cartesian):
         """
         Given atomz, returns the parameters needed for the basis.
         If cartesian == True, returns (ijks, alphas, coeffs, nelmts).
         else, returns (lms, alphas, coeffs, nelmts).
+        The elements in return should be torch.tensor
         """
         pass
+
+    def construct_basis(self, atomzs, atomposs, cartesian):
+        # atomzs: torch.tensor int (natoms)
+        # atomposs: torch.tensor (natoms, 3)
+        # returns: (ijks, alphas, coeffs, nelmts, poss) each are torch.tensor
+        i = 0
+        for atomz, atompos in zip(atomzs, atomposs):
+            ijks, alphas, coeffs, nelmts = self.loadbasis(int(atomz), cartesian=cartesian)
+            atpos = atompos.unsqueeze(0).repeat((nelmts.sum(), 1))
+            if i == 0:
+                all_ijks = ijks
+                all_alphas = alphas
+                all_coeffs = coeffs
+                all_nelmts = nelmts
+                all_poss = atpos
+            else:
+                all_ijks = torch.cat((all_ijks, ijks), dim=0)
+                all_alphas = torch.cat((all_alphas, alphas), dim=0)
+                all_coeffs = torch.cat((all_coeffs, coeffs), dim=0)
+                all_nelmts = torch.cat((all_nelmts, nelmts), dim=0)
+                all_poss = torch.cat((all_poss, atpos), dim=0)
+            i = 1
+        return all_ijks, all_alphas, all_coeffs, all_nelmts, all_poss
 
 def normalize_basisname(basisname):
     b = basisname.lower()

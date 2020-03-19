@@ -1,13 +1,14 @@
 import os
+import torch
 from ddft.basissets.base_basisset import BaseContractedGaussian, \
     normalize_basisname, to_angmom, expand_basis, flatten
 
 class CGTOBasis(BaseContractedGaussian):
-    def __init__(self, basisname, fnameformat=None):
+    def __init__(self, basisname, fnameformat=None, dtype=torch.float32, device=torch.device('cpu')):
         """
         Read the database of basis from files with name format given in `fnameformat`
         """
-        super(CGTOBasis, self).__init__()
+        super(CGTOBasis, self).__init__(dtype, device)
 
         basisname = normalize_basisname(basisname)
         if fnameformat is None:
@@ -63,18 +64,21 @@ class CGTOBasis(BaseContractedGaussian):
 
         # save the results
         ijks, alphas, coeffs = expand_basis(spdfs, alphas, coeffs, cartesian=cartesian)
-        nelmts = [len(ijk) for ijk in ijks]
-        ijks = flatten(ijks)
-        alphas = flatten(alphas)
-        coeffs = flatten(coeffs)
+        nelmts = torch.tensor([len(ijk) for ijk in ijks], dtype=torch.int32, device=self.device)
+        ijks   = torch.tensor(flatten(ijks), dtype=torch.int32, device=self.device)
+        alphas = torch.tensor(flatten(alphas), dtype=self.dtype, device=self.device)
+        coeffs = torch.tensor(flatten(coeffs), dtype=self.dtype, device=self.device)
         res = (ijks, alphas, coeffs, nelmts)
         self.res_memory[atomz] = res
         return res
 
 if __name__ == "__main__":
-    basis = CGTOBasis("6-31++G**")
-    ijks, alphas, coeffs, nelmts = basis.loadbasis(3, cartesian=True)
-    # ijks, alphas, pos, coeffs, nelmts = basis.get_cartesian(atomzs)#, atompos)
+    dtype = torch.float64
+    basis = CGTOBasis("6-31++G**", dtype=dtype)
+    atomzs = torch.tensor([1.0, 1.0], dtype=dtype)
+    atomposs = torch.tensor([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]])
+    # ijks, alphas, coeffs, nelmts = basis.loadbasis(3, cartesian=True)
+    ijks, alphas, coeffs, nelmts, pos = basis.construct_basis(atomzs, atomposs, cartesian=True)
     print("IJKs:")
     print(ijks)
     print("Alphas:")
@@ -83,3 +87,5 @@ if __name__ == "__main__":
     print(coeffs)
     print("Nelmts:")
     print(nelmts)
+    print("Positions:")
+    print(pos)
