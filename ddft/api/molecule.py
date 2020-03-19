@@ -2,6 +2,8 @@ import torch
 import numpy as np
 from ddft.dft.dft import DFT
 from ddft.utils.misc import set_default_option
+from ddft.basissets.cgto_basis import CGTOBasis
+from ddft.hamiltons.hmolcgauss import HamiltonMoleculeCGauss
 from ddft.hamiltons.hmolc0gauss import HamiltonMoleculeC0Gauss
 from ddft.grids.radialgrid import LegendreRadialShiftExp
 from ddft.grids.sphangulargrid import Lebedev
@@ -13,7 +15,8 @@ __all__ = ["molecule"]
 
 def molecule(atomzs, atompos,
          eks_model="lda",
-         gwmin=1e-5, gwmax=1e2, ng=60,
+         basis="6-31++G**",
+         # gwmin=1e-5, gwmax=1e2, ng=60,
          rmin=1e-5, rmax=1e2, nr=100,
          angprec=13, lmax_poisson=4,
          dtype=torch.float64, device="cpu",
@@ -47,11 +50,16 @@ def molecule(atomzs, atompos,
 
     # set up the basis
     natoms = atompos.shape[0]
-    gwidths = torch.logspace(np.log10(gwmin), np.log10(gwmax), ng, dtype=dtype).to(device) # (ng,)
-    alphas = 1./(2*gwidths*gwidths).unsqueeze(-1).repeat(natoms, 1) # (natoms*ng, 1)
-    centres = atompos.unsqueeze(1).repeat_interleave(ng, dim=0) # (natoms*ng, 1, ndim)
-    coeffs = torch.ones_like(alphas, device=device)
-    H_model = HamiltonMoleculeC0Gauss(grid, alphas, centres, coeffs, atompos, atomzs).to(dtype).to(device)
+    b = CGTOBasis(basis)
+    ijks, alphas, coeffs, nelmts, poss = b.construct_basis(atomzs, atompos, cartesian=True)
+    print(nelmts)
+    H_model = HamiltonMoleculeCGauss(grid, ijks, alphas, poss, coeffs, nelmts, atompos, atomzs)\
+              .to(dtype).to(device)
+    # gwidths = torch.logspace(np.log10(gwmin), np.log10(gwmax), ng, dtype=dtype).to(device) # (ng,)
+    # alphas = 1./(2*gwidths*gwidths).unsqueeze(-1).repeat(natoms, 1) # (natoms*ng, 1)
+    # centres = atompos.unsqueeze(1).repeat_interleave(ng, dim=0) # (natoms*ng, 1, ndim)
+    # coeffs = torch.ones_like(alphas, device=device)
+    # H_model = HamiltonMoleculeC0Gauss(grid, alphas, centres, coeffs, atompos, atomzs).to(dtype).to(device)
 
     # setup the hamiltonian forward parameters
     hparams = []
@@ -131,7 +139,7 @@ if __name__ == "__main__":
     a = torch.tensor([-0.7385587663820223]).to(dtype).requires_grad_()
     p = torch.tensor([4./3]).to(dtype).requires_grad_()
     eks_model = PseudoLDA(a, p)
-    mode = "grad"
+    mode = "fwd"
 
     def getloss(a, p, distance, eks_model=None):
         atompos = distance * torch.tensor([[-0.5], [0.5]], dtype=dtype) # (2,1)
