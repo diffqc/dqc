@@ -60,6 +60,9 @@ def atom(atomz, charge=0,
         grid = radgrid
         H_models = [HamiltonAtomRadial(grid, gwidths, angmom=angmom, coulexp=coulexp).to(dtype).to(device) for angmom in angmoms]
 
+    # set the grid for eks_model
+    eks_model.set_grid(grid)
+
     # setup the hamiltonian parameters and the occupation numbers
     atomz_tensor = torch.tensor([atomz]).to(dtype).to(device)
     charge_tensor = torch.tensor([charge]).to(dtype).to(device)

@@ -7,7 +7,7 @@ __all__ = ["Hartree"]
 class Hartree(BaseEKS):
     def __init__(self, grid):
         super(Hartree, self).__init__()
-        self.grid = grid
+        self.set_grid(grid)
 
     def forward(self, density):
         # density: (nbatch, nr)

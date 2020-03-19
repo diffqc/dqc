@@ -6,6 +6,17 @@ __all__ = ["BaseEKS"]
 class BaseEKS(torch.nn.Module):
     def __init__(self):
         super(BaseEKS, self).__init__()
+        self._grid = None
+
+    def set_grid(self, grid):
+        self._grid = grid
+
+    # should be called internally only
+    @property
+    def grid(self):
+        if self._grid is None:
+            raise RuntimeError("The grid must be set by set_grid first before accessing grid")
+        return self._grid
 
     @abstractmethod
     def forward(self, density):

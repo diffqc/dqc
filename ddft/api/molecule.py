@@ -44,6 +44,7 @@ def molecule(atomzs, atompos,
     radgrid = LegendreRadialShiftExp(rmin, rmax, nr, dtype=dtype, device=device)
     sphgrid = Lebedev(radgrid, prec=angprec, basis_maxangmom=lmax_poisson, dtype=dtype, device=device)
     grid = BeckeMultiGrid(sphgrid, atompos, dtype=dtype, device=device)
+    eks_model.set_grid(grid)
 
     # set up the basis
     natoms = atompos.shape[0]
