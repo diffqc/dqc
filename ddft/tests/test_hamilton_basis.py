@@ -51,11 +51,12 @@ def test_hamilton_molecule_cartesian_gauss():
 
         # setup basis
         nbasis = 60
-        alphas = torch.logspace(np.log10(1e-4), np.log10(1e6), nbasis).unsqueeze(-1).to(dtype) # (nbasis, 1)
-        centres = atompos.unsqueeze(1).repeat(nbasis, 1, 1)
-        coeffs = torch.ones((nbasis, 1))
-        ijks = torch.zeros((nbasis, 1, 3), dtype=torch.int32)
-        h = HamiltonMoleculeCGauss(grid, ijks, alphas, centres, coeffs, atompos, atomzs).to(dtype)
+        nelmts = 1
+        alphas = torch.logspace(np.log10(1e-4), np.log10(1e6), nbasis).to(dtype) # (nbasis,)
+        centres = atompos.repeat(nbasis, 1)
+        coeffs = torch.ones((nbasis,))
+        ijks = torch.zeros((nbasis, 3), dtype=torch.int32)
+        h = HamiltonMoleculeCGauss(grid, ijks, alphas, centres, coeffs, nelmts, atompos, atomzs).to(dtype)
 
         # compare the eigenvalues (no degeneracy because the basis is all radial)
         nevals = 5
@@ -78,16 +79,17 @@ def test_hamilton_molecule_cartesian_gauss1():
 
         # setup basis
         nbasis = 60
-        alphas = torch.logspace(np.log10(1e-4), np.log10(1e6), nbasis).repeat(4).unsqueeze(-1).to(dtype) # (4*nbasis, 1)
-        centres = atompos.unsqueeze(1).repeat(4*nbasis, 1, 1)
-        coeffs = torch.ones((4*nbasis, 1))
-        ijks = torch.zeros((4,nbasis, 1, 3), dtype=torch.int32)
+        nelmts = 1
+        alphas = torch.logspace(np.log10(1e-4), np.log10(1e6), nbasis).repeat(4).to(dtype) # (4*nbasis,)
+        centres = atompos.repeat(4*nbasis, 1)
+        coeffs = torch.ones((4*nbasis,))
+        ijks = torch.zeros((4,nbasis, 3), dtype=torch.int32)
         # L=1
-        ijks[1,:,:,0] = 1
-        ijks[2,:,:,1] = 1
-        ijks[3,:,:,2] = 1
-        ijks = ijks.view(4*nbasis, 1, 3)
-        h = HamiltonMoleculeCGauss(grid, ijks, alphas, centres, coeffs, atompos, atomzs).to(dtype)
+        ijks[1,:,0] = 1
+        ijks[2,:,1] = 1
+        ijks[3,:,2] = 1
+        ijks = ijks.view(4*nbasis, 3)
+        h = HamiltonMoleculeCGauss(grid, ijks, alphas, centres, coeffs, nelmts, atompos, atomzs).to(dtype)
 
         # compare the eigenvalues (there is degeneracy in p-orbitals)
         nevals = 6

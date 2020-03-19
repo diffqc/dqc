@@ -21,14 +21,18 @@ class HamiltonMoleculeCGauss(BaseHamilton):
     * grid: BaseGrid
         The integration grid. It should be a spherical harmonics radial grid
         centered at the centre of coordinate.
-    * ijks: torch.tensor int (nbasis, nelmts, 3)
+    * ijks: torch.tensor int (nelmtstot, 3)
         The power of xyz in the basis.
-    * alphas: torch.tensor (nbasis, nelmts,)
+    * alphas: torch.tensor (nelmtstot,)
         The Gaussian exponent of the contracted Gaussians.
-    * centres: torch.tensor (nbasis, nelmts, 3)
+    * centres: torch.tensor (nelmtstot, 3)
         The position in Cartesian coordinate of the contracted Gaussians.
-    * coeffs: torch.tensor (nbasis, nelmts,)
+    * coeffs: torch.tensor (nelmtstot,)
         The contracted coefficients of each elements in the contracted Gaussians.
+    * nelmts: int or torch.tensor int (nbasis,)
+        The number of elements per basis. If it is an int, then the number of
+        elements are the same for all bases. If it is a tensor, then the number
+        of elements in each basis is indicated by the values in the tensor.
     * atompos: torch.tensor (natoms, 3)
         The position of the atoms (to be the central position of Coulomb potential).
     * atomzs: torch.tensor (natoms,)
@@ -48,10 +52,17 @@ class HamiltonMoleculeCGauss(BaseHamilton):
     """
 
     def __init__(self, grid,
-                 ijks, alphas, centres, coeffs,
+                 ijks, alphas, centres, coeffs, nelmts,
                  atompos, atomzs):
-        self.nbasis, self.nelmts, ndim = centres.shape
+        # self.nbasis, self.nelmts, ndim = centres.shape
+        self.nelmtstot, ndim = centres.shape
         assert ndim == 3, "The centres must be 3 dimensions"
+        self.nelmts = nelmts
+        if isinstance(self.nelmts, torch.Tensor):
+            self.nbasis = nelmts.shape[0]
+        else:
+            assert self.nelmtstot % self.nelmts == 0, "The number of gaussian is not the multiple of nelmts"
+            self.nbasis = self.nelmtstot // self.nelmts
         self.natoms = atompos.shape[0]
         self._grid = grid
         dtype = alphas.dtype
@@ -63,21 +74,19 @@ class HamiltonMoleculeCGauss(BaseHamilton):
             dtype = dtype,
             device = device)
 
-        # flatten the information about the basis
-        ijks = ijks.view(-1, ndim) # (nbasis*nelmts, 3)
-        alphas = alphas.view(-1) # (nbasis*nelmts,)
-        centres = centres.view(-1, ndim) # (nbasis*nelmts, 3)
-        coeffs = coeffs.view(-1) # (nbasis*nelmts,)
-        self.coeffs = coeffs
-        self.coeffs2 = coeffs * coeffs.unsqueeze(1) # (nbasis*nelmts, nbasis*nelmts)
-
+        # get the matrices before contraction
         ecoeff_obj = Ecoeff(ijks, centres, alphas, atompos)
-        self.olp_elmts = ecoeff_obj.get_overlap().unsqueeze(0) # (1, nbasis*nelmts, nbasis*nelmts)
-        self.kin_elmts = ecoeff_obj.get_kinetics().unsqueeze(0) # (1, nbasis*nelmts, nbasis*nelmts)
-        self.coul_elmts = ecoeff_obj.get_coulomb() * atomzs.unsqueeze(-1).unsqueeze(-1) # (natoms, nbasis*nelmts, nbasis*nelmts)
+        self.olp_elmts = ecoeff_obj.get_overlap().unsqueeze(0) # (1, nelmtstot, nelmtstot)
+        self.kin_elmts = ecoeff_obj.get_kinetics().unsqueeze(0) # (1, nelmtstot, nelmtstot)
+        self.coul_elmts = ecoeff_obj.get_coulomb() * atomzs.unsqueeze(-1).unsqueeze(-1) # (natoms, nelmtstot, nelmtstot)
 
         # combine the kinetics and coulomb elements
-        self.kin_coul_elmts = self.kin_elmts + self.coul_elmts.sum(dim=0, keepdim=True) # (1, nbasis*nelmts, nbasis*nelmts)
+        self.kin_coul_elmts = self.kin_elmts + self.coul_elmts.sum(dim=0, keepdim=True) # (1, nelmtstot, nelmtstot)
+
+        # prepare the contracted coefficients and indices
+        self.coeffs2 = coeffs * coeffs.unsqueeze(1) # (nelmtstot, nelmtstot)
+        if isinstance(self.nelmts, torch.Tensor):
+            self.csnelmts = torch.cumsum(self.nelmts)
 
         # get the contracted part
         self.kin_coul_mat = self._contract(self.kin_coul_elmts) # (1, nbasis, nbasis)
@@ -148,11 +157,19 @@ class HamiltonMoleculeCGauss(BaseHamilton):
         # resize mat to have shape of (-1, nbasis, nelmts, nbasis, nelmts)
         batch_size = mat.shape[:-2]
         mat_size = mat.shape[-2:]
-        mat = mat.view(-1, self.nbasis, self.nelmts, self.nbasis, self.nelmts)
+        if isinstance(self.nelmts, torch.Tensor):
+            mat = mat.view(-1, *mat_size) # (-1, nelmtstot, nelmtstot)
+            csmat1 = torch.cumsum(mat, dim=1)[:,self.csnelmts,:] # (-1, nbasis, nelmtstot)
+            mat1 = torch.cat((csmat1[:,:1,:], csmat1[:,1:,:]-csmat1[:,:-1,:]), dim=1) # (-1, nbasis, nelmtstot)
+            csmat2 = torch.cumsum(mat1, dim=2)[:,:,self.csnelmts] # (-1, nbasis, nbasis)
+            cmat = torch.cat((csmat2[:,:,:1], csmat2[:,:,1:]-csmat2[:,:,:-1]), dim=2) # (-1, nbasis, nbasis)
+        else:
+            mat = mat.view(-1, self.nbasis, self.nelmts, self.nbasis, self.nelmts)
 
-        # sum the nelmts to get the basis
-        cmat = mat.sum(dim=-1).sum(dim=-2) # (-1, nbasis, nbasis)
-        return cmat.view(*batch_size, self.nbasis, self.nbasis)
+            # sum the nelmts to get the basis
+            cmat = mat.sum(dim=-1).sum(dim=-2) # (-1, nbasis, nbasis)
+        cmat = cmat.view(*batch_size, self.nbasis, self.nbasis)
+        return cmat
 
 class Ecoeff(object):
     def __init__(self, ijks, centres, alphas, atompos):
@@ -172,7 +189,7 @@ class Ecoeff(object):
         qab_sq = qab**2 # (nbasis*nelmts, nbasis*nelmts, 3)
         gamma = (alphas + alphas.unsqueeze(1)) # (nbasis*nelmts, nbasis*nelmts)
         kappa = (alphas * alphas.unsqueeze(1)) / gamma # (nbasis*nelmts, nbasis*nelmts)
-        # print(alphas.shape, gamma.shape, kappa.shape, qab_sq.shape)
+        print(alphas.shape, gamma.shape, kappa.shape, qab_sq.shape)
         mab = torch.exp(-kappa.unsqueeze(-1) * qab_sq) # (nbasis*nelmts, nbasis*nelmts, 3)
         ra = alphas.unsqueeze(-1) * centres # (nbasis*nelmts, 3)
         rc = (ra + ra.unsqueeze(1)) / gamma.unsqueeze(-1) # (nbasis*nelmts, nbasis*nelmts, 3)
@@ -380,11 +397,12 @@ if __name__ == "__main__":
     nr = grid.rgrid.shape[0]
 
     nbasis = 30
-    alphas = torch.logspace(np.log10(1e-4), np.log10(1e6), nbasis).unsqueeze(-1).to(dtype) # (nbasis, 1)
-    centres = atompos.unsqueeze(1).repeat(nbasis, 1, 1)
-    coeffs = torch.ones((nbasis, 1))
-    ijks = torch.zeros((nbasis, 1, 3), dtype=torch.int32)
-    h = HamiltonMoleculeCGauss(grid, ijks, alphas, centres, coeffs, atompos, atomzs).to(dtype)
+    nelmts = 1
+    alphas = torch.logspace(np.log10(1e-4), np.log10(1e6), nbasis).to(dtype) # (nbasis,)
+    centres = atompos.repeat(nbasis, 1) # (nbasis, 3)
+    coeffs = torch.ones((nbasis,))
+    ijks = torch.zeros((nbasis, 3), dtype=torch.int32)
+    h = HamiltonMoleculeCGauss(grid, ijks, alphas, centres, coeffs, nelmts, atompos, atomzs).to(dtype)
 
     vext = torch.zeros(1, nr).to(dtype)
     H = h.fullmatrix(vext)
