@@ -6,10 +6,11 @@ from ddft.hamiltons.hamiltonpw import HamiltonPlaneWave
 from ddft.modules.equilibrium import EquilibriumModule
 from ddft.dft.dft import DFT, _get_uniform_density
 from ddft.grids.linearnd import LinearNDGrid
+from ddft.eks.base_eks import BaseEKS
 
 # slow
 def test_dft1d_1():
-    class EKS1(torch.nn.Module):
+    class EKS1(BaseEKS):
         def __init__(self, a, p):
             super(EKS1, self).__init__()
             self.a = torch.nn.Parameter(a)

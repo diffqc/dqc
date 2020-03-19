@@ -47,7 +47,9 @@ def run_vks_test(gridname, fcnname, rtol=1e-5, atol=1e-8):
     a = torch.tensor([1.0]).to(dtype)
     p = torch.tensor([1.3333]).to(dtype)
     eks_mdl = EKS1(a, p)
-    vks_mdl = VKS(eks_mdl, grid)
+    # use_potential=False to use the derivative to check if the poisson
+    # solver is stable and implemented correctly
+    vks_mdl = VKS(eks_mdl, grid, use_potential=False)
     eks = eks_mdl(density)
     vks = vks_mdl(density)
 

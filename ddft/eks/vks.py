@@ -3,14 +3,19 @@ import torch
 __all__ = ["VKS"]
 
 class VKS(torch.nn.Module):
-    def __init__(self, eks_model, grid):
+    def __init__(self, eks_model, grid, use_potential=True):
         super(VKS, self).__init__()
         self.eks_model = eks_model
+        self.eks_model.set_grid(grid)
+        self.use_potential = use_potential
         self.grid = grid
         self.dv = self.grid.get_dvolume()
 
     def forward(self, x):
         assert x.ndim == 2, "The input to VKS module must be 2-dimensional tensor (nbatch, nrgrid)"
+        if self.use_potential:
+            return self.eks_model.potential(x)
+
         if x.requires_grad:
             xinp = x
         else:
