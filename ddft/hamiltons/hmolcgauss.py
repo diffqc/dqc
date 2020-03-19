@@ -86,7 +86,7 @@ class HamiltonMoleculeCGauss(BaseHamilton):
         # prepare the contracted coefficients and indices
         self.coeffs2 = coeffs * coeffs.unsqueeze(1) # (nelmtstot, nelmtstot)
         if isinstance(self.nelmts, torch.Tensor):
-            self.csnelmts = torch.cumsum(self.nelmts)
+            self.csnelmts = torch.cumsum(self.nelmts, dim=0)-1
 
         # get the contracted part
         self.kin_coul_mat = self._contract(self.kin_coul_elmts) # (1, nbasis, nbasis)
@@ -106,7 +106,13 @@ class HamiltonMoleculeCGauss(BaseHamilton):
         dist_sq = (rab*rab).sum(dim=-1) # (nbasis*nelmts, nr)
         rab_power = ((rab+1e-15)**ijks.unsqueeze(1)).prod(dim=-1) # (nbasis*nelmts, nr)
         basis_all = rab_power * torch.exp(-alphas.unsqueeze(-1) * dist_sq) # (nbasis*nelmts, nr)
-        basis = (basis_all * coeffs.unsqueeze(-1)).view(self.nbasis, self.nelmts, -1).sum(dim=1) # (nbasis, nr)
+        basis_all_coeff = basis_all * coeffs.unsqueeze(-1) # (nelmtstot, nr)
+        # contract the basis
+        if isinstance(self.nelmts, torch.Tensor):
+            basis = basis_all_coeff.cumsum(dim=0)[self.csnelmts,:] # (nbasis, nr)
+            basis = torch.cat((basis[:1,:], basis[1:,:]-basis[:-1,:]), dim=0) # (nbasis, nr)
+        else:
+            basis = basis_all_coeff.view(self.nbasis, self.nelmts, -1).sum(dim=1) # (nbasis, nr)
         norm_basis = basis * norm.squeeze(0).unsqueeze(-1)
         self.basis = norm_basis # (nbasis, nr)
         self.basis_dvolume = self.basis * self.grid.get_dvolume() # (nbasis, nr)
