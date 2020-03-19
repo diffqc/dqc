@@ -16,10 +16,12 @@ class BeckeMultiGrid(BaseMultiAtomsGrid):
         The grid for each individual atom.
     * atompos: torch.tensor (natoms, 3)
         The position of each atom.
+    * atomradius: torch.tensor (natoms,) or None
+        The atom radius. If None, it will be assumed to be all 1.
     * dtype, device:
         Type and device of the tensors involved in the calculations.
     """
-    def __init__(self, atomgrid, atompos, dtype=torch.float, device=torch.device('cpu')):
+    def __init__(self, atomgrid, atompos, atomradius=None, dtype=torch.float, device=torch.device('cpu')):
         super(BeckeMultiGrid, self).__init__()
 
         # atomgrid must be a 3DGrid
@@ -29,6 +31,7 @@ class BeckeMultiGrid(BaseMultiAtomsGrid):
         natoms = atompos.shape[0]
         self.natoms = natoms
         self.atompos = atompos
+        self.atomradius = atomradius
 
         # obtain the grid position
         self._atomgrid = atomgrid
@@ -50,6 +53,15 @@ class BeckeMultiGrid(BaseMultiAtomsGrid):
         rgatoms = torch.norm(xyz - self.atompos.unsqueeze(1), dim=-1) # (natoms, nr)
         ratoms = torch.norm(self.atompos - self.atompos.unsqueeze(1), dim=-1) # (natoms, natoms)
         mu_ij = (rgatoms - rgatoms.unsqueeze(1)) / (ratoms.unsqueeze(-1) + 1e-12) # (natoms, natoms, nr)
+
+        # calculate the distortion due to heterogeneity
+        # (Appendix in Becke's https://doi.org/10.1063/1.454033)
+        if self.atomradius is not None:
+            chiij = self.atomradius / self.atomradius.unsqueeze(1) # (natoms, natoms)
+            uij = (self.atomradius - self.atomradius.unsqueeze(1)) / \
+                  (self.atomradius + self.atomradius.unsqueeze(1))
+            aij = torch.clamp(uij / (uij*uij - 1), min=-0.45, max=0.45)
+            mu_ij = mu_ij + aij * (1-mu_ij*mu_ij)
 
         f = mu_ij
         for _ in range(3):
