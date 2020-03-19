@@ -6,10 +6,8 @@ class BaseContractedGaussian(object):
         """
         Given atomz, returns the parameters needed for the basis.
         If cartesian == True, returns (ijks, alphas, coeffs, nelmts).
+        else, returns (lms, alphas, coeffs, nelmts).
         """
-        pass
-
-    def get_spherical(self, atomzs, atompos):
         pass
 
 def normalize_basisname(basisname):
