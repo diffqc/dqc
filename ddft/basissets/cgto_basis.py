@@ -27,8 +27,14 @@ class CGTOBasis(BaseContractedGaussian):
 
         # read the content
         with open(file, "r") as f:
-            # the content starts from line 15
-            lines = f.read().split("\n")[14:]
+            lines = f.read().split("\n")
+
+        # skip the header
+        while True:
+            line = lines.pop(0)
+            if line == "": continue
+            if line.startswith("!"): continue
+            break
 
         spdfs = []
         alphas = []
@@ -46,6 +52,7 @@ class CGTOBasis(BaseContractedGaussian):
             angmom = []
             for i in range(nelmt):
                 line = lines.pop(0)
+                line = line.replace("D", "E")
                 elmts = [float(s) for s in line.split()]
                 if len(elmts) == 2:
                     alpha.append(elmts[0])
