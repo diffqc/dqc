@@ -41,7 +41,7 @@ def test_hamilton_molecule_c0_gauss():
 
 
 def test_hamilton_molecule_cartesian_gauss():
-    def runtest(atomz):
+    def runtest(atomz, nelmts_tensor):
         # setup grid
         atompos = torch.tensor([[0.0, 0.0, 0.0]], dtype=dtype) # (natoms, ndim)
         atomzs = torch.tensor([atomz], dtype=dtype)
@@ -51,11 +51,15 @@ def test_hamilton_molecule_cartesian_gauss():
 
         # setup basis
         nbasis = 60
-        nelmts = 1
-        alphas = torch.logspace(np.log10(1e-4), np.log10(1e6), nbasis).to(dtype) # (nbasis,)
-        centres = atompos.repeat(nbasis, 1)
-        coeffs = torch.ones((nbasis,))
-        ijks = torch.zeros((nbasis, 3), dtype=torch.int32)
+        nelmts_val = 2
+        if nelmts_tensor:
+            nelmts = torch.ones(nbasis, dtype=torch.int32) * nelmts_val
+        else:
+            nelmts = nelmts_val
+        alphas = torch.logspace(np.log10(1e-4), np.log10(1e6), nbasis*nelmts_val).to(dtype) # (nbasis,)
+        centres = atompos.repeat(nbasis*nelmts_val, 1)
+        coeffs = torch.ones((nbasis*nelmts_val,))
+        ijks = torch.zeros((nbasis*nelmts_val, 3), dtype=torch.int32)
         h = HamiltonMoleculeCGauss(grid, ijks, alphas, centres, coeffs, nelmts, atompos, atomzs).to(dtype)
 
         # compare the eigenvalues (no degeneracy because the basis is all radial)
@@ -65,8 +69,8 @@ def test_hamilton_molecule_cartesian_gauss():
         print(evals - true_evals)
         assert torch.allclose(evals, true_evals)
 
-    for atomz in [1.0,2.0]:
-        runtest(atomz)
+    for atomz, nelmts_tensor in product([1.0,2.0], [True, False]):
+        runtest(atomz, nelmts_tensor)
 
 def test_hamilton_molecule_cartesian_gauss1():
     def runtest(atomz):
