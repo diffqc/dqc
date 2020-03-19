@@ -60,7 +60,8 @@ def run_hartree_test(gridname, fcnname, rtol=1e-5, atol=1e-8):
     dtype = torch.float64
     grid, density = _setup_density(gridname, fcnname, dtype=dtype)
 
-    hartree_mdl = Hartree(grid)
+    hartree_mdl = Hartree()
+    hartree_mdl.set_grid(grid)
     vks_hartree_mdl = VKS(hartree_mdl, grid)
     vks_hartree = vks_hartree_mdl(density)
 

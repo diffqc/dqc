@@ -303,8 +303,9 @@ if __name__ == "__main__":
     def getloss(a, p, vext, focc, return_model=False):
         # set up the modules
         eks_model = EKS1(a, p)
-        eks_model = eks_model + Hartree(H_model.grid)
+        eks_model = eks_model + Hartree()
         eks_model = eks_model + xLDA()
+        eks_model.set_grid(H_model.grid)
         dft_model = DFT(H_model, eks_model, nlowest,
             **eigen_options)
         scf_model = EquilibriumModule(dft_model,

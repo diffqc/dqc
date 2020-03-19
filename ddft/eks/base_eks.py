@@ -15,7 +15,7 @@ class BaseEKS(torch.nn.Module):
     @property
     def grid(self):
         if self._grid is None:
-            raise RuntimeError("The grid must be set by set_grid first before accessing grid")
+            raise RuntimeError("The grid must be set by set_grid first before calling grid")
         return self._grid
 
     @abstractmethod

@@ -5,10 +5,6 @@ from ddft.eks.base_eks import BaseEKS
 __all__ = ["Hartree"]
 
 class Hartree(BaseEKS):
-    def __init__(self, grid):
-        super(Hartree, self).__init__()
-        self.set_grid(grid)
-
     def forward(self, density):
         # density: (nbatch, nr)
         vks = self.potential(density)
@@ -32,7 +28,8 @@ if __name__ == "__main__":
     rgrid = grid.rgrid
     density = torch.exp(-rgrid*rgrid).transpose(-2,-1)
 
-    hartree_mdl = Hartree(grid)
+    hartree_mdl = Hartree()
+    hartree_mdl.set_grid(grid)
     vks_hartree_mdl = VKS(hartree_mdl, grid)
     eks_hartree = hartree_mdl(density)
     vks_hartree = vks_hartree_mdl(density)

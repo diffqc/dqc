@@ -60,9 +60,6 @@ def atom(atomz, charge=0,
         grid = radgrid
         H_models = [HamiltonAtomRadial(grid, gwidths, angmom=angmom, coulexp=coulexp).to(dtype).to(device) for angmom in angmoms]
 
-    # set the grid for eks_model
-    eks_model.set_grid(grid)
-
     # setup the hamiltonian parameters and the occupation numbers
     atomz_tensor = torch.tensor([atomz]).to(dtype).to(device)
     charge_tensor = torch.tensor([charge]).to(dtype).to(device)
@@ -71,9 +68,10 @@ def atom(atomz, charge=0,
 
     # setup the modules
     nlowests = orbitals.get_nlowests()
-    all_eks_models = Hartree(grid)
+    all_eks_models = Hartree()
     if eks_model is not None:
         all_eks_models = all_eks_models + eks_model
+    all_eks_models.set_grid(grid)
     dft_model = DFTMulti(H_models, all_eks_models, nlowests, **eig_options)
     scf_model = EquilibriumModule(dft_model, forward_options=scf_options, backward_options=bck_options)
 

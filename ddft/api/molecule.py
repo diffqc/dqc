@@ -44,7 +44,6 @@ def molecule(atomzs, atompos,
     radgrid = LegendreRadialShiftExp(rmin, rmax, nr, dtype=dtype, device=device)
     sphgrid = Lebedev(radgrid, prec=angprec, basis_maxangmom=lmax_poisson, dtype=dtype, device=device)
     grid = BeckeMultiGrid(sphgrid, atompos, dtype=dtype, device=device)
-    eks_model.set_grid(grid)
 
     # set up the basis
     natoms = atompos.shape[0]
@@ -61,9 +60,10 @@ def molecule(atomzs, atompos,
     # setup the modules
     nelectrons = int(atomzs.sum())
     nlowest = (nelectrons // 2) + (nelectrons % 2)
-    all_eks_models = Hartree(grid)
+    all_eks_models = Hartree()
     if eks_model is not None:
         all_eks_models = all_eks_models + eks_model
+    all_eks_models.set_grid(grid)
     dft_model = DFT(H_model, all_eks_models, nlowest, **eig_options)
     scf_model = EquilibriumModule(dft_model, forward_options=scf_options, backward_options=bck_options)
 
