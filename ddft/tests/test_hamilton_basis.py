@@ -1,6 +1,7 @@
 from itertools import product
 import torch
 import numpy as np
+from ddft.basissets.cgto_basis import CGTOBasis
 from ddft.hamiltons.hmolc0gauss import HamiltonMoleculeC0Gauss
 from ddft.hamiltons.hmolcgauss import HamiltonMoleculeCGauss
 from ddft.hamiltons.hatomygauss import HamiltonAtomYGauss
@@ -104,6 +105,30 @@ def test_hamilton_molecule_cartesian_gauss1():
 
     for atomz in [1.0,2.0]:
         runtest(atomz)
+
+def test_hamilton_molecule_cgto():
+    def runtest(atomz, basisname):
+        # setup grid
+        atompos = torch.tensor([[0.0, 0.0, 0.0]], dtype=dtype) # (natoms, ndim)
+        atomzs = torch.tensor([atomz], dtype=dtype)
+        radgrid = LegendreRadialShiftExp(1e-6, 1e3, 200, dtype=dtype)
+        atomgrid = Lebedev(radgrid, prec=13, basis_maxangmom=4, dtype=dtype)
+        grid = BeckeMultiGrid(atomgrid, atompos, dtype=dtype)
+
+        # setup basis
+        basis = CGTOBasis(basisname)
+        ijks, alphas, coeffs, nelmts, poss = basis.construct_basis(atomzs, atompos, cartesian=True)
+        h = HamiltonMoleculeCGauss(grid, ijks, alphas, poss, coeffs, nelmts, atompos, atomzs).to(dtype)
+
+        # compare the eigenvalues (there is degeneracy in p-orbitals)
+        nevals = 1
+        evals = get_evals(grid, h)[:nevals]
+        true_evals = -0.5*atomz*atomz/torch.tensor([1.0]).to(dtype)**2
+        print(evals - true_evals)
+        assert torch.allclose(evals, true_evals, rtol=5e-2)
+
+    for atomz in [1.0]:#,2.0]:
+        runtest(atomz, "STO-6G")
 
 def test_atom_gauss():
     def runtest(atomz, coulexp):
