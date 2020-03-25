@@ -203,7 +203,6 @@ class Ecoeff(object):
         qab_sq = qab**2 # (nbasis*nelmts, nbasis*nelmts, 3)
         gamma = (alphas + alphas.unsqueeze(1)) # (nbasis*nelmts, nbasis*nelmts)
         kappa = (alphas * alphas.unsqueeze(1)) / gamma # (nbasis*nelmts, nbasis*nelmts)
-        print(alphas.shape, gamma.shape, kappa.shape, qab_sq.shape)
         mab = torch.exp(-kappa.unsqueeze(-1) * qab_sq) # (nbasis*nelmts, nbasis*nelmts, 3)
         ra = alphas.unsqueeze(-1) * centres # (nbasis*nelmts, 3)
         rc = (ra + ra.unsqueeze(1)) / gamma.unsqueeze(-1) # (nbasis*nelmts, nbasis*nelmts, 3)

@@ -52,7 +52,6 @@ def molecule(atomzs, atompos,
     natoms = atompos.shape[0]
     b = CGTOBasis(basis)
     ijks, alphas, coeffs, nelmts, poss = b.construct_basis(atomzs, atompos, cartesian=True)
-    print(nelmts)
     H_model = HamiltonMoleculeCGauss(grid, ijks, alphas, poss, coeffs, nelmts, atompos, atomzs)\
               .to(dtype).to(device)
     # gwidths = torch.logspace(np.log10(gwmin), np.log10(gwmax), ng, dtype=dtype).to(device) # (ng,)
