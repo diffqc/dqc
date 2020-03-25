@@ -308,9 +308,9 @@ class Ecoeff(object):
                 for r in range(k+u+1):
                     Erku = self.get_coeff(k, u, r, 0)[idx] # flatten tensor
                     for s in range(l+v+1):
-                        Eslv = self.get_coeff(l, v, s, 0)[idx]
+                        Eslv = self.get_coeff(l, v, s, 1)[idx]
                         for t in range(m+w+1):
-                            Etmw = self.get_coeff(m, w, t, 0)[idx]
+                            Etmw = self.get_coeff(m, w, t, 2)[idx]
                             Rrst = self.get_rcoeff(r, s, t, 0)[:,idx] # (natoms, -1)
                             coulomb[:,idx] += (Erku * Eslv * Etmw) * Rrst
             self.coulomb = -(2*np.pi/self.gamma) * coulomb
