@@ -100,6 +100,9 @@ class BeckeMultiGrid(BaseMultiAtomsGrid):
             res = torch.cat((rgrid[:iatom,:,:], rgrid[iatom+1:,:,:]), dim=0) # (natoms-1, ngrid, ndim)
             return res.view(-1, res.shape[-1]) # ((natoms-1) * ngrid, ndim)
 
+        if self.natoms == 1:
+            return Vatoms.view(Vatoms.shape[0], -1) # (nbatch, natoms*ngrid)
+
         # combine the potentials with interpolation and extrapolation
         Vtot = torch.zeros_like(Vatoms).to(Vatoms.device).view(nbatch, -1) # (nbatch, natoms*ngrid)
         for i in range(self.natoms):
