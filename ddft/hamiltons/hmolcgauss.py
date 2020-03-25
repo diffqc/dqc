@@ -37,6 +37,9 @@ class HamiltonMoleculeCGauss(BaseHamilton):
         The position of the atoms (to be the central position of Coulomb potential).
     * atomzs: torch.tensor (natoms,)
         The atomic number of the atoms.
+    * normalize_elmts: bool
+        If True, then the basis is `sum(coeff * norm(alpha) * xyz * exp(-alpha*r^2))`.
+        Otherwise, then the basis is `sum(coeff * xyz * exp(-alpha*r^2))`.
 
     Forward arguments
     -----------------
@@ -53,7 +56,7 @@ class HamiltonMoleculeCGauss(BaseHamilton):
 
     def __init__(self, grid,
                  ijks, alphas, centres, coeffs, nelmts,
-                 atompos, atomzs):
+                 atompos, atomzs, normalize_elmts=True):
         # self.nbasis, self.nelmts, ndim = centres.shape
         self.nelmtstot, ndim = centres.shape
         assert ndim == 3, "The centres must be 3 dimensions"
@@ -79,6 +82,11 @@ class HamiltonMoleculeCGauss(BaseHamilton):
         self.olp_elmts = ecoeff_obj.get_overlap().unsqueeze(0) # (1, nelmtstot, nelmtstot)
         self.kin_elmts = ecoeff_obj.get_kinetics().unsqueeze(0) # (1, nelmtstot, nelmtstot)
         self.coul_elmts = ecoeff_obj.get_coulomb() * atomzs.unsqueeze(-1).unsqueeze(-1) # (natoms, nelmtstot, nelmtstot)
+
+        # normalize each gaussian elements
+        if normalize_elmts:
+            norm_elmt = 1./torch.sqrt(torch.diagonal(self.olp_elmts[0])) # (nelmtstot,)
+            coeffs = coeffs * norm_elmt
 
         # combine the kinetics and coulomb elements
         self.kin_coul_elmts = self.kin_elmts + self.coul_elmts.sum(dim=0, keepdim=True) # (1, nelmtstot, nelmtstot)

@@ -107,7 +107,7 @@ def test_hamilton_molecule_cartesian_gauss1():
         runtest(atomz)
 
 def test_hamilton_molecule_cgto():
-    def runtest(atomz, basisname):
+    def runtest(atomz, basisname, rtol):
         # setup grid
         atompos = torch.tensor([[0.0, 0.0, 0.0]], dtype=dtype) # (natoms, ndim)
         atomzs = torch.tensor([atomz], dtype=dtype)
@@ -125,10 +125,10 @@ def test_hamilton_molecule_cgto():
         evals = get_evals(grid, h)[:nevals]
         true_evals = -0.5*atomz*atomz/torch.tensor([1.0]).to(dtype)**2
         print(evals - true_evals)
-        assert torch.allclose(evals, true_evals, rtol=5e-2)
+        assert torch.allclose(evals, true_evals, rtol=rtol)
 
-    for atomz in [1.0]:#,2.0]:
-        runtest(atomz, "STO-6G")
+    for atomz in [1.0]:
+        runtest(atomz, "6-311++G**", rtol=5e-4)
 
 def test_atom_gauss():
     def runtest(atomz, coulexp):
