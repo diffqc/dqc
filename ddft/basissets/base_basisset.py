@@ -24,7 +24,7 @@ class BaseContractedGaussian(object):
         """
         pass
 
-    def construct_basis(self, atomzs, atomposs, cartesian):
+    def construct_basis(self, atomzs, atomposs, cartesian, requires_grad=False):
         # atomzs: torch.tensor int (natoms)
         # atomposs: torch.tensor (natoms, 3)
         # returns: (ijks, alphas, coeffs, nelmts, poss) each are torch.tensor
@@ -45,6 +45,12 @@ class BaseContractedGaussian(object):
                 all_nelmts = torch.cat((all_nelmts, nelmts), dim=0)
                 all_poss = torch.cat((all_poss, atpos), dim=0)
             i = 1
+
+        if requires_grad:
+            all_alphas = all_alphas.requires_grad_()
+            all_coeffs = all_coeffs.requires_grad_()
+            all_poss = all_poss.requires_grad_()
+
         return all_ijks, all_alphas, all_coeffs, all_nelmts, all_poss
 
 def normalize_basisname(basisname):
