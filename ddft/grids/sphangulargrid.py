@@ -162,7 +162,7 @@ class Lebedev(BaseRadialAngularGrid):
         p = p.view(*batch_size, self.nrad, -1) # (..., nrad, nphitheta)
         if idim == 0:
             # radial derivative
-            pres = self.radgrid.derivative(p, idim=0, dim=-2).view(*batch_size, -1) # (..., nr)
+            pres = self.radgrid.derivative(p, idim=0, dim=-2).reshape(*batch_size, -1) # (..., nr)
 
         else:
             # phi (azimuth) or theta derivative

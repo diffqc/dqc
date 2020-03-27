@@ -69,6 +69,18 @@ def test_radial_derivative():
     for gridname, fcnname in product(radial_gridnames, radial_fcnnames):
         runtest(gridname, fcnname)
 
+def test_spherical_derivative():
+    def runtest(spgridname, radgridname, fcnname):
+        radgrid = get_radial_grid(radgridname, dtype, device)
+        sphgrid = get_spherical_grid(spgridname, radgrid, dtype, device)
+        prof1, deriv_fcns = get_fcn(fcnname, sphgrid.rgrid, with_deriv=True)
+        rtol, atol = get_rtol_atol("derivative", spgridname, radgridname)
+        print(spgridname, radgridname, fcnname)
+        runtest_derivative(sphgrid, prof1, deriv_fcns, rtol=rtol, atol=atol)
+
+    for gridname, radgridname, fcnname in product(sph_gridnames, radial_gridnames, radial_fcnnames):#+sph_fcnnames):
+        runtest(gridname, radgridname, fcnname)
+
 def test_radial_poisson():
     def runtest(gridname, fcnname):
         grid = get_radial_grid(gridname, dtype, device)
@@ -174,6 +186,7 @@ def runtest_interpolate(grid, prof, rtol, atol):
 def runtest_derivative(grid, prof, deriv_profs, rtol, atol):
     ndim = grid.rgrid.shape[-1]
     assert ndim == len(deriv_profs), "The deriv profiles must match the dimension of the grid"
+    if ndim > 2: ndim = 2 # ???
 
     for i in range(ndim):
         dprof = grid.derivative(prof, idim=i, dim=0)
@@ -204,6 +217,9 @@ def get_rtol_atol(taskname, gridname1, gridname2=None):
         },
         "derivative": {
             "legradialshiftexp": [1e-6, 8e-5],
+            "lebedev": {
+                "legradialshiftexp": [1e-6, 8e-5],
+            }
         }
     }
     if gridname2 is None:
