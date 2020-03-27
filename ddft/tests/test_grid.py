@@ -288,19 +288,45 @@ def get_fcn(fcnname, rgrid, with_deriv=False):
         if fcnname == "gauss-l1":
             unnorm_basis = torch.exp(-rs*rs/(2*gw*gw)) * costheta # (nr,1)
             norm = np.sqrt(3) / gw**1.5 / np.pi**.75 # (ng)
-            return unnorm_basis * norm
+            fcn = unnorm_basis * norm
+            if not with_deriv:
+                return fcn
+            deriv_r = (-rs/(gw*gw)) * fcn
+            deriv_phi = fcn*0
+            deriv_theta = norm * torch.exp(-rs*rs/(2*gw*gw)) * (-sintheta)
+            return fcn, [deriv_r, deriv_phi, deriv_theta]
+
         elif fcnname == "gauss-l2":
             unnorm_basis = torch.exp(-rs*rs/(2*gw*gw)) * (3*costheta*costheta - 1)/2.0 # (nr,1)
             norm = np.sqrt(5) / gw**1.5 / np.pi**.75 # (ng)
-            return unnorm_basis * norm
+            fcn = unnorm_basis * norm
+            if not with_deriv:
+                return fcn
+            deriv_r = (-rs/(gw*gw)) * fcn
+            deriv_phi = fcn*0
+            deriv_theta = norm * torch.exp(-rs*rs/(2*gw*gw)) * (-3*costheta*sintheta)
+            return fcn, [deriv_r, deriv_phi, deriv_theta]
+
         elif fcnname == "gauss-l1m1":
             unnorm_basis = torch.exp(-rs*rs/(2*gw*gw)) * sintheta * torch.cos(phi)
             norm = np.sqrt(3) / gw**1.5 / np.pi**.75
-            return unnorm_basis * norm
+            fcn = unnorm_basis * norm
+            if not with_deriv:
+                return fcn
+            deriv_r = (-rs/(gw*gw)) * fcn
+            deriv_phi = norm * torch.exp(-rs*rs/(2*gw*gw)) * sintheta * (-torch.sin(phi))
+            deriv_theta = norm * torch.exp(-rs*rs/(2*gw*gw)) * costheta
+            return fcn, [deriv_r, deriv_phi, deriv_theta]
+
         elif fcnname == "gauss-l2m2":
             unnorm_basis = torch.exp(-rs*rs/(2*gw*gw)) * (3*sintheta**2)*torch.cos(2*phi) # (nr,1)
             norm = np.sqrt(5/12.0) / gw**1.5 / np.pi**.75 # (ng)
-            return unnorm_basis * norm
+            if not with_deriv:
+                return fcn
+            deriv_r = (-rs/(gw*gw)) * fcn
+            deriv_phi = norm * torch.exp(-rs*rs/(2*gw*gw)) * (3*sintheta**2) * (-2*torch.sin(2*phi))
+            deriv_theta = norm * torch.exp(-rs*rs/(2*gw*gw)) * (6*sintheta*costheta) * torch.cos(2*phi)
+            return fcn, [deriv_r, deriv_phi, deriv_theta]
 
     # note that the function below is not supposed to be squared when integrated
     elif fcnname in multiatoms_fcnnames:
