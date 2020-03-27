@@ -202,6 +202,9 @@ def assoclegval(cost, l, m):
     else:
         raise RuntimeError("The associated legendre polynomial order %d has not been implemented" % l)
 
+def deriv_assoclegval(cost, l, m):
+    raise RuntimeError("Unimplemented derivative of associated legendre polynomial")
+
 if __name__ == "__main__":
     coeffs = torch.tensor([1., 2., 3.])
     print(legint(coeffs)) # (dc, 0.4, 0.6667, 0.6000)

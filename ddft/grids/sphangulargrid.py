@@ -4,7 +4,7 @@ import torch
 import numpy as np
 import ddft
 from ddft.grids.base_grid import BaseGrid, BaseTransformed1DGrid, BaseRadialAngularGrid
-from ddft.utils.spharmonics import spharmonics
+from ddft.utils.spharmonics import spharmonics, vspharmonics
 
 class Lebedev(BaseRadialAngularGrid):
     def __init__(self, radgrid, prec, basis_maxangmom=None, dtype=torch.float, device=torch.device('cpu')):
@@ -16,6 +16,7 @@ class Lebedev(BaseRadialAngularGrid):
 
         # cached variables
         self._basis_ = None
+        self._deriv_basis_ = [None, None]
         self._angmoms_ = None
 
         # the precision must be an odd number in range [3, 131]
@@ -153,6 +154,27 @@ class Lebedev(BaseRadialAngularGrid):
 
         return frq
 
+    def derivative(self, p, idim, dim=-1):
+        if dim != -1:
+            p = p.transpose(dim, -1) # (..., nr)
+
+        batch_size = p.shape[:-1]
+        p = p.view(*batch_size, self.nrad, -1) # (..., nrad, nphitheta)
+        if idim == 0:
+            # radial derivative
+            pres = self.radgrid.derivative(p, idim=0, dim=-2).view(*batch_size, -1) # (..., nr)
+
+        else:
+            # phi (azimuth) or theta derivative
+            basis = self._get_basis() # (nsh, nphitheta)
+            deriv_basis = self._get_deriv_basis(idim-1) # (nsh, nphitheta)
+            psh = torch.matmul(p, basis.transpose(-2,-1)) # (..., nrad, nsh)
+            pres = torch.matmul(psh, deriv_basis).view(*batch_size, -1) # (..., nr)
+
+        if dim != -1:
+            pres = pres.transpose(dim, -1)
+        return pres
+
     @property
     def radial_grid(self):
         return self.radgrid
@@ -204,6 +226,18 @@ class Lebedev(BaseRadialAngularGrid):
             phi = phitheta[:,0]
             costheta = torch.cos(phitheta[:,1])
             return spharmonics(costheta, phi, self.basis_maxangmom)
+
+    def _get_deriv_basis(self, iphitheta, phitheta=None):
+        if phitheta is None:
+            if self._deriv_basis_[iphitheta] is None:
+                phi = self.phithetargrid[:,0]
+                costheta = torch.cos(self.phithetargrid[:,1])
+                self._deriv_basis_[iphitheta] = vspharmonics(iphitheta, costheta, phi, self.basis_maxangmom)
+            return self._deriv_basis_[iphitheta]
+        else:
+            phi = phitheta[:,0]
+            costheta = torch.cos(phitheta[:,1])
+            return vspharmonics(iphitheta, costheta, phi, self.basis_maxangmom)
 
     def _get_angmoms(self):
         if self._angmoms_ is None:
