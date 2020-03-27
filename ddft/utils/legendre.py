@@ -25,6 +25,35 @@ def legint(coeffs, dim=-1, zeroat="left"):
     res = mfinal * torch.cat((dl, dmid, dr), dim=-1).transpose(dim, -1)
     return res
 
+def legder(c, dim=-1):
+    # c: (..., nr)
+    if dim != -1:
+        c = c.transpose(dim, -1)
+
+    nr_even = c.shape[-1] % 2 == 0
+    c_odd = c[..., 1::2]
+    if nr_even:
+        c_even = c[..., ::2]
+    else:
+        c_even = c[..., 2::2]
+    n_odd = torch.arange(c_odd.shape[-1], device=c.device)
+    n_even = torch.arange(c_even.shape[-1], device=c.device)
+    der = torch.zeros_like(c).to(c.device)
+    if nr_even:
+        der[..., ::2] = (torch.sum(c_odd, dim=-1, keepdim=True) - \
+                         torch.cumsum(c_odd, dim=-1) + c_odd) * (4*n_odd+1)
+        der[..., 1::2] = (torch.sum(c_even, dim=-1, keepdim=True) - \
+                          torch.cumsum(c_even, dim=-1)) * (4*n_even+3)
+    else:
+        der[..., :-1:2] = (torch.sum(c_odd, dim=-1, keepdim=True) - \
+                         torch.cumsum(c_odd, dim=-1) + c_odd) * (4*n_odd+1)
+        der[..., 1::2] = (torch.sum(c_even, dim=-1, keepdim=True) - \
+                          torch.cumsum(c_even, dim=-1) + c_even) * (4*n_even+3)
+
+    if dim != -1:
+        der = der.transpose(dim, -1)
+    return der
+
 def legval(x, order):
     if order == 0:
         return x*0 + 1
@@ -176,3 +205,8 @@ def assoclegval(cost, l, m):
 if __name__ == "__main__":
     coeffs = torch.tensor([1., 2., 3.])
     print(legint(coeffs)) # (dc, 0.4, 0.6667, 0.6000)
+    print(legder(coeffs)) # (2, 9, 0)
+    coeffs2 = torch.tensor([1., 2., 3., 4., 5., 6.])
+    print(legder(coeffs2)) # (12, 24, 50, 35, 54, 0)
+    coeffs3 = torch.tensor([1., 2., 3., 4., 5., 6., 7.])
+    print(legder(coeffs3)) # (12, 45, 50, 84, 54, 77, 0)
