@@ -3,7 +3,7 @@ import torch
 import numpy as np
 from numpy.polynomial.legendre import leggauss
 from ddft.grids.base_grid import BaseGrid, BaseTransformed1DGrid
-from ddft.utils.legendre import legint, legvander
+from ddft.utils.legendre import legint, legvander, legder
 
 class LegendreRadialTransform(BaseTransformed1DGrid):
     def __init__(self, nx, dtype=torch.float, device=torch.device('cpu')):
@@ -102,6 +102,22 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
             frq[:,idxextrap] = frqextrap
 
         return frq
+
+    def derivative(self, p, dim=-1, idim=0):
+        # p: (..., nr, ...)
+        if dim != -1:
+            p = p.transpose(dim, -1) # p: (..., nr)
+
+        # get the derivative w.r.t. the legendre basis
+        coeff = torch.matmul(p, self.inv_basis) # (..., nr)
+        dcoeff = legder(coeff) # (..., nr)
+        dpdq = torch.matmul(dcoeff, self.basis) # (..., nr)
+
+        # get the derivative w.r.t. r
+        dpdr = dpdq / self.get_scaling(self.rgrid[:,0]) # (..., nr)
+        if dim != -1:
+            dpdr = dpdr.transpose(dim, -1)
+        return dpdr
 
     def _get_spline_mat_inverse(self):
         if self._spline_mat_inv_ is None:

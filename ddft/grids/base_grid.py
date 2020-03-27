@@ -52,6 +52,7 @@ class BaseGrid(object):
         """
         pass
 
+    ###################### integrals ######################
     def integralbox(self, p, dim=-1):
         """
         Performing the integral over the spatial grid of the signal `p` where
@@ -90,6 +91,7 @@ class BaseGrid(object):
         pleft = p1 * self.get_dvolume()
         return torch.matmul(pleft, p2)
 
+    ###################### interpolate ######################
     def interpolate(self, f, rq, extrap=None):
         """
         Interpolate the function f to any point rq.
@@ -110,6 +112,90 @@ class BaseGrid(object):
         """
         raise RuntimeError("Unimplemented interpolate function for class %s" % \
                            (self.__class__.__name__))
+
+    ###################### derivatives ######################
+    def derivative(self, p, idim, dim=-1):
+        """
+        Get the derivative in `idim` directions where `idim` indicate the index
+        of the axis according to `self.rgrid`.
+
+        Arguments
+        ---------
+        * p: torch.tensor (..., nr, ...)
+            The function to be taken the derivative.
+        * idim: int
+            The index of the axis where the derivative is calculated
+        * dim: int
+            The dimension of the spatial information.
+
+        Returns
+        -------
+        * dp: torch.tensor (..., nr, ...)
+            The derivative in the `idim` axis.
+        """
+        raise RuntimeError("Derivative for grid %s has not been implemented" % \
+              self.__class__.__name__)
+
+    def magnitude_derivative(self, p, dim=-1):
+        """
+        Returns the magnitude of the derivative |\nabla(p)|.
+
+        Arguments
+        ---------
+        * p: torch.tensor (..., nr, ...)
+            The function to be taken the derivative.
+        * dim: int
+            The dimension of the spatial information.
+
+        Returns
+        -------
+        * dp: torch.tensor (..., nr, ...)
+            The magnitude of the derivative of p.
+        """
+        if dim != -1:
+            p = p.transpose(dim, -1)
+
+        ndim = self.rgrid.shape[-1]
+        pder_sq = 0
+        for i in range(ndim):
+            pder = self.derivative(p, idim=i, dim=-1)
+            pder_sq = pder_sq + pder*pder
+        pder = torch.sqrt(pder_sq)
+
+        # transpose back
+        if dim != -1:
+            pder = pder.transpose(dim, -1)
+        return pder
+
+    def laplace(self, p, dim=-1):
+        """
+        Returns the laplacian of a function p, i.e. \nabla^2(p).
+
+        Arguments
+        ---------
+        * p: torch.tensor (..., nr, ...)
+            The function to be taken the laplacian.
+        * dim: int
+            The dimension of the spatial information.
+
+        Returns
+        -------
+        * dp: torch.tensor (..., nr, ...)
+            The laplacian of p.
+        """
+        if dim != -1:
+            p = p.transpose(dim, -1)
+
+        ndim = self.rgrid.shape[-1]
+        pres = 0
+        for i in range(ndim):
+            pder1 = self.derivative(p, idim=i, dim=-1)
+            pder2 = self.derivative(pder1, idim=i, dim=-1)
+            pres = pres + pder2
+
+        if dim != -1:
+            pres = pres.transpose(dim, -1)
+        return pres
 
 class Base3DGrid(BaseGrid):
     @abstractproperty

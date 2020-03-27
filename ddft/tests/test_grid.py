@@ -59,6 +59,16 @@ def test_multiatoms_integralbox():
     for gridname, fcnname in product(multiatoms_gridnames, multiatoms_fcnnames):
         runtest(gridname, sph_gridnames[0], radial_gridnames[0], fcnname)
 
+def test_radial_derivative():
+    def runtest(gridname, fcnname):
+        grid = get_radial_grid(gridname, dtype, device)
+        prof1, deriv_fcns = get_fcn(fcnname, grid.rgrid, with_deriv=True) # (nr, nbasis)
+        rtol, atol = get_rtol_atol("derivative", gridname)
+        runtest_derivative(grid, prof1, deriv_fcns[:1], rtol=rtol, atol=atol)
+
+    for gridname, fcnname in product(radial_gridnames, radial_fcnnames):
+        runtest(gridname, fcnname)
+
 def test_radial_poisson():
     def runtest(gridname, fcnname):
         grid = get_radial_grid(gridname, dtype, device)
@@ -161,6 +171,14 @@ def runtest_interpolate(grid, prof, rtol, atol):
         prof2 = grid.interpolate(prof, grid2)
         assert torch.allclose(prof2_estimate, prof2, rtol=rtol, atol=atol)
 
+def runtest_derivative(grid, prof, deriv_profs, rtol, atol):
+    ndim = grid.rgrid.shape[-1]
+    assert ndim == len(deriv_profs), "The deriv profiles must match the dimension of the grid"
+
+    for i in range(ndim):
+        dprof = grid.derivative(prof, idim=i, dim=0)
+        assert torch.allclose(dprof, deriv_profs[i], rtol=rtol, atol=atol)
+
 def get_rtol_atol(taskname, gridname1, gridname2=None):
     rtolatol = {
         "integralbox": {
@@ -183,6 +201,9 @@ def get_rtol_atol(taskname, gridname1, gridname2=None):
             "lebedev": {
                 "legradialshiftexp": [0.0, 8e-4],
             }
+        },
+        "derivative": {
+            "legradialshiftexp": [1e-6, 8e-5],
         }
     }
     if gridname2 is None:
@@ -213,7 +234,7 @@ def get_multiatoms_grid(gridname, sphgrid, dtype, device):
         raise RuntimeError("Unknown multiatoms grid name: %s" % gridname)
     return grid
 
-def get_fcn(fcnname, rgrid):
+def get_fcn(fcnname, rgrid, with_deriv=False):
     dtype = rgrid.dtype
     device = rgrid.device
 
@@ -223,11 +244,24 @@ def get_fcn(fcnname, rgrid):
         if fcnname == "gauss1":
             unnorm_basis = torch.exp(-rs*rs / (2*gw*gw)) * rs # (nr,ng)
             norm = np.sqrt(2./3) / gw**2.5 / np.pi**.75 # (ng)
-            return unnorm_basis * norm # (nr, ng)
+            fcn = unnorm_basis * norm # (nr, ng)
+            if not with_deriv:
+                return fcn
+
+            deriv_fcn = norm * (1 - rs*rs/gw/gw) * torch.exp(-rs*rs/(2*gw*gw))
+            d2 = deriv_fcn*0
+            return fcn, [deriv_fcn, d2, d2]
+
         elif fcnname == "exp1":
             unnorm_basis = torch.exp(-rs/gw)
             norm = 1./torch.sqrt(np.pi*gw**3)
-            return unnorm_basis * norm
+            fcn = unnorm_basis * norm
+            if not with_deriv:
+                return fcn
+
+            deriv_fcn = norm * (-1./gw) * torch.exp(-rs/gw)
+            d2 = deriv_fcn*0
+            return fcn, [deriv_fcn, d2, d2]
 
     elif fcnname in sph_fcnnames:
         rs = rgrid[:,0].unsqueeze(-1) # (nr,1)
