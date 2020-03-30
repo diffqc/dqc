@@ -79,7 +79,7 @@ class Lebedev(BaseRadialAngularGrid):
         nbatch, nr = f.shape
         f1 = f.view(nbatch, self.nrad, -1) # (nbatch, nrad, nphitheta)
         basis = self._get_basis() # (nsh, nphitheta)
-        basis_integrate = basis * self.wphitheta
+        basis_integrate = self._get_basis(basis_integrate=True)
         frad_lm = torch.bmm(basis_integrate.unsqueeze(0).expand(nbatch,-1,-1), f1.transpose(-2,-1)) # (nbatch, nsh, nrad)
 
         # the computation is done by computing the ratio of rless/rgreat first
@@ -114,8 +114,7 @@ class Lebedev(BaseRadialAngularGrid):
         nbatch = f.shape[0]
         nr2 = rq.shape[0]
         f1 = f.view(nbatch, self.nrad, -1) # (nbatch, nrad, nphitheta)
-        basis = self._get_basis() # (nsh, nphitheta)
-        basis_integrate = basis * self.wphitheta
+        basis_integrate = self._get_basis(basis_integrate=True)
         frad_lm = torch.bmm(basis_integrate.unsqueeze(0).expand(nbatch,-1,-1), f1.transpose(-2,-1)) # (nbatch, nsh, nrad)
 
         # obtain the points to be interpolated and extrapolated
@@ -166,9 +165,9 @@ class Lebedev(BaseRadialAngularGrid):
 
         else:
             # phi (azimuth) or theta derivative
-            basis = self._get_basis() # (nsh, nphitheta)
+            basis_integrate = self._get_basis(basis_integrate=True) # (nsh, nphitheta)
             deriv_basis = self._get_deriv_basis(idim-1) # (nsh, nphitheta)
-            psh = torch.matmul(p, basis.transpose(-2,-1)) # (..., nrad, nsh)
+            psh = torch.matmul(p, basis_integrate.transpose(-2,-1)) # (..., nrad, nsh)
             pres = torch.matmul(psh, deriv_basis).view(*batch_size, -1) # (..., nr)
 
         if dim != -1:
@@ -215,17 +214,25 @@ class Lebedev(BaseRadialAngularGrid):
     def boxshape(self):
         warnings.warn("Boxshape is obsolete. Please refrain in using it.")
 
-    def _get_basis(self, phitheta=None):
+    def _get_basis(self, phitheta=None, basis_integrate=False):
         if phitheta is None:
             if self._basis_ is None:
                 phi = self.phithetargrid[:,0]
                 costheta = torch.cos(self.phithetargrid[:,1])
                 self._basis_ = spharmonics(costheta, phi, self.basis_maxangmom)
-            return self._basis_
+                self._basis_integrate_ = self._basis_ * self.wphitheta
+            if basis_integrate:
+                return self._basis_integrate_
+            else:
+                return self._basis_
         else:
             phi = phitheta[:,0]
             costheta = torch.cos(phitheta[:,1])
-            return spharmonics(costheta, phi, self.basis_maxangmom)
+            basis = spharmonics(costheta, phi, self.basis_maxangmom)
+            if basis_integrate:
+                return basis * self.wphitheta
+            else:
+                return basis
 
     def _get_deriv_basis(self, iphitheta, phitheta=None):
         if phitheta is None:

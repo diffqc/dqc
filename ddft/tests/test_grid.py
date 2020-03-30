@@ -78,7 +78,7 @@ def test_spherical_derivative():
         print(spgridname, radgridname, fcnname)
         runtest_derivative(sphgrid, prof1, deriv_fcns, rtol=rtol, atol=atol)
 
-    for gridname, radgridname, fcnname in product(sph_gridnames, radial_gridnames, radial_fcnnames):#+sph_fcnnames):
+    for gridname, radgridname, fcnname in product(sph_gridnames, radial_gridnames, radial_fcnnames+sph_fcnnames):
         runtest(gridname, radgridname, fcnname)
 
 def test_radial_poisson():
@@ -190,7 +190,15 @@ def runtest_derivative(grid, prof, deriv_profs, rtol, atol):
 
     for i in range(ndim):
         dprof = grid.derivative(prof, idim=i, dim=0)
-        assert torch.allclose(dprof, deriv_profs[i], rtol=rtol, atol=atol)
+        # case where the derivative is significantly not zero
+        if deriv_profs[i].abs().max() > 1e-7:
+            assert torch.allclose(dprof/dprof.abs().max(), deriv_profs[i]/deriv_profs[i].abs().max(), rtol=rtol, atol=atol)
+
+        # case where the derivative is zero
+        else:
+            assert torch.allclose(dprof, deriv_profs[i], rtol=rtol, atol=atol)
+
+        assert torch.allclose(dprof.abs().max(), deriv_profs[i].abs().max(), rtol=rtol, atol=atol)
 
 def get_rtol_atol(taskname, gridname1, gridname2=None):
     rtolatol = {
@@ -321,6 +329,7 @@ def get_fcn(fcnname, rgrid, with_deriv=False):
         elif fcnname == "gauss-l2m2":
             unnorm_basis = torch.exp(-rs*rs/(2*gw*gw)) * (3*sintheta**2)*torch.cos(2*phi) # (nr,1)
             norm = np.sqrt(5/12.0) / gw**1.5 / np.pi**.75 # (ng)
+            fcn = unnorm_basis * norm
             if not with_deriv:
                 return fcn
             deriv_r = (-rs/(gw*gw)) * fcn
