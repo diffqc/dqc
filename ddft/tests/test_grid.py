@@ -12,7 +12,7 @@ radial_fcnnames = ["gauss1", "exp1"]
 radial_fcnnames_deriv_friendly = ["gauss0"]
 sph_gridnames = ["lebedev"]
 sph_fcnnames = ["gauss-l1", "gauss-l2", "gauss-l1m1", "gauss-l2m2"]
-sph_fcnnames_deriv_friendly = ["gauss2-l1", "gauss2-l2", "gauss2-l1m1"]#, "gauss2-l2m2"]
+sph_fcnnames_deriv_friendly = ["gauss2-l1", "gauss2-l2", "gauss2-l1m1", "gauss2-l2m2"]
 
 # the multiple atoms are placed on -0.5 and 0.5 on x axis
 multiatoms_gridnames = ["becke"]
@@ -203,6 +203,12 @@ def runtest_grad(grid, prof, deriv_profs, rtol, atol):
     pm = prof.abs().max()
     for i in range(ndim):
         dprof = grid.grad(prof, idim=i, dim=0)
+        import matplotlib.pyplot as plt
+        if i == 1 and dprof.max() > 1e-1:
+            plt.plot((dprof/pm).detach().numpy().ravel())
+            plt.plot((deriv_profs[i]/pm).detach().numpy().ravel())
+            plt.plot(((dprof-deriv_profs[i])/pm).detach().numpy().ravel())
+            plt.show()
         assert torch.allclose(dprof/pm, deriv_profs[i]/pm, rtol=rtol, atol=atol)
 
 def runtest_laplace(grid, prof, laplace_prof, rtol, atol):
@@ -433,16 +439,18 @@ def get_fcn(fcnname, rgrid, with_grad=False, with_laplace=False):
             return fcn
 
         elif fcnname == "gauss2-l2m2":
-            unnorm_basis = rs*rs*torch.exp(-rs*rs/(2*gw*gw)) * (3*sintheta**2)*torch.cos(2*phi) # (nr,1)
-            norm = np.sqrt(5/12.0) / gw**1.5 / np.pi**.75 # (ng)
+            cos2phi = torch.cos(2*phi)
+            ylm = (3*sintheta**2)*cos2phi
+            unnorm_basis = rs*rs*exp_factor * ylm # (nr,1)
+            norm = 1.0
             fcn = unnorm_basis * norm
             if not with_grad:
                 return fcn
             if with_grad:
-                deriv_r = (-rs/(gw*gw)) * fcn
-                deriv_phi = norm * torch.exp(-rs*rs/(2*gw*gw)) * (3*sintheta**2) * (-2*torch.sin(2*phi))
-                deriv_theta = norm * torch.exp(-rs*rs/(2*gw*gw)) * (6*sintheta*costheta) * torch.cos(2*phi)
-                return fcn, [deriv_r, deriv_phi, deriv_theta]
+                grad_r = norm * ylm * rs * exp_factor * (2 - rs*rs/(gw*gw))
+                grad_phi = -norm * 6 * exp_factor * rs * sintheta * torch.sin(2*phi)
+                grad_theta = norm * 6 * exp_factor * rs * (costheta*cos2phi*sintheta)
+                return fcn, [grad_r, grad_phi, grad_theta]
             elif with_laplace:
                 pass
 

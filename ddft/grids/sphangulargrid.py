@@ -168,7 +168,7 @@ class Lebedev(BaseRadialAngularGrid):
             basis_integrate = self._get_basis(basis_integrate=True) # (nsh, nphitheta)
             deriv_basis = self._get_deriv_basis(idim-1) # (nsh, nphitheta)
             psh = torch.matmul(p, basis_integrate.transpose(-2,-1)) # (..., nrad, nsh)
-            pres = torch.matmul(psh, deriv_basis) / (self.radgrid.rgrid[:,:1] + 1e-12) # (..., nrad, nphitheta)
+            pres = torch.matmul(psh, deriv_basis) / (self.radgrid.rgrid[:,:1] + 1e-15) # (..., nrad, nphitheta)
 
             pres = pres.view(*batch_size, -1) # (..., nr)
 

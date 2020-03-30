@@ -217,7 +217,7 @@ def deriv_assoclegval_azimuth(cost, l, m):
         if m == 1:
             return -3*cost
         elif m == 2:
-            return 3*sint*sint
+            return 3*sint
     elif l == 3:
         if m == 1:
             return (-7.5*cost**2 + 1.5)
