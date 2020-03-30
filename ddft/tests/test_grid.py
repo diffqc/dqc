@@ -60,24 +60,24 @@ def test_multiatoms_integralbox():
     for gridname, fcnname in product(multiatoms_gridnames, multiatoms_fcnnames):
         runtest(gridname, sph_gridnames[0], radial_gridnames[0], fcnname)
 
-def test_radial_derivative():
+def test_radial_grad():
     def runtest(gridname, fcnname):
         grid = get_radial_grid(gridname, dtype, device)
-        prof1, deriv_fcns = get_fcn(fcnname, grid.rgrid, with_deriv=True) # (nr, nbasis)
+        prof1, deriv_fcns = get_fcn(fcnname, grid.rgrid, with_grad=True) # (nr, nbasis)
         rtol, atol = get_rtol_atol("grad", gridname)
-        runtest_derivative(grid, prof1, deriv_fcns[:1], rtol=rtol, atol=atol)
+        runtest_grad(grid, prof1, deriv_fcns[:1], rtol=rtol, atol=atol)
 
     for gridname, fcnname in product(radial_gridnames, radial_fcnnames):
         runtest(gridname, fcnname)
 
-def test_spherical_derivative():
+def test_spherical_grad():
     def runtest(spgridname, radgridname, fcnname):
         radgrid = get_radial_grid(radgridname, dtype, device)
         sphgrid = get_spherical_grid(spgridname, radgrid, dtype, device)
-        prof1, deriv_fcns = get_fcn(fcnname, sphgrid.rgrid, with_deriv=True)
+        prof1, deriv_fcns = get_fcn(fcnname, sphgrid.rgrid, with_grad=True)
         rtol, atol = get_rtol_atol("grad", spgridname, radgridname)
         print(spgridname, radgridname, fcnname)
-        runtest_derivative(sphgrid, prof1, deriv_fcns, rtol=rtol, atol=atol)
+        runtest_grad(sphgrid, prof1, deriv_fcns, rtol=rtol, atol=atol)
 
     for gridname, radgridname, fcnname in product(sph_gridnames, radial_gridnames, radial_fcnnames+sph_fcnnames):
         runtest(gridname, radgridname, fcnname)
@@ -195,7 +195,7 @@ def runtest_interpolate(grid, prof, rtol, atol):
         prof2 = grid.interpolate(prof, grid2)
         assert torch.allclose(prof2_estimate, prof2, rtol=rtol, atol=atol)
 
-def runtest_derivative(grid, prof, deriv_profs, rtol, atol):
+def runtest_grad(grid, prof, deriv_profs, rtol, atol):
     ndim = grid.rgrid.shape[-1]
     assert ndim == len(deriv_profs), "The deriv profiles must match the dimension of the grid"
     if ndim > 2: ndim = 2 # ???
@@ -295,7 +295,7 @@ def get_multiatoms_grid(gridname, sphgrid, dtype, device):
         raise RuntimeError("Unknown multiatoms grid name: %s" % gridname)
     return grid
 
-def get_fcn(fcnname, rgrid, with_deriv=False, with_laplace=False):
+def get_fcn(fcnname, rgrid, with_grad=False, with_laplace=False):
     dtype = rgrid.dtype
     device = rgrid.device
 
@@ -306,7 +306,7 @@ def get_fcn(fcnname, rgrid, with_deriv=False, with_laplace=False):
             unnorm_basis = torch.exp(-rs*rs / (2*gw*gw)) * rs # (nr,ng)
             norm = np.sqrt(2./3) / gw**2.5 / np.pi**.75 # (ng)
             fcn = unnorm_basis * norm # (nr, ng)
-            if with_deriv:
+            if with_grad:
                 deriv_fcn = norm * (1 - rs*rs/gw/gw) * torch.exp(-rs*rs/(2*gw*gw))
                 d2 = deriv_fcn*0
                 return fcn, [deriv_fcn, d2, d2]
@@ -318,7 +318,7 @@ def get_fcn(fcnname, rgrid, with_deriv=False, with_laplace=False):
             unnorm_basis = torch.exp(-rs/gw)
             norm = 1./torch.sqrt(np.pi*gw**3)
             fcn = unnorm_basis * norm
-            if with_deriv:
+            if with_grad:
                 deriv_fcn = norm * (-1./gw) * torch.exp(-rs/gw)
                 d2 = deriv_fcn*0
                 return fcn, [deriv_fcn, d2, d2]
@@ -330,7 +330,7 @@ def get_fcn(fcnname, rgrid, with_deriv=False, with_laplace=False):
             unnorm_basis = torch.exp(-rs*rs/(2*gw*gw))
             norm = np.sqrt(3) / gw**1.5 / np.pi**.75 # (ng)
             fcn = unnorm_basis * norm
-            if with_deriv:
+            if with_grad:
                 deriv_fcn = -rs/(gw*gw) * fcn
                 d2 = deriv_fcn * 0
                 return fcn, [deriv_fcn, d2, d2]
@@ -349,7 +349,7 @@ def get_fcn(fcnname, rgrid, with_deriv=False, with_laplace=False):
             unnorm_basis = torch.exp(-rs*rs/(2*gw*gw)) * costheta # (nr,1)
             norm = np.sqrt(3) / gw**1.5 / np.pi**.75 # (ng)
             fcn = unnorm_basis * norm
-            if with_deriv:
+            if with_grad:
                 deriv_r = (-rs/(gw*gw)) * fcn
                 deriv_phi = fcn*0
                 deriv_theta = norm * torch.exp(-rs*rs/(2*gw*gw)) * (-sintheta)
@@ -360,7 +360,7 @@ def get_fcn(fcnname, rgrid, with_deriv=False, with_laplace=False):
             unnorm_basis = torch.exp(-rs*rs/(2*gw*gw)) * (3*costheta*costheta - 1)/2.0 # (nr,1)
             norm = np.sqrt(5) / gw**1.5 / np.pi**.75 # (ng)
             fcn = unnorm_basis * norm
-            if with_deriv:
+            if with_grad:
                 deriv_r = (-rs/(gw*gw)) * fcn
                 deriv_phi = fcn*0
                 deriv_theta = norm * torch.exp(-rs*rs/(2*gw*gw)) * (-3*costheta*sintheta)
@@ -371,7 +371,7 @@ def get_fcn(fcnname, rgrid, with_deriv=False, with_laplace=False):
             unnorm_basis = torch.exp(-rs*rs/(2*gw*gw)) * sintheta * torch.cos(phi)
             norm = np.sqrt(3) / gw**1.5 / np.pi**.75
             fcn = unnorm_basis * norm
-            if with_deriv:
+            if with_grad:
                 deriv_r = (-rs/(gw*gw)) * fcn
                 deriv_phi = norm * torch.exp(-rs*rs/(2*gw*gw)) * sintheta * (-torch.sin(phi))
                 deriv_theta = norm * torch.exp(-rs*rs/(2*gw*gw)) * costheta
@@ -384,9 +384,9 @@ def get_fcn(fcnname, rgrid, with_deriv=False, with_laplace=False):
             unnorm_basis = torch.exp(-rs*rs/(2*gw*gw)) * (3*sintheta**2)*torch.cos(2*phi) # (nr,1)
             norm = np.sqrt(5/12.0) / gw**1.5 / np.pi**.75 # (ng)
             fcn = unnorm_basis * norm
-            if not with_deriv:
+            if not with_grad:
                 return fcn
-            if with_deriv:
+            if with_grad:
                 deriv_r = (-rs/(gw*gw)) * fcn
                 deriv_phi = norm * torch.exp(-rs*rs/(2*gw*gw)) * (3*sintheta**2) * (-2*torch.sin(2*phi))
                 deriv_theta = norm * torch.exp(-rs*rs/(2*gw*gw)) * (6*sintheta*costheta) * torch.cos(2*phi)
