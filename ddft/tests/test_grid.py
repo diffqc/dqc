@@ -9,6 +9,7 @@ from ddft.grids.multiatomsgrid import BeckeMultiGrid
 
 radial_gridnames = ["legradialshiftexp"]
 radial_fcnnames = ["gauss1", "exp1"]
+radial_fcnnames_no_cusp = ["gauss0"]
 sph_gridnames = ["lebedev"]
 sph_fcnnames = ["gauss-l1", "gauss-l2", "gauss-l1m1", "gauss-l2m2"]
 
@@ -80,6 +81,17 @@ def test_spherical_derivative():
 
     for gridname, radgridname, fcnname in product(sph_gridnames, radial_gridnames, radial_fcnnames+sph_fcnnames):
         runtest(gridname, radgridname, fcnname)
+
+def test_radial_laplace():
+    def runtest(gridname, fcnname):
+        grid = get_radial_grid(gridname, dtype, device)
+        prof1, laplace_prof = get_fcn(fcnname, grid.rgrid, with_laplace=True) # (nr, nbasis)
+        rtol, atol = get_rtol_atol("laplace", gridname)
+        runtest_laplace(grid, prof1, laplace_prof, rtol=rtol, atol=atol)
+
+    for gridname, fcnname in product(radial_gridnames, radial_fcnnames_no_cusp):
+        print(fcnname)
+        runtest(gridname, fcnname)
 
 def test_radial_poisson():
     def runtest(gridname, fcnname):
@@ -200,6 +212,25 @@ def runtest_derivative(grid, prof, deriv_profs, rtol, atol):
 
         assert torch.allclose(dprof.abs().max(), deriv_profs[i].abs().max(), rtol=rtol, atol=atol)
 
+def runtest_laplace(grid, prof, laplace_prof, rtol, atol):
+    dprof = grid.laplace(prof, dim=0)
+
+    import matplotlib.pyplot as plt
+    plt.plot(dprof.detach().numpy().ravel())
+    plt.plot(laplace_prof.detach().numpy().ravel(), alpha=0.2)
+    plt.show()
+
+    # case where the grad is significantly not zero
+    if laplace_prof.abs().max() > 1e-7:
+        # assert torch.allclose(dprof/dprof.abs().max(), laplace_prof/laplace_prof.abs().max(), rtol=rtol, atol=atol)
+        assert torch.allclose(dprof, laplace_prof, rtol=rtol, atol=atol)
+
+    # case where the grad is zero
+    else:
+        assert torch.allclose(dprof, laplace_prof, rtol=rtol, atol=atol)
+
+    assert torch.allclose(dprof.abs().max(), laplace_prof.abs().max(), rtol=rtol, atol=atol)
+
 def get_rtol_atol(taskname, gridname1, gridname2=None):
     rtolatol = {
         "integralbox": {
@@ -228,7 +259,13 @@ def get_rtol_atol(taskname, gridname1, gridname2=None):
             "lebedev": {
                 "legradialshiftexp": [1e-6, 8e-5],
             }
-        }
+        },
+        "laplace": {
+            "legradialshiftexp": [1e-6, 8e-5],
+            "lebedev": {
+                "legradialshiftexp": [1e-6, 8e-5],
+            }
+        },
     }
     if gridname2 is None:
         return rtolatol[taskname][gridname1]
@@ -258,34 +295,49 @@ def get_multiatoms_grid(gridname, sphgrid, dtype, device):
         raise RuntimeError("Unknown multiatoms grid name: %s" % gridname)
     return grid
 
-def get_fcn(fcnname, rgrid, with_deriv=False):
+def get_fcn(fcnname, rgrid, with_deriv=False, with_laplace=False):
     dtype = rgrid.dtype
     device = rgrid.device
 
     gw = torch.logspace(np.log10(1e-4), np.log10(1e0), 30).to(dtype).to(device) # (ng,)
-    if fcnname in radial_fcnnames:
+    if fcnname in radial_fcnnames+radial_fcnnames_no_cusp:
         rs = rgrid[:,0].unsqueeze(-1) # (nr,1)
         if fcnname == "gauss1":
             unnorm_basis = torch.exp(-rs*rs / (2*gw*gw)) * rs # (nr,ng)
             norm = np.sqrt(2./3) / gw**2.5 / np.pi**.75 # (ng)
             fcn = unnorm_basis * norm # (nr, ng)
-            if not with_deriv:
-                return fcn
-
-            deriv_fcn = norm * (1 - rs*rs/gw/gw) * torch.exp(-rs*rs/(2*gw*gw))
-            d2 = deriv_fcn*0
-            return fcn, [deriv_fcn, d2, d2]
+            if with_deriv:
+                deriv_fcn = norm * (1 - rs*rs/gw/gw) * torch.exp(-rs*rs/(2*gw*gw))
+                d2 = deriv_fcn*0
+                return fcn, [deriv_fcn, d2, d2]
+            elif with_laplace:
+                raise RuntimeError("The called function has cusp, so laplace should not be compared")
+            return fcn
 
         elif fcnname == "exp1":
             unnorm_basis = torch.exp(-rs/gw)
             norm = 1./torch.sqrt(np.pi*gw**3)
             fcn = unnorm_basis * norm
-            if not with_deriv:
-                return fcn
+            if with_deriv:
+                deriv_fcn = norm * (-1./gw) * torch.exp(-rs/gw)
+                d2 = deriv_fcn*0
+                return fcn, [deriv_fcn, d2, d2]
+            elif with_laplace:
+                raise RuntimeError("The called function has cusp, so laplace should not be compared")
+            return fcn
 
-            deriv_fcn = norm * (-1./gw) * torch.exp(-rs/gw)
-            d2 = deriv_fcn*0
-            return fcn, [deriv_fcn, d2, d2]
+        elif fcnname == "gauss0":
+            unnorm_basis = torch.exp(-rs*rs/(2*gw*gw))
+            norm = np.sqrt(3) / gw**1.5 / np.pi**.75 # (ng)
+            fcn = unnorm_basis * norm
+            if with_deriv:
+                deriv_fcn = -rs/(gw*gw) * fcn
+                d2 = deriv_fcn * 0
+                return fcn, [deriv_fcn, d2, d2]
+            elif with_laplace:
+                laplace_fcn = fcn * (rs*rs - 2*gw*gw) / (gw**4)
+                return fcn, laplace_fcn
+            return fcn
 
     elif fcnname in sph_fcnnames:
         rs = rgrid[:,0].unsqueeze(-1) # (nr,1)
@@ -297,34 +349,36 @@ def get_fcn(fcnname, rgrid, with_deriv=False):
             unnorm_basis = torch.exp(-rs*rs/(2*gw*gw)) * costheta # (nr,1)
             norm = np.sqrt(3) / gw**1.5 / np.pi**.75 # (ng)
             fcn = unnorm_basis * norm
-            if not with_deriv:
-                return fcn
-            deriv_r = (-rs/(gw*gw)) * fcn
-            deriv_phi = fcn*0
-            deriv_theta = norm * torch.exp(-rs*rs/(2*gw*gw)) * (-sintheta)
-            return fcn, [deriv_r, deriv_phi, deriv_theta]
+            if with_deriv:
+                deriv_r = (-rs/(gw*gw)) * fcn
+                deriv_phi = fcn*0
+                deriv_theta = norm * torch.exp(-rs*rs/(2*gw*gw)) * (-sintheta)
+                return fcn, [deriv_r, deriv_phi, deriv_theta]
+            return fcn
 
         elif fcnname == "gauss-l2":
             unnorm_basis = torch.exp(-rs*rs/(2*gw*gw)) * (3*costheta*costheta - 1)/2.0 # (nr,1)
             norm = np.sqrt(5) / gw**1.5 / np.pi**.75 # (ng)
             fcn = unnorm_basis * norm
-            if not with_deriv:
-                return fcn
-            deriv_r = (-rs/(gw*gw)) * fcn
-            deriv_phi = fcn*0
-            deriv_theta = norm * torch.exp(-rs*rs/(2*gw*gw)) * (-3*costheta*sintheta)
-            return fcn, [deriv_r, deriv_phi, deriv_theta]
+            if with_deriv:
+                deriv_r = (-rs/(gw*gw)) * fcn
+                deriv_phi = fcn*0
+                deriv_theta = norm * torch.exp(-rs*rs/(2*gw*gw)) * (-3*costheta*sintheta)
+                return fcn, [deriv_r, deriv_phi, deriv_theta]
+            return fcn
 
         elif fcnname == "gauss-l1m1":
             unnorm_basis = torch.exp(-rs*rs/(2*gw*gw)) * sintheta * torch.cos(phi)
             norm = np.sqrt(3) / gw**1.5 / np.pi**.75
             fcn = unnorm_basis * norm
-            if not with_deriv:
-                return fcn
-            deriv_r = (-rs/(gw*gw)) * fcn
-            deriv_phi = norm * torch.exp(-rs*rs/(2*gw*gw)) * sintheta * (-torch.sin(phi))
-            deriv_theta = norm * torch.exp(-rs*rs/(2*gw*gw)) * costheta
-            return fcn, [deriv_r, deriv_phi, deriv_theta]
+            if with_deriv:
+                deriv_r = (-rs/(gw*gw)) * fcn
+                deriv_phi = norm * torch.exp(-rs*rs/(2*gw*gw)) * sintheta * (-torch.sin(phi))
+                deriv_theta = norm * torch.exp(-rs*rs/(2*gw*gw)) * costheta
+                return fcn, [deriv_r, deriv_phi, deriv_theta]
+            elif with_laplace:
+                pass
+            return fcn
 
         elif fcnname == "gauss-l2m2":
             unnorm_basis = torch.exp(-rs*rs/(2*gw*gw)) * (3*sintheta**2)*torch.cos(2*phi) # (nr,1)
@@ -332,10 +386,13 @@ def get_fcn(fcnname, rgrid, with_deriv=False):
             fcn = unnorm_basis * norm
             if not with_deriv:
                 return fcn
-            deriv_r = (-rs/(gw*gw)) * fcn
-            deriv_phi = norm * torch.exp(-rs*rs/(2*gw*gw)) * (3*sintheta**2) * (-2*torch.sin(2*phi))
-            deriv_theta = norm * torch.exp(-rs*rs/(2*gw*gw)) * (6*sintheta*costheta) * torch.cos(2*phi)
-            return fcn, [deriv_r, deriv_phi, deriv_theta]
+            if with_deriv:
+                deriv_r = (-rs/(gw*gw)) * fcn
+                deriv_phi = norm * torch.exp(-rs*rs/(2*gw*gw)) * (3*sintheta**2) * (-2*torch.sin(2*phi))
+                deriv_theta = norm * torch.exp(-rs*rs/(2*gw*gw)) * (6*sintheta*costheta) * torch.cos(2*phi)
+                return fcn, [deriv_r, deriv_phi, deriv_theta]
+            elif with_laplace:
+                pass
 
     # note that the function below is not supposed to be squared when integrated
     elif fcnname in multiatoms_fcnnames:

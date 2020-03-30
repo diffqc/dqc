@@ -119,6 +119,25 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
             dpdr = dpdr.transpose(dim, -1)
         return dpdr
 
+    def laplace(self, p, dim=-1):
+        if dim != -1:
+            p = p.transpose(dim, -1) # p: (..., nr)
+
+        # # take the second derivative
+        # pder1 = self.grad(p, idim=0)
+        # pder2 = self.grad(pder1 * self.rs*self.rs, idim=0)
+        # print(p.shape, pder1.shape, self.rs.shape)
+        #
+        # # divide by rs
+        # res = pder2 / (self.rs*self.rs + 1e-12) # protection against /0
+
+        pder1 = self.grad(self.grad(p*self.rs))
+        res = pder1 / (self.rs + 1e-12)
+
+        if dim != -1:
+            res = res.transpose(dim, -1)
+        return res
+
     def _get_spline_mat_inverse(self):
         if self._spline_mat_inv_ is None:
             nx = self.xleggauss.shape[0]
