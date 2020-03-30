@@ -203,12 +203,6 @@ def runtest_grad(grid, prof, deriv_profs, rtol, atol):
     pm = prof.abs().max()
     for i in range(ndim):
         dprof = grid.grad(prof, idim=i, dim=0)
-        import matplotlib.pyplot as plt
-        if i == 1 and dprof.max() > 1e-1:
-            plt.plot((dprof/pm).detach().numpy().ravel())
-            plt.plot((deriv_profs[i]/pm).detach().numpy().ravel())
-            plt.plot(((dprof-deriv_profs[i])/pm).detach().numpy().ravel())
-            plt.show()
         assert torch.allclose(dprof/pm, deriv_profs[i]/pm, rtol=rtol, atol=atol)
 
 def runtest_laplace(grid, prof, laplace_prof, rtol, atol):
