@@ -176,6 +176,31 @@ class Lebedev(BaseRadialAngularGrid):
             pres = pres.transpose(dim, -1)
         return pres
 
+    def laplace(self, p, dim=-1):
+        if dim != -1:
+            p = p.transpose(dim, -1)
+
+        batch_size = p.shape[:-1]
+        p = p.view(*batch_size, self.nrad, -1) # (..., nrad, nphitheta)
+        basis = self._get_basis() # (nsh, nphitheta)
+        basis_integrate = self._get_basis(basis_integrate=True) # (nsh, nphitheta)
+
+        # get the spherical harmonics components
+        psh = torch.matmul(p, basis_integrate.transpose(-2,-1)) # (..., nrad, nsh)
+        angmoms = self._get_angmoms() # (nsh,)
+        pang = -angmoms * (angmoms+1) * psh # (..., nrad, nsh)
+        pphitheta = torch.matmul(pang, basis) # (..., nrad, nphitheta)
+
+        # get the contribution from the radial direction
+        prad = self.radgrid.laplace(p, dim=-2) # (..., nrad, nphitheta)
+
+        # add all contributions
+        res = prad + pphitheta
+
+        if dim != -1:
+            res = res.transpose(dim, -1)
+        return res
+
     @property
     def radial_grid(self):
         return self.radgrid
