@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from ddft.utils.legendre import legval, assoclegval, deriv_assoclegval
+from ddft.utils.legendre import legval, assoclegval, deriv_assoclegval, deriv_assoclegval_azimuth
 
 def spharmonics(costheta, phi, maxangmom, onlytheta=False):
     # costheta: (nphitheta,)
@@ -60,7 +60,7 @@ def vspharmonics(iphitheta, costheta, phi, maxangmom):
             # m != 0
             nm = 0.5
             for m in range(1,l+1):
-                alegcostheta = assoclegval(costheta, l, m)
+                alegcostheta = deriv_assoclegval_azimuth(costheta, l, m) # already divided by sin(theta)
                 nm = nm * (l-m+1) * (l+m)
                 norm = normm0 / np.sqrt(nm)
                 angbasis[angbasis_row] = -alegcostheta * torch.sin(m*phi) * m * norm

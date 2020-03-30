@@ -170,11 +170,6 @@ class Lebedev(BaseRadialAngularGrid):
             psh = torch.matmul(p, basis_integrate.transpose(-2,-1)) # (..., nrad, nsh)
             pres = torch.matmul(psh, deriv_basis) / (self.radgrid.rgrid[:,:1] + 1e-12) # (..., nrad, nphitheta)
 
-            # derivative w.r.t. phi (azimuth angle)
-            if idim == 1:
-                sintheta = torch.sin(self.phithetargrid[:,1])
-                pres = pres / (sintheta + 1e-12)
-
             pres = pres.view(*batch_size, -1) # (..., nr)
 
         if dim != -1:

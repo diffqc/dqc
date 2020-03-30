@@ -147,7 +147,7 @@ def assoclegval(cost, l, m):
         elif m == 4:
             return 945 * cost * sint**4
         elif m == 5:
-            return 945 * sint**4
+            return 945 * sint**5
     elif l == 6:
         if m == 0:
             return (231*cost**6 - 315*cost**4 + 105*cost**2 - 5) / 16
@@ -201,6 +201,97 @@ def assoclegval(cost, l, m):
             return 2027025 * sint**8
     else:
         raise RuntimeError("The associated legendre polynomial order %d has not been implemented" % l)
+
+def deriv_assoclegval_azimuth(cost, l, m):
+    sint = torch.sqrt(1-cost*cost)
+    assert m <= l, "m must not be greater than l"
+    assert l >= 0 and m >= 0, "l and m must be non-negative"
+    if m == 0:
+        return 0.0
+    if l == 0:
+        return torch.ones_like(cost).to(cost.device)
+    elif l == 1:
+        if m == 1:
+            return -1.0
+    elif l == 2:
+        if m == 1:
+            return -3*cost
+        elif m == 2:
+            return 3*sint*sint
+    elif l == 3:
+        if m == 1:
+            return (-7.5*cost**2 + 1.5)
+        elif m == 2:
+            return 15 * cost * sint
+        elif m == 3:
+            return -15 * sint**2
+    elif l == 4:
+        if m == 1:
+            return -2.5*(7*cost**3 - 3*cost)
+        elif m == 2:
+            return 7.5*(7*cost**2 - 1)*sint
+        elif m == 3:
+            return -105*cost*sint**2
+        elif m == 4:
+            return 105*sint**3
+    elif l == 5:
+        if m == 1:
+            return (21*cost**4 - 14*cost**2 + 1) * 15/8.0
+        elif m == 2:
+            return sint * (3*cost**2 - 1) * cost * 105./2.
+        elif m == 3:
+            return (9*cost**2 - 1) * sint**2 * 105./2
+        elif m == 4:
+            return 945 * cost * sint**3
+        elif m == 5:
+            return 945 * sint**4
+    elif l == 6:
+        if m == 1:
+            return (33*cost**4 - 30*cost**2 + 5) * cost * 21/8.0
+        elif m == 2:
+            return (33*cost**4 - 18*cost**2 + 1) * sint * 105/8.0
+        elif m == 3:
+            return (11*cost**2 - 3) * cost * sint**2 * 315/2.0
+        elif m == 4:
+            return (11*cost**2 - 1) * sint**3 * 945/2.0
+        elif m == 5:
+            return 10395 * cost * sint**4
+        elif m == 6:
+            return 10395 * sint**5
+    elif l == 7:
+        if m == 1:
+            return (429*cost**6 - 495*cost**4 + 135*cost**2 - 5) * 7/16.
+        elif m == 2:
+            return (143*cost**4 - 110*cost**2 + 15) * cost * sint * 63/8.
+        elif m == 3:
+            return (143*cost**4 - 66*cost**2 + 3) * sint**2 * 315./8
+        elif m == 4:
+            return (13*cost**2 - 3) * cost * sint**3 * 3465/2.
+        elif m == 5:
+            return (13*cost**2 - 1) * sint**4 * 10395/2.
+        elif m == 6:
+            return 135135 * cost * sint**5
+        elif m == 7:
+            return 135135 * sint**6
+    elif l == 8:
+        if m == 1:
+            return (715*cost**6 - 1001*cost**4 + 385*cost**2 - 35) * cost * 9/16.
+        elif m == 2:
+            return (143*cost**6 - 143*cost**4 + 33*cost**2 - 1) * sint * 315/16.
+        elif m == 3:
+            return (39*cost**4 - 26*cost**2 + 3) * cost * sint**2 * 3465/8.
+        elif m == 4:
+            return (65*cost**4 - 26*cost**2 + 1) * sint**3 * 10395/8.
+        elif m == 5:
+            return (5*cost**2 - 1) * cost * sint**4 * 135135/2.
+        elif m == 6:
+            return (15*cost**2 - 1) * sint**5 * 135135/2.
+        elif m == 7:
+            return 2027025 * cost * sint**6
+        elif m == 8:
+            return 2027025 * sint**7
+    else:
+        raise RuntimeError("The derivative associated legendre polynomial order %d has not been implemented" % l)
 
 def deriv_assoclegval(cost, l, m):
     raise RuntimeError("Unimplemented derivative of associated legendre polynomial")

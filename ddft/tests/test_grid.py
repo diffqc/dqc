@@ -12,7 +12,7 @@ radial_fcnnames = ["gauss1", "exp1"]
 radial_fcnnames_deriv_friendly = ["gauss0"]
 sph_gridnames = ["lebedev"]
 sph_fcnnames = ["gauss-l1", "gauss-l2", "gauss-l1m1", "gauss-l2m2"]
-sph_fcnnames_deriv_friendly = ["gauss2-l1"]#, "gauss2-l2", "gauss2-l1m1", "gauss2-l2m2"]
+sph_fcnnames_deriv_friendly = ["gauss2-l1", "gauss2-l2", "gauss2-l1m1"]#, "gauss2-l2m2"]
 
 # the multiple atoms are placed on -0.5 and 0.5 on x axis
 multiatoms_gridnames = ["becke"]
@@ -321,7 +321,7 @@ def get_fcn(fcnname, rgrid, with_grad=False, with_laplace=False):
 
         elif fcnname == "gauss0":
             unnorm_basis = torch.exp(-rs*rs/(2*gw*gw))
-            norm = np.sqrt(3) / gw**1.5 / np.pi**.75 # (ng)
+            norm = 1.0 # (ng)
             fcn = unnorm_basis * norm
             if with_grad:
                 deriv_fcn = -rs/(gw*gw) * fcn
@@ -338,6 +338,8 @@ def get_fcn(fcnname, rgrid, with_grad=False, with_laplace=False):
         theta = rgrid[:,2].unsqueeze(-1)
         costheta = torch.cos(theta) # (nr,1)
         sintheta = torch.sin(theta)
+        cosphi = torch.cos(phi)
+        sinphi = torch.sin(phi)
         exp_factor = torch.exp(-rs*rs/(2*gw*gw))
         if fcnname == "gauss-l1":
             unnorm_basis = torch.exp(-rs*rs/(2*gw*gw)) * costheta # (nr,1)
@@ -395,7 +397,7 @@ def get_fcn(fcnname, rgrid, with_grad=False, with_laplace=False):
         # derivative and laplace friendly functions
         elif fcnname == "gauss2-l1":
             unnorm_basis = rs*rs * exp_factor * costheta # (nr,1)
-            norm = np.sqrt(3) / gw**1.5 / np.pi**.75 # (ng)
+            norm = 1.0 # (ng)
             fcn = unnorm_basis * norm
             if with_grad:
                 grad_r = norm * rs*costheta*exp_factor * (2 - rs*rs/(gw*gw))
@@ -405,25 +407,27 @@ def get_fcn(fcnname, rgrid, with_grad=False, with_laplace=False):
             return fcn
 
         elif fcnname == "gauss2-l2":
-            unnorm_basis = rs*rs*torch.exp(-rs*rs/(2*gw*gw)) * (3*costheta*costheta - 1)/2.0 # (nr,1)
-            norm = np.sqrt(5) / gw**1.5 / np.pi**.75 # (ng)
+            ylm = (3*costheta*costheta - 1)/2.0
+            unnorm_basis = rs*rs*exp_factor * ylm # (nr,1)
+            norm = 1.0 # (ng)
             fcn = unnorm_basis * norm
             if with_grad:
-                deriv_r = (-rs/(gw*gw)) * fcn
-                deriv_phi = fcn*0
-                deriv_theta = norm * torch.exp(-rs*rs/(2*gw*gw)) * (-3*costheta*sintheta)
-                return fcn, [deriv_r, deriv_phi, deriv_theta]
+                grad_r = norm*exp_factor*rs*ylm* (2 - rs*rs/(gw*gw))
+                grad_phi = fcn*0
+                grad_theta = norm * (-3) * rs * exp_factor * costheta * sintheta
+                return fcn, [grad_r, grad_phi, grad_theta]
             return fcn
 
         elif fcnname == "gauss2-l1m1":
-            unnorm_basis = rs*rs*torch.exp(-rs*rs/(2*gw*gw)) * sintheta * torch.cos(phi)
-            norm = np.sqrt(3) / gw**1.5 / np.pi**.75
+            ylm = sintheta * cosphi
+            unnorm_basis = rs*rs*exp_factor * ylm
+            norm = 1.0
             fcn = unnorm_basis * norm
             if with_grad:
-                deriv_r = (-rs/(gw*gw)) * fcn
-                deriv_phi = norm * torch.exp(-rs*rs/(2*gw*gw)) * sintheta * (-torch.sin(phi))
-                deriv_theta = norm * torch.exp(-rs*rs/(2*gw*gw)) * costheta
-                return fcn, [deriv_r, deriv_phi, deriv_theta]
+                grad_r = norm * rs*exp_factor * ylm * (2 - rs*rs/(gw*gw))
+                grad_phi = -norm * exp_factor * rs * sinphi
+                grad_theta = norm * exp_factor * costheta * cosphi
+                return fcn, [grad_r, grad_phi, grad_theta]
             elif with_laplace:
                 pass
             return fcn
