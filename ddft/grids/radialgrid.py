@@ -123,16 +123,9 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
         if dim != -1:
             p = p.transpose(dim, -1) # p: (..., nr)
 
-        # # take the second derivative
-        # pder1 = self.grad(p, idim=0)
-        # pder2 = self.grad(pder1 * self.rs*self.rs, idim=0)
-        # print(p.shape, pder1.shape, self.rs.shape)
-        #
-        # # divide by rs
-        # res = pder2 / (self.rs*self.rs + 1e-12) # protection against /0
-
-        pder1 = self.grad(self.grad(p*self.rs))
-        res = pder1 / (self.rs + 1e-12)
+        pder1 = self.grad(p)
+        pder2 = self.grad(pder1)
+        res = pder2 + 2 * pder1 / (self.rs + 1e-15)
 
         if dim != -1:
             res = res.transpose(dim, -1)

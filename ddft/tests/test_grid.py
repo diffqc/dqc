@@ -207,22 +207,10 @@ def runtest_grad(grid, prof, deriv_profs, rtol, atol):
 
 def runtest_laplace(grid, prof, laplace_prof, rtol, atol):
     dprof = grid.laplace(prof, dim=0)
-
-    import matplotlib.pyplot as plt
-    plt.plot(dprof.detach().numpy().ravel())
-    plt.plot(laplace_prof.detach().numpy().ravel(), alpha=0.2)
-    plt.show()
-
-    # case where the grad is significantly not zero
-    if laplace_prof.abs().max() > 1e-7:
-        # assert torch.allclose(dprof/dprof.abs().max(), laplace_prof/laplace_prof.abs().max(), rtol=rtol, atol=atol)
-        assert torch.allclose(dprof, laplace_prof, rtol=rtol, atol=atol)
-
-    # case where the grad is zero
-    else:
-        assert torch.allclose(dprof, laplace_prof, rtol=rtol, atol=atol)
-
-    assert torch.allclose(dprof.abs().max(), laplace_prof.abs().max(), rtol=rtol, atol=atol)
+    pm = dprof.abs().max()
+    d1 = dprof / pm
+    d2 = laplace_prof / pm
+    assert torch.allclose(d1, d2, rtol=rtol, atol=atol)
 
 def get_rtol_atol(taskname, gridname1, gridname2=None):
     rtolatol = {
@@ -254,7 +242,7 @@ def get_rtol_atol(taskname, gridname1, gridname2=None):
             }
         },
         "laplace": {
-            "legradialshiftexp": [1e-6, 8e-5],
+            "legradialshiftexp": [0.0, 4e-4],
             "lebedev": {
                 "legradialshiftexp": [1e-6, 8e-5],
             }
@@ -328,7 +316,7 @@ def get_fcn(fcnname, rgrid, with_grad=False, with_laplace=False):
                 d2 = deriv_fcn * 0
                 return fcn, [deriv_fcn, d2, d2]
             elif with_laplace:
-                laplace_fcn = fcn * (rs*rs - 2*gw*gw) / (gw**4)
+                laplace_fcn = fcn * (rs*rs - 3*gw*gw) / (gw**4)
                 return fcn, laplace_fcn
             return fcn
 
