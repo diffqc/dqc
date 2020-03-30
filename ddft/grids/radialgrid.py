@@ -103,7 +103,7 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
 
         return frq
 
-    def derivative(self, p, dim=-1, idim=0):
+    def grad(self, p, dim=-1, idim=0):
         # p: (..., nr, ...)
         if dim != -1:
             p = p.transpose(dim, -1) # p: (..., nr)

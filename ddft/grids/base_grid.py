@@ -114,9 +114,9 @@ class BaseGrid(object):
                            (self.__class__.__name__))
 
     ###################### derivatives ######################
-    def derivative(self, p, idim, dim=-1):
+    def grad(self, p, idim, dim=-1):
         """
-        Get the derivative in `idim` directions where `idim` indicate the index
+        Get the gradient in `idim` directions where `idim` indicate the index
         of the axis according to `self.rgrid`.
 
         Arguments
@@ -133,7 +133,7 @@ class BaseGrid(object):
         * dp: torch.tensor (..., nr, ...)
             The derivative in the `idim` axis.
         """
-        raise RuntimeError("Derivative for grid %s has not been implemented" % \
+        raise RuntimeError("Grad for grid %s has not been implemented" % \
               self.__class__.__name__)
 
     def magnitude_derivative(self, p, dim=-1):
@@ -158,7 +158,7 @@ class BaseGrid(object):
         ndim = self.rgrid.shape[-1]
         pder_sq = 0
         for i in range(ndim):
-            pder = self.derivative(p, idim=i, dim=-1)
+            pder = self.grad(p, idim=i, dim=-1)
             pder_sq = pder_sq + pder*pder
         pder = torch.sqrt(pder_sq)
 
@@ -183,19 +183,8 @@ class BaseGrid(object):
         * dp: torch.tensor (..., nr, ...)
             The laplacian of p.
         """
-        if dim != -1:
-            p = p.transpose(dim, -1)
-
-        ndim = self.rgrid.shape[-1]
-        pres = 0
-        for i in range(ndim):
-            pder1 = self.derivative(p, idim=i, dim=-1)
-            pder2 = self.derivative(pder1, idim=i, dim=-1)
-            pres = pres + pder2
-
-        if dim != -1:
-            pres = pres.transpose(dim, -1)
-        return pres
+        raise RuntimeError("Laplace for grid %s has not been implemented" % \
+              self.__class__.__name__)
 
 class Base3DGrid(BaseGrid):
     @abstractproperty

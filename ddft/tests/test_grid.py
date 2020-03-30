@@ -63,7 +63,7 @@ def test_radial_derivative():
     def runtest(gridname, fcnname):
         grid = get_radial_grid(gridname, dtype, device)
         prof1, deriv_fcns = get_fcn(fcnname, grid.rgrid, with_deriv=True) # (nr, nbasis)
-        rtol, atol = get_rtol_atol("derivative", gridname)
+        rtol, atol = get_rtol_atol("grad", gridname)
         runtest_derivative(grid, prof1, deriv_fcns[:1], rtol=rtol, atol=atol)
 
     for gridname, fcnname in product(radial_gridnames, radial_fcnnames):
@@ -74,7 +74,7 @@ def test_spherical_derivative():
         radgrid = get_radial_grid(radgridname, dtype, device)
         sphgrid = get_spherical_grid(spgridname, radgrid, dtype, device)
         prof1, deriv_fcns = get_fcn(fcnname, sphgrid.rgrid, with_deriv=True)
-        rtol, atol = get_rtol_atol("derivative", spgridname, radgridname)
+        rtol, atol = get_rtol_atol("grad", spgridname, radgridname)
         print(spgridname, radgridname, fcnname)
         runtest_derivative(sphgrid, prof1, deriv_fcns, rtol=rtol, atol=atol)
 
@@ -189,12 +189,12 @@ def runtest_derivative(grid, prof, deriv_profs, rtol, atol):
     if ndim > 2: ndim = 2 # ???
 
     for i in range(ndim):
-        dprof = grid.derivative(prof, idim=i, dim=0)
-        # case where the derivative is significantly not zero
+        dprof = grid.grad(prof, idim=i, dim=0)
+        # case where the grad is significantly not zero
         if deriv_profs[i].abs().max() > 1e-7:
             assert torch.allclose(dprof/dprof.abs().max(), deriv_profs[i]/deriv_profs[i].abs().max(), rtol=rtol, atol=atol)
 
-        # case where the derivative is zero
+        # case where the grad is zero
         else:
             assert torch.allclose(dprof, deriv_profs[i], rtol=rtol, atol=atol)
 
@@ -223,7 +223,7 @@ def get_rtol_atol(taskname, gridname1, gridname2=None):
                 "legradialshiftexp": [0.0, 8e-4],
             }
         },
-        "derivative": {
+        "grad": {
             "legradialshiftexp": [1e-6, 8e-5],
             "lebedev": {
                 "legradialshiftexp": [1e-6, 8e-5],
