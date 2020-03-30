@@ -9,9 +9,10 @@ from ddft.grids.multiatomsgrid import BeckeMultiGrid
 
 radial_gridnames = ["legradialshiftexp"]
 radial_fcnnames = ["gauss1", "exp1"]
-radial_fcnnames_no_cusp = ["gauss0"]
+radial_fcnnames_deriv_friendly = ["gauss0"]
 sph_gridnames = ["lebedev"]
 sph_fcnnames = ["gauss-l1", "gauss-l2", "gauss-l1m1", "gauss-l2m2"]
+sph_fcnnames_deriv_friendly = ["gauss2-l1"]#, "gauss2-l2", "gauss2-l1m1", "gauss2-l2m2"]
 
 # the multiple atoms are placed on -0.5 and 0.5 on x axis
 multiatoms_gridnames = ["becke"]
@@ -67,7 +68,7 @@ def test_radial_grad():
         rtol, atol = get_rtol_atol("grad", gridname)
         runtest_grad(grid, prof1, deriv_fcns[:1], rtol=rtol, atol=atol)
 
-    for gridname, fcnname in product(radial_gridnames, radial_fcnnames):
+    for gridname, fcnname in product(radial_gridnames, radial_fcnnames+radial_fcnnames_deriv_friendly):
         runtest(gridname, fcnname)
 
 def test_spherical_grad():
@@ -79,7 +80,7 @@ def test_spherical_grad():
         print(spgridname, radgridname, fcnname)
         runtest_grad(sphgrid, prof1, deriv_fcns, rtol=rtol, atol=atol)
 
-    for gridname, radgridname, fcnname in product(sph_gridnames, radial_gridnames, radial_fcnnames+sph_fcnnames):
+    for gridname, radgridname, fcnname in product(sph_gridnames, radial_gridnames, radial_fcnnames+radial_fcnnames_deriv_friendly+sph_fcnnames_deriv_friendly):
         runtest(gridname, radgridname, fcnname)
 
 def test_radial_laplace():
@@ -89,8 +90,7 @@ def test_radial_laplace():
         rtol, atol = get_rtol_atol("laplace", gridname)
         runtest_laplace(grid, prof1, laplace_prof, rtol=rtol, atol=atol)
 
-    for gridname, fcnname in product(radial_gridnames, radial_fcnnames_no_cusp):
-        print(fcnname)
+    for gridname, fcnname in product(radial_gridnames, radial_fcnnames_deriv_friendly):
         runtest(gridname, fcnname)
 
 def test_radial_poisson():
@@ -200,17 +200,10 @@ def runtest_grad(grid, prof, deriv_profs, rtol, atol):
     assert ndim == len(deriv_profs), "The deriv profiles must match the dimension of the grid"
     if ndim > 2: ndim = 2 # ???
 
+    pm = prof.abs().max()
     for i in range(ndim):
         dprof = grid.grad(prof, idim=i, dim=0)
-        # case where the grad is significantly not zero
-        if deriv_profs[i].abs().max() > 1e-7:
-            assert torch.allclose(dprof/dprof.abs().max(), deriv_profs[i]/deriv_profs[i].abs().max(), rtol=rtol, atol=atol)
-
-        # case where the grad is zero
-        else:
-            assert torch.allclose(dprof, deriv_profs[i], rtol=rtol, atol=atol)
-
-        assert torch.allclose(dprof.abs().max(), deriv_profs[i].abs().max(), rtol=rtol, atol=atol)
+        assert torch.allclose(dprof/pm, deriv_profs[i]/pm, rtol=rtol, atol=atol)
 
 def runtest_laplace(grid, prof, laplace_prof, rtol, atol):
     dprof = grid.laplace(prof, dim=0)
@@ -300,7 +293,7 @@ def get_fcn(fcnname, rgrid, with_grad=False, with_laplace=False):
     device = rgrid.device
 
     gw = torch.logspace(np.log10(1e-4), np.log10(1e0), 30).to(dtype).to(device) # (ng,)
-    if fcnname in radial_fcnnames+radial_fcnnames_no_cusp:
+    if fcnname in radial_fcnnames+radial_fcnnames_deriv_friendly:
         rs = rgrid[:,0].unsqueeze(-1) # (nr,1)
         if fcnname == "gauss1":
             unnorm_basis = torch.exp(-rs*rs / (2*gw*gw)) * rs # (nr,ng)
@@ -339,25 +332,80 @@ def get_fcn(fcnname, rgrid, with_grad=False, with_laplace=False):
                 return fcn, laplace_fcn
             return fcn
 
-    elif fcnname in sph_fcnnames:
+    elif fcnname in sph_fcnnames+sph_fcnnames_deriv_friendly:
         rs = rgrid[:,0].unsqueeze(-1) # (nr,1)
         phi = rgrid[:,1].unsqueeze(-1) # (nr,1)
         theta = rgrid[:,2].unsqueeze(-1)
         costheta = torch.cos(theta) # (nr,1)
         sintheta = torch.sin(theta)
+        exp_factor = torch.exp(-rs*rs/(2*gw*gw))
         if fcnname == "gauss-l1":
             unnorm_basis = torch.exp(-rs*rs/(2*gw*gw)) * costheta # (nr,1)
             norm = np.sqrt(3) / gw**1.5 / np.pi**.75 # (ng)
             fcn = unnorm_basis * norm
             if with_grad:
-                deriv_r = (-rs/(gw*gw)) * fcn
-                deriv_phi = fcn*0
-                deriv_theta = norm * torch.exp(-rs*rs/(2*gw*gw)) * (-sintheta)
-                return fcn, [deriv_r, deriv_phi, deriv_theta]
+                raise RuntimeError("This function is not grad friendly")
+                # deriv_r = (-rs/(gw*gw)) * fcn
+                # deriv_phi = fcn*0
+                # deriv_theta = norm * torch.exp(-rs*rs/(2*gw*gw)) * (-sintheta) / rs
+                # return fcn, [deriv_r, deriv_phi, deriv_theta]
             return fcn
 
         elif fcnname == "gauss-l2":
             unnorm_basis = torch.exp(-rs*rs/(2*gw*gw)) * (3*costheta*costheta - 1)/2.0 # (nr,1)
+            norm = np.sqrt(5) / gw**1.5 / np.pi**.75 # (ng)
+            fcn = unnorm_basis * norm
+            if with_grad:
+                raise RuntimeError("This function is not grad friendly")
+                # deriv_r = (-rs/(gw*gw)) * fcn
+                # deriv_phi = fcn*0
+                # deriv_theta = norm * torch.exp(-rs*rs/(2*gw*gw)) * (-3*costheta*sintheta)
+                # return fcn, [deriv_r, deriv_phi, deriv_theta]
+            return fcn
+
+        elif fcnname == "gauss-l1m1":
+            unnorm_basis = torch.exp(-rs*rs/(2*gw*gw)) * sintheta * torch.cos(phi)
+            norm = np.sqrt(3) / gw**1.5 / np.pi**.75
+            fcn = unnorm_basis * norm
+            if with_grad:
+                raise RuntimeError("This function is not grad friendly")
+                # deriv_r = (-rs/(gw*gw)) * fcn
+                # deriv_phi = norm * torch.exp(-rs*rs/(2*gw*gw)) * sintheta * (-torch.sin(phi))
+                # deriv_theta = norm * torch.exp(-rs*rs/(2*gw*gw)) * costheta
+                # return fcn, [deriv_r, deriv_phi, deriv_theta]
+            elif with_laplace:
+                pass
+            return fcn
+
+        elif fcnname == "gauss-l2m2":
+            unnorm_basis = torch.exp(-rs*rs/(2*gw*gw)) * (3*sintheta**2)*torch.cos(2*phi) # (nr,1)
+            norm = np.sqrt(5/12.0) / gw**1.5 / np.pi**.75 # (ng)
+            fcn = unnorm_basis * norm
+            if not with_grad:
+                return fcn
+            if with_grad:
+                raise RuntimeError("This function is not grad friendly")
+                # deriv_r = (-rs/(gw*gw)) * fcn
+                # deriv_phi = norm * torch.exp(-rs*rs/(2*gw*gw)) * (3*sintheta**2) * (-2*torch.sin(2*phi))
+                # deriv_theta = norm * torch.exp(-rs*rs/(2*gw*gw)) * (6*sintheta*costheta) * torch.cos(2*phi)
+                # return fcn, [deriv_r, deriv_phi, deriv_theta]
+            elif with_laplace:
+                pass
+
+        # derivative and laplace friendly functions
+        elif fcnname == "gauss2-l1":
+            unnorm_basis = rs*rs * exp_factor * costheta # (nr,1)
+            norm = np.sqrt(3) / gw**1.5 / np.pi**.75 # (ng)
+            fcn = unnorm_basis * norm
+            if with_grad:
+                grad_r = norm * rs*costheta*exp_factor * (2 - rs*rs/(gw*gw))
+                grad_phi = fcn*0
+                grad_theta = -norm * exp_factor * rs * sintheta
+                return fcn, [grad_r, grad_phi, grad_theta]
+            return fcn
+
+        elif fcnname == "gauss2-l2":
+            unnorm_basis = rs*rs*torch.exp(-rs*rs/(2*gw*gw)) * (3*costheta*costheta - 1)/2.0 # (nr,1)
             norm = np.sqrt(5) / gw**1.5 / np.pi**.75 # (ng)
             fcn = unnorm_basis * norm
             if with_grad:
@@ -367,8 +415,8 @@ def get_fcn(fcnname, rgrid, with_grad=False, with_laplace=False):
                 return fcn, [deriv_r, deriv_phi, deriv_theta]
             return fcn
 
-        elif fcnname == "gauss-l1m1":
-            unnorm_basis = torch.exp(-rs*rs/(2*gw*gw)) * sintheta * torch.cos(phi)
+        elif fcnname == "gauss2-l1m1":
+            unnorm_basis = rs*rs*torch.exp(-rs*rs/(2*gw*gw)) * sintheta * torch.cos(phi)
             norm = np.sqrt(3) / gw**1.5 / np.pi**.75
             fcn = unnorm_basis * norm
             if with_grad:
@@ -380,8 +428,8 @@ def get_fcn(fcnname, rgrid, with_grad=False, with_laplace=False):
                 pass
             return fcn
 
-        elif fcnname == "gauss-l2m2":
-            unnorm_basis = torch.exp(-rs*rs/(2*gw*gw)) * (3*sintheta**2)*torch.cos(2*phi) # (nr,1)
+        elif fcnname == "gauss2-l2m2":
+            unnorm_basis = rs*rs*torch.exp(-rs*rs/(2*gw*gw)) * (3*sintheta**2)*torch.cos(2*phi) # (nr,1)
             norm = np.sqrt(5/12.0) / gw**1.5 / np.pi**.75 # (ng)
             fcn = unnorm_basis * norm
             if not with_grad:
