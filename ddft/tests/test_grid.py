@@ -93,6 +93,18 @@ def test_radial_laplace():
     for gridname, fcnname in product(radial_gridnames, radial_fcnnames_deriv_friendly):
         runtest(gridname, fcnname)
 
+# def test_spherical_laplace():
+#     def runtest(spgridname, radgridname, fcnname):
+#         radgrid = get_radial_grid(radgridname, dtype, device)
+#         sphgrid = get_spherical_grid(spgridname, radgrid, dtype, device)
+#         prof1, laplace_fcn = get_fcn(fcnname, sphgrid.rgrid, with_laplace=True)
+#         rtol, atol = get_rtol_atol("laplace", spgridname, radgridname)
+#         print(spgridname, radgridname, fcnname)
+#         runtest_laplace(sphgrid, prof1, laplace_fcn, rtol=rtol, atol=atol)
+#
+#     for gridname, radgridname, fcnname in product(sph_gridnames, radial_gridnames, radial_fcnnames_deriv_friendly+sph_fcnnames_deriv_friendly):
+#         runtest(gridname, radgridname, fcnname)
+
 def test_radial_poisson():
     def runtest(gridname, fcnname):
         grid = get_radial_grid(gridname, dtype, device)
@@ -210,6 +222,10 @@ def runtest_laplace(grid, prof, laplace_prof, rtol, atol):
     pm = dprof.abs().max()
     d1 = dprof / pm
     d2 = laplace_prof / pm
+    # import matplotlib.pyplot as plt
+    # plt.plot(d1.detach().numpy().ravel())
+    # plt.plot(d2.detach().numpy().ravel(), alpha=0.5)
+    # plt.show()
     assert torch.allclose(d1, d2, rtol=rtol, atol=atol)
 
 def get_rtol_atol(taskname, gridname1, gridname2=None):
@@ -244,7 +260,7 @@ def get_rtol_atol(taskname, gridname1, gridname2=None):
         "laplace": {
             "legradialshiftexp": [0.0, 4e-4],
             "lebedev": {
-                "legradialshiftexp": [1e-6, 8e-5],
+                "legradialshiftexp": [0.0, 4e-4],
             }
         },
     }
@@ -328,7 +344,8 @@ def get_fcn(fcnname, rgrid, with_grad=False, with_laplace=False):
         sintheta = torch.sin(theta)
         cosphi = torch.cos(phi)
         sinphi = torch.sin(phi)
-        exp_factor = torch.exp(-rs*rs/(2*gw*gw))
+        rg = rs / gw
+        exp_factor = torch.exp(-rg*rg*.5)
         if fcnname == "gauss-l1":
             unnorm_basis = torch.exp(-rs*rs/(2*gw*gw)) * costheta # (nr,1)
             norm = np.sqrt(3) / gw**1.5 / np.pi**.75 # (ng)
@@ -392,6 +409,10 @@ def get_fcn(fcnname, rgrid, with_grad=False, with_laplace=False):
                 grad_phi = fcn*0
                 grad_theta = -norm * exp_factor * rs * sintheta
                 return fcn, [grad_r, grad_phi, grad_theta]
+            elif with_laplace:
+                laplace_fcn = norm * exp_factor * (4 - 7*rg*rg + rg**4) * costheta
+                return fcn, laplace_fcn
+
             return fcn
 
         elif fcnname == "gauss2-l2":
