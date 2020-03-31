@@ -186,16 +186,17 @@ class Lebedev(BaseRadialAngularGrid):
         basis_integrate = self._get_basis(basis_integrate=True) # (nsh, nphitheta)
 
         # get the spherical harmonics components
+        rs = self.radgrid.rgrid[:,:1] # (nrad, 1)
         psh = torch.matmul(p, basis_integrate.transpose(-2,-1)) # (..., nrad, nsh)
         angmoms = self._get_angmoms() # (nsh,)
-        pang = -angmoms * (angmoms+1) * psh # (..., nrad, nsh)
+        pang = -angmoms * (angmoms+1) * psh / (rs*rs + 1e-12) # (..., nrad, nsh)
         pphitheta = torch.matmul(pang, basis) # (..., nrad, nphitheta)
 
         # get the contribution from the radial direction
         prad = self.radgrid.laplace(p, dim=-2) # (..., nrad, nphitheta)
 
         # add all contributions
-        res = prad + pphitheta
+        res = (prad + pphitheta).reshape(*batch_size, -1)
 
         if dim != -1:
             res = res.transpose(dim, -1)
