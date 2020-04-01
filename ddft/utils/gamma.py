@@ -2,7 +2,6 @@ import torch
 from scipy.special import gammainc, gamma
 
 def incgamma(s, x):
-    # NOTE: incgamma does not seem to propagate the gradient w.r.t. x correctly!
     return _incgamma_fcn.apply(s, x)
 
 class _incgamma_fcn(torch.autograd.Function):
@@ -21,5 +20,5 @@ class _incgamma_fcn(torch.autograd.Function):
     def backward(ctx, grad_output):
         s = ctx.s
         x = ctx.x
-        grad_x = x**(s-1) * torch.exp(-x)
+        grad_x = x**(s-1) * torch.exp(-x) * grad_output
         return (None, grad_x)
