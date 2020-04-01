@@ -380,7 +380,7 @@ class Ecoeff(object):
     def _boys(self, n, T):
         nhalf = n + 0.5
         T = T + 1e-12 # add small noise
-        return incgamma(nhalf, T) / (2*T**nhalf)
+        return incgamma(nhalf, T) / 2 * T**(1-nhalf)
 
     def _access_coeff(self, i, j, t, xyz):
         key = self.key_format % (i,j,t,xyz)
