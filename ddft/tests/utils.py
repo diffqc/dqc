@@ -8,7 +8,8 @@ def compare_grad_with_fd(fcn, args, idxs, eps=1e-6, rtol=1e-3, step=1, fd_to64=T
         rtol = [rtol for i in range(len(idxs))]
 
     # calculate the differentiable loss
-    loss0 = fcn(*args)
+    with torch.enable_grad():
+        loss0 = fcn(*args)
 
     # zeroing the grad
     for idx in idxs:
