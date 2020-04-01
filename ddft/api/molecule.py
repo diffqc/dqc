@@ -60,13 +60,33 @@ def molecule(atomzs, atompos,
     # coeffs = torch.ones_like(alphas, device=device)
     # H_model = HamiltonMoleculeC0Gauss(grid, alphas, centres, coeffs, atompos, atomzs).to(dtype).to(device)
 
-    # setup the hamiltonian forward parameters
+    # set up the occupation number
+    nelectrons = int(atomzs.sum())
+    nlowest = (nelectrons // 2) + (nelectrons % 2)
+    focc = torch.ones(nlowest, dtype=dtype, device=device).unsqueeze(0)
+    focc[:,:nelectrons//2] = 2.0
+
+    # run the self-consistent iterations
+    dft_model = scf_dft(grid, H_model, focc, eks_model,
+        eig_options=eig_options, scf_options=scf_options,
+        bck_options=bck_options)
+    # get the postprocess' components
+    density = dft_model.density()
+    energy = dft_model.energy()
+
+    return energy, density
+
+def scf_dft(grid, H_model, focc, eks_model,
+        eig_options={}, scf_options={}, bck_options={}):
+    # focc: tensor of (nbatch, nlowest)
+
+    dtype, device = H_model.dtype, H_model.device
+    nlowest = focc.shape[1]
+
     hparams = []
     vext = torch.zeros_like(grid.rgrid[:,0]).unsqueeze(0).to(device)
 
     # setup the modules
-    nelectrons = int(atomzs.sum())
-    nlowest = (nelectrons // 2) + (nelectrons % 2)
     all_eks_models = Hartree()
     if eks_model is not None:
         all_eks_models = all_eks_models + eks_model
@@ -75,14 +95,20 @@ def molecule(atomzs, atompos,
     scf_model = EquilibriumModule(dft_model, forward_options=scf_options, backward_options=bck_options)
 
     # calculate the density
-    focc = torch.ones(nlowest, dtype=dtype, device=device).unsqueeze(0)
-    focc[:,:nelectrons//2] = 2.0
     density0 = torch.zeros_like(vext).to(device)
     density0 = dft_model(density0, vext, focc, hparams).detach()
     density = scf_model(density0, vext, focc, hparams)
-    energy = dft_model.energy()
+    return dft_model
 
-    return energy, density
+# class BasisToEnergy(torch.nn.Module):
+#     def __init__(self, grid, eks_model, dtype, device):
+#         super(BasisToEnergy, self).__init__()
+#         self.grid = grid
+#         self.eks_model = eks_model
+#         self.dtype = dtype
+#         self.device = device
+#
+#     def forward(self)
 
 def ion_coulomb_energy(atomzs, atompos):
     # atomzs: (natoms,)

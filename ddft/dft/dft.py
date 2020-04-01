@@ -76,13 +76,21 @@ class DFT(torch.nn.Module):
         self._lc_eigvecs = eigvecs
         self._lc_density = density
         self._lc_focc = focc
+        # parameters that would be computed later
+        self._lc_energy = None
 
         return new_density
 
     ############################# post processing #############################
+    def density(self):
+        return self._lc_density
+
     def energy(self):
         # calculate the total potential experienced by Kohn-Sham particles
         # from the last forward calculation
+        if self._lc_energy is not None:
+            return self._lc_energy
+
         vks = self._lc_vks
         vext_tot = self._lc_vext_tot
         eigvals = self._lc_eigvals
@@ -100,6 +108,7 @@ class DFT(torch.nn.Module):
 
         # compute the interacting particles energy
         Etot = sum_eigvals - vks_integral + Eks
+        self._lc_energy = Etot
         return Etot
 
 class DFTMulti(torch.nn.Module):
@@ -187,13 +196,21 @@ class DFTMulti(torch.nn.Module):
         self._lc_all_eigvecs = all_eigvecs
         self._lc_density = density
         self._lc_foccs = foccs
+        # parameters that would be computed later
+        self._lc_energy = None
 
         return new_density
 
     ############################# post processing #############################
+    def density(self):
+        return self._lc_density
+
     def energy(self):
         # calculate the total potential experienced by Kohn-Sham particles
         # from the last forward calculation
+        if self._lc_energy is not None:
+            return self._lc_energy
+
         vks = self._lc_vks
         vext_tot = self._lc_vext_tot
         all_eigvals = self._lc_all_eigvals
@@ -214,6 +231,7 @@ class DFTMulti(torch.nn.Module):
 
         # compute the interacting particles energy
         Etot = sum_eigvals - vks_integral + Eks
+        self._lc_energy = Etot
         return Etot
 
 def _get_uniform_density(rgrid, nels):
