@@ -116,9 +116,9 @@ def test_hamilton_molecule_cgto():
         grid = BeckeMultiGrid(atomgrid, atompos, dtype=dtype)
 
         # setup basis
-        basis = CGTOBasis(basisname)
-        ijks, alphas, coeffs, nelmts, poss = basis.construct_basis(atomzs, atompos, cartesian=True)
-        h = HamiltonMoleculeCGauss(grid, ijks, alphas, poss, coeffs, nelmts, atompos, atomzs).to(dtype)
+        basis = CGTOBasis(basisname, cartesian=True, dtype=dtype)
+        basis.construct_basis(atomzs, atompos)
+        h = basis.get_hamiltonian(grid)
 
         # compare the eigenvalues (there is degeneracy in p-orbitals)
         nevals = 1
