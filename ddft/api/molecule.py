@@ -74,15 +74,50 @@ def molecule(atomzs, atompos,
     focc = torch.ones(nlowest, dtype=dtype, device=device).unsqueeze(0)
     focc[:,:nelectrons//2] = 2.0
 
-    # run the self-consistent iterations
-    dft_model = scf_dft(grid, b, focc, eks_model,
-        eig_options=eig_options, scf_options=scf_options,
-        bck_options=bck_options)
-    # get the postprocess' components
+    wrapped_module = WrapperModule(grid, b, focc, eks_model,
+        eig_options=eig_options, scf_options=scf_options, bck_options=bck_options)
+    if optimize_basis:
+        opt_module = OptimizationModule(wrapped_module,
+            optimized_nparams=0, optimize_model=True,
+            return_arg=False)
+        module = opt_module
+    else:
+        module = wrapped_module
+
+    energy = module()
+    dft_model = module.get_dftmodel()
     density = dft_model.density()
-    energy = dft_model.energy()
+
+    # # run the self-consistent iterations
+    # dft_model = scf_dft(grid, b, focc, eks_model,
+    #     eig_options=eig_options, scf_options=scf_options,
+    #     bck_options=bck_options)
+    # # get the postprocess' components
+    # density = dft_model.density()
+    # energy = dft_model.energy()
 
     return energy, density
+
+class WrapperModule(torch.nn.Module):
+    def __init__(self, grid, basis, focc, eks_model,
+            eig_options={}, scf_options={}, bck_options={}):
+        super(WrapperModule, self).__init__()
+        self.grid = grid
+        self.basis = basis
+        self.focc = focc
+        self.eks_model = eks_model
+        self.eig_options = eig_options
+        self.scf_options = scf_options
+        self.bck_options = bck_options
+
+    def forward(self):
+        self.dft_model = scf_dft(self.grid, self.basis, self.focc, self.eks_model,
+            self.eig_options, self.scf_options, self.bck_options)
+        energy = self.dft_model.energy()
+        return energy
+
+    def get_dftmodel(self):
+        return self.dft_model
 
 def scf_dft(grid, basis, focc, eks_model,
         eig_options={}, scf_options={}, bck_options={}):
