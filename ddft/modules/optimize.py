@@ -30,7 +30,9 @@ class OptimizationModule(torch.nn.Module):
         If True, perform minimization. Otherwise, perform maximization.
     * optimize_model: bool
         If True, the model's parameters are also optimized, but not returned
-        as the output.
+        as the output. If model has method "optimizing_parameters", then it will
+        use the parameters from "optimizing_parameters". Otherwise, it will use
+        the parameters from "parameters"
     * return_arg: bool
         If True, then return (z*, x*) in the forward. Otherwise, only return z*
     * forward_options: dict
@@ -100,7 +102,14 @@ class _ForwardOpt(torch.autograd.Function):
             x = [p.detach().clone().requires_grad_() for p in x0]
             y = [p.detach().clone() for p in yparams]
 
-            params = (x + list(model.parameters())) if optimize_model else x
+            if optimize_model:
+                if hasattr(model, "optimizing_parameters"):
+                    mparams = list(model.optimizing_parameters())
+                else:
+                    mparams = list(model.parameters())
+                params = x + mparams
+            else:
+                params = x
             if len(params) == 0:
                 raise RuntimeError("There is no parameters to be optimized in the OptimizationModule")
 
