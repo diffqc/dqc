@@ -119,7 +119,7 @@ class WrapperModule(torch.nn.Module):
         self.dft_model = scf_dft(self.grid, self.basis, self.focc, self.eks_model,
             self.density0, self.eig_options, self.scf_options, self.bck_options)
         energy = self.dft_model.energy()
-        ion_energy = ion_coulomb_energy(atomzs, atompos)
+        ion_energy = ion_coulomb_energy(atomzs, atomposs)
 
         # set up the initial density for the next iteration
         self.density0 = self.dft_model.density().clone().detach()
