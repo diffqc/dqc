@@ -35,12 +35,18 @@ def molecule(atomzs, atompos,
         "min_eps": 1e-5,
         "jinv0": 0.5,
         "alpha0": 1.0,
-        "verbose": True,
+        "verbose": False,
         "method": "selfconsistent",
     }, scf_options)
     bck_options = set_default_option({
         "min_eps": 1e-9,
     }, bck_options)
+    opt_options = {
+        "verbose":True,
+        "method": "sgd",
+        "lr": 1e-2,
+        "max_niter": 100,
+    }
 
     # normalize the device and eks_model
     device = _normalize_device(device)
@@ -79,9 +85,6 @@ def molecule(atomzs, atompos,
     wrapped_module = WrapperModule(grid, b, focc, eks_model,
         eig_options=eig_options, scf_options=scf_options, bck_options=bck_options)
     if optimize_basis:
-        opt_options = {
-            "verbose":True
-        }
         opt_module = OptimizationModule(wrapped_module,
             optimized_nparams=0, optimize_model=True,
             return_arg=False, forward_options=opt_options)
@@ -107,15 +110,20 @@ class WrapperModule(torch.nn.Module):
         self.scf_options = scf_options
         self.bck_options = bck_options
         self.dft_model = None
+        self.density0 = None
 
     def optimizing_parameters(self):
         return self.basis.parameters()
 
     def forward(self, atomzs, atomposs):
         self.dft_model = scf_dft(self.grid, self.basis, self.focc, self.eks_model,
-            self.eig_options, self.scf_options, self.bck_options)
+            self.density0, self.eig_options, self.scf_options, self.bck_options)
         energy = self.dft_model.energy()
         ion_energy = ion_coulomb_energy(atomzs, atompos)
+
+        # set up the initial density for the next iteration
+        self.density0 = self.dft_model.density().clone().detach()
+
         return energy + ion_energy
 
     def get_dftmodel(self):
@@ -123,7 +131,7 @@ class WrapperModule(torch.nn.Module):
             raise RuntimeError("forward() must be called before calling get_dftmodel()")
         return self.dft_model
 
-def scf_dft(grid, basis, focc, eks_model,
+def scf_dft(grid, basis, focc, eks_model, density0=None,
         eig_options={}, scf_options={}, bck_options={}):
     # focc: tensor of (nbatch, nlowest)
 
@@ -143,7 +151,8 @@ def scf_dft(grid, basis, focc, eks_model,
     scf_model = EquilibriumModule(dft_model, forward_options=scf_options, backward_options=bck_options)
 
     # calculate the density
-    density0 = torch.zeros_like(vext).to(device)
+    if density0 is None:
+        density0 = torch.zeros_like(vext).to(device)
     density0 = dft_model(density0, vext, focc, hparams).detach()
     density = scf_model(density0, vext, focc, hparams)
     return dft_model
@@ -216,7 +225,7 @@ if __name__ == "__main__":
     if mode == "fwd":
         t0 = time.time()
         atompos = torch.tensor([[-distance[0]/2.0, 0.0, 0.0], [distance[0]/2.0, 0.0, 0.0]], dtype=dtype)
-        energy, density = molecule(atomzs, atompos, eks_model=eks_model, optimize_basis=False)
+        energy, density = molecule(atomzs, atompos, eks_model=eks_model, optimize_basis=True)
         ion_energy = ion_coulomb_energy(atomzs, atompos)
         print("Electron energy: %f" % (energy-ion_energy))
         print("Ion energy: %f" % ion_energy)
