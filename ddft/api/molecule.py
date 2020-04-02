@@ -2,6 +2,7 @@ import torch
 import numpy as np
 from ddft.dft.dft import DFT
 from ddft.utils.misc import set_default_option
+from ddft.basissets.base_basisset import BaseBasisModule
 from ddft.basissets.cgto_basis import CGTOBasis
 from ddft.hamiltons.hmolcgauss import HamiltonMoleculeCGauss
 from ddft.hamiltons.hmolc0gauss import HamiltonMoleculeC0Gauss
@@ -50,9 +51,15 @@ def molecule(atomzs, atompos,
 
     # set up the basis
     natoms = atompos.shape[0]
-    b = CGTOBasis(basis, cartesian=True, requires_grad=False,
-                  dtype=dtype, device=device)
-    b.construct_basis(atomzs, atompos)
+    if isinstance(basis, BaseBasisModule):
+        b = basis
+    elif isinstance(basis, str):
+        b = CGTOBasis(basis, cartesian=True, requires_grad=False,
+                      dtype=dtype, device=device)
+
+    # construct the basis and the hamiltonian
+    if not b.is_basis_constructed():
+        b.construct_basis(atomzs, atompos)
     H_model = b.get_hamiltonian(grid).to(dtype).to(device)
 
     # gwidths = torch.logspace(np.log10(gwmin), np.log10(gwmax), ng, dtype=dtype).to(device) # (ng,)

@@ -19,6 +19,13 @@ class BaseBasisModule(torch.nn.Module):
         pass
 
     @abstractmethod
+    def is_basis_constructed(self):
+        """
+        Returns True if the basis has been constructed. Otherwise returns False.
+        """
+        pass
+
+    @abstractmethod
     def get_hamiltonian(self, grid):
         """
         Returns the hamiltonian using the basis parameters set up earlier with

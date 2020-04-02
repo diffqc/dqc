@@ -23,7 +23,7 @@ class CGTOBasis(BaseBasisModule):
         self.res_memory = {}
 
         # cache
-        self.all_alphas = None
+        self._basis_constructed = False
 
     def loadbasis(self, atomz, cartesian):
         if atomz in self.res_memory:
@@ -123,9 +123,13 @@ class CGTOBasis(BaseBasisModule):
 
         self.all_nelmts = all_nelmts
         self.all_ijks = all_ijks
+        self._basis_constructed = True
+
+    def is_basis_constructed(self):
+        return self._basis_constructed
 
     def get_hamiltonian(self, grid):
-        if self.all_alphas is None:
+        if not self.is_basis_constructed():
             raise RuntimeError("Must call construct_basis before calling get_hamiltonian")
         H_model = HamiltonMoleculeCGauss(grid, self.all_ijks, self.all_alphas,
             self.all_poss, self.all_coeffs, self.all_nelmts, self.atomposs, self.atomzs)
