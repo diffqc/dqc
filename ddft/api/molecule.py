@@ -90,7 +90,7 @@ def molecule(atomzs, atompos,
         module = wrapped_module
 
     energy = module(atomzs, atompos)
-    dft_model = module.get_dftmodel()
+    dft_model = wrapped_module.get_dftmodel()
     density = dft_model.density()
 
     return energy, density
@@ -107,6 +107,9 @@ class WrapperModule(torch.nn.Module):
         self.scf_options = scf_options
         self.bck_options = bck_options
         self.dft_model = None
+
+    def optimizing_parameters(self):
+        return self.basis.parameters()
 
     def forward(self, atomzs, atomposs):
         self.dft_model = scf_dft(self.grid, self.basis, self.focc, self.eks_model,
