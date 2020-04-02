@@ -7,26 +7,56 @@ class OptimizationModule(torch.nn.Module):
     """
     OptimizationModule finds the optimum solution from a given model.
 
-        z* = min_x model(x, y)
-        x* = argmin_x model(x, y)
+        z* = min_x model(*x, *y)
+        x* = argmin_x model(*x, *y)
 
     The model should take the optimized parameters, x, and the external
     parameters, y.
+    The separation of x and y is specified by `optimized_nparams`.
     The variables `x` and `y` must be a list of tensor.
     When the model is wrapped with an OptimizationModule, the new module
-    takes `y` as the input and produce `z*` and `x*` as the outputs.
+    takes `y` as the input and produce `z*` (and `x*`) as the outputs.
 
     This module cannot propagate the gradient from `x*`.
+
+    Initialization arguments
+    ------------------------
+    * model: torch.nn.Module
+        The torch module where the forward is called to get the loss function.
+    * optimized_nparams: int
+        Indicating how many initial arguments to be specified as the optimized
+        parameters.
+    * minimize: bool
+        If True, perform minimization. Otherwise, perform maximization.
+    * optimize_model: bool
+        If True, the model's parameters are also optimized, but not returned
+        as the output.
+    * return_arg: bool
+        If True, then return (z*, x*) in the forward. Otherwise, only return z*
+    * forward_options: dict
+        The option for optimization algorithm.
+    * backward_options: dict
+        (Has no effect just yet)
     """
-    def __init__(self, model, minimize=True, forward_options={}, backward_options={}):
+    def __init__(self, model, optimized_nparams, minimize=True,
+                 optimize_model=False, return_arg=False,
+                 forward_options={}, backward_options={}):
         super(OptimizationModule, self).__init__()
         self.model = model
+        self.optimize_model = optimize_model
         self.fwd_options = forward_options
         self.bck_options = backward_options
         self.multiplier = 1.0 if minimize else -1.0
+        self.optimized_nparams = optimized_nparams
+        self.return_arg = return_arg
 
-    def forward(self, x0, yparams):
-        results = _ForwardOpt.apply(self.model, self.multiplier, x0, self.fwd_options, yparams)
+    def forward(self, *params):
+        # split into optimized parameters and external parameters
+        x0 = params[:self.optimized_nparams]
+        yparams = params[self.optimized_nparams:]
+
+        results = _ForwardOpt.apply(self.model, self.multiplier, x0,
+            self.fwd_options, yparams, self.optimize_model)
         zopt = results[0]
         xopt = results[1:]
         if self.training:
@@ -35,12 +65,15 @@ class OptimizationModule(torch.nn.Module):
             # res = _BackwardOpt.apply(zopt2, self.bck_options, xopt)
             # zopt = res[0]
             # xopt = res[1:]
-            zopt = self.model(xopt, yparams)
-        return zopt, xopt
+            zopt = self.model(*xopt, *yparams)
+        if self.return_arg:
+            return zopt, xopt
+        else:
+            return zopt
 
 class _ForwardOpt(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, model, mult, x0, fwd_options, yparams):
+    def forward(ctx, model, mult, x0, fwd_options, yparams, optimize_model):
         # set default options
         config = set_default_option({
             "max_niter": 100,
@@ -67,11 +100,15 @@ class _ForwardOpt(torch.autograd.Function):
             x = [p.detach().clone().requires_grad_() for p in x0]
             y = [p.detach().clone() for p in yparams]
 
-            opt = opt_cls(x, **opt_kwargs)
+            params = (x + list(model.parameters())) if optimize_model else x
+            if len(params) == 0:
+                raise RuntimeError("There is no parameters to be optimized in the OptimizationModule")
+
+            opt = opt_cls(params, **opt_kwargs)
             for i in range(config["max_niter"]):
                 def closure():
                     opt.zero_grad()
-                    z = model(x, y) * mult
+                    z = model(*x, *y) * mult
                     z.backward()
                     if verbose and i%10 == 0:
                         print("Iter %3d: %.3e" % (i, z))
@@ -85,13 +122,13 @@ class _ForwardOpt(torch.autograd.Function):
             p.grad.zero_()
 
         xopt = x
-        zopt = model(xopt, y)
+        zopt = model(*xopt, *y)
         res = (zopt, *xopt)
         return res
 
     @staticmethod
     def backward(ctx, grad_zopt, *grad_xopt):
-        return (None, None, None, None, None)
+        return (None, None, None, None, None, None)
 
 class _BackwardOpt(torch.autograd.Function):
     @staticmethod
@@ -122,10 +159,8 @@ if __name__ == "__main__":
             self.A = torch.nn.Parameter(A)
 
         def forward(self, x, y):
-            # x: list of (nbatch, nr)
-            # y: list of (nbatch, nr)
-            y = y[0]
-            x = x[0]
+            # x: (nbatch, nr)
+            # y: (nbatch, nr)
             nbatch = y.shape[0]
             tanh = torch.nn.Tanh()
             A = self.A.unsqueeze(0).expand(nbatch, -1, -1)
@@ -152,8 +187,10 @@ if __name__ == "__main__":
     x0 = torch.rand((nbatch, nr)).to(dtype).requires_grad_()
 
     model = DummyModule(A)
-    optmodel = OptimizationModule(model, forward_options=fwd_options)
-    minloss, yopt = optmodel((x0,), (y,))
+    optmodel = OptimizationModule(model, optimized_nparams=1,
+        return_arg=True,
+        forward_options=fwd_options)
+    minloss, yopt = optmodel(x0, y)
 
     print("Forward results:")
     print(yopt)
@@ -162,8 +199,10 @@ if __name__ == "__main__":
 
     def getloss(A, y, x0, return_model=False):
         model = DummyModule(A)
-        optmodel = OptimizationModule(model, forward_options=fwd_options)
-        minloss, yopt = optmodel((x0,), (y,))
+        optmodel = OptimizationModule(model, optimized_nparams=1,
+            return_arg=True,
+            forward_options=fwd_options)
+        minloss, yopt = optmodel(x0, y)
         loss = minloss
         if not return_model:
             return loss
