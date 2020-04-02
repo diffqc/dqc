@@ -11,7 +11,7 @@ class BaseBasisModule(torch.nn.Module):
         pass
 
     @abstractmethod
-    def construct_basis(self, atomzs, atomposs):
+    def construct_basis(self, atomzs, atomposs, requires_grad=False):
         """
         Construct the basis and store them as parameters of the module.
         Calling this function will reset the basis parameters.

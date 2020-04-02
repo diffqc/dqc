@@ -13,7 +13,6 @@ class CGTOBasis(BaseBasisModule):
         self._dtype = dtype
         self._device = device
         self.cartesian = cartesian
-        self.requires_grad = requires_grad
 
         basisname = normalize_basisname(basisname)
         if fnameformat is None:
@@ -24,6 +23,14 @@ class CGTOBasis(BaseBasisModule):
 
         # cache
         self._basis_constructed = False
+
+    @property
+    def dtype(self):
+        return self._dtype
+
+    @property
+    def device(self):
+        return self._device
 
     def loadbasis(self, atomz, cartesian):
         if atomz in self.res_memory:
@@ -87,7 +94,7 @@ class CGTOBasis(BaseBasisModule):
         self.res_memory[atomz] = res
         return res
 
-    def construct_basis(self, atomzs, atomposs):
+    def construct_basis(self, atomzs, atomposs, requires_grad=False):
         # atomzs: torch.tensor int (natoms)
         # atomposs: torch.tensor (natoms, 3)
         # returns: (ijks, alphas, coeffs, nelmts, poss) each are torch.tensor
@@ -112,7 +119,7 @@ class CGTOBasis(BaseBasisModule):
                 all_poss = torch.cat((all_poss, atpos), dim=0)
             i = 1
 
-        if self.requires_grad:
+        if requires_grad:
             self.all_alphas = torch.nn.Parameter(all_alphas)
             self.all_coeffs = torch.nn.Parameter(all_coeffs)
             self.all_poss = torch.nn.Parameter(all_poss)
@@ -132,7 +139,8 @@ class CGTOBasis(BaseBasisModule):
         if not self.is_basis_constructed():
             raise RuntimeError("Must call construct_basis before calling get_hamiltonian")
         H_model = HamiltonMoleculeCGauss(grid, self.all_ijks, self.all_alphas,
-            self.all_poss, self.all_coeffs, self.all_nelmts, self.atomposs, self.atomzs)
+            self.all_poss, self.all_coeffs, self.all_nelmts, self.atomposs,
+            self.atomzs).to(self.dtype).to(self.device)
         return H_model
 
 def normalize_basisname(basisname):

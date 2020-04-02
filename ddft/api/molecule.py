@@ -18,6 +18,7 @@ def molecule(atomzs, atompos,
          eks_model="lda",
          basis="6-311++G**",
          # gwmin=1e-5, gwmax=1e2, ng=60,
+         optimize_basis=False,
          rmin=1e-5, rmax=1e2, nr=100,
          angprec=13, lmax_poisson=4,
          dtype=torch.float64, device="cpu",
@@ -54,13 +55,12 @@ def molecule(atomzs, atompos,
     if isinstance(basis, BaseBasisModule):
         b = basis
     elif isinstance(basis, str):
-        b = CGTOBasis(basis, cartesian=True, requires_grad=False,
+        b = CGTOBasis(basis, cartesian=True,
                       dtype=dtype, device=device)
 
     # construct the basis and the hamiltonian
     if not b.is_basis_constructed():
-        b.construct_basis(atomzs, atompos)
-    H_model = b.get_hamiltonian(grid).to(dtype).to(device)
+        b.construct_basis(atomzs, atompos, requires_grad=optimize_basis)
 
     # gwidths = torch.logspace(np.log10(gwmin), np.log10(gwmax), ng, dtype=dtype).to(device) # (ng,)
     # alphas = 1./(2*gwidths*gwidths).unsqueeze(-1).repeat(natoms, 1) # (natoms*ng, 1)
@@ -75,7 +75,7 @@ def molecule(atomzs, atompos,
     focc[:,:nelectrons//2] = 2.0
 
     # run the self-consistent iterations
-    dft_model = scf_dft(grid, H_model, focc, eks_model,
+    dft_model = scf_dft(grid, b, focc, eks_model,
         eig_options=eig_options, scf_options=scf_options,
         bck_options=bck_options)
     # get the postprocess' components
@@ -84,11 +84,12 @@ def molecule(atomzs, atompos,
 
     return energy, density
 
-def scf_dft(grid, H_model, focc, eks_model,
+def scf_dft(grid, basis, focc, eks_model,
         eig_options={}, scf_options={}, bck_options={}):
     # focc: tensor of (nbatch, nlowest)
 
-    dtype, device = H_model.dtype, H_model.device
+    H_model = basis.get_hamiltonian(grid)
+    dtype, device = basis.dtype, basis.device
     nlowest = focc.shape[1]
 
     hparams = []
