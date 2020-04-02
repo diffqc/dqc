@@ -50,7 +50,8 @@ def molecule(atomzs, atompos,
 
     # set up the basis
     natoms = atompos.shape[0]
-    b = CGTOBasis(basis, cartesian=True, dtype=dtype, device=device)
+    b = CGTOBasis(basis, cartesian=True, requires_grad=False,
+                  dtype=dtype, device=device)
     b.construct_basis(atomzs, atompos)
     H_model = b.get_hamiltonian(grid).to(dtype).to(device)
 

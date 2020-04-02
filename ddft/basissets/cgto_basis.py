@@ -4,7 +4,8 @@ from ddft.basissets.base_basisset import BaseBasisModule
 from ddft.hamiltons.hmolcgauss import HamiltonMoleculeCGauss
 
 class CGTOBasis(BaseBasisModule):
-    def __init__(self, basisname, cartesian=True, fnameformat=None, dtype=torch.float32, device=torch.device('cpu')):
+    def __init__(self, basisname, cartesian=True, requires_grad=False,
+                 fnameformat=None, dtype=torch.float32, device=torch.device('cpu')):
         """
         Read the database of basis from files with name format given in `fnameformat`
         """
@@ -12,6 +13,7 @@ class CGTOBasis(BaseBasisModule):
         self._dtype = dtype
         self._device = device
         self.cartesian = cartesian
+        self.requires_grad = requires_grad
 
         basisname = normalize_basisname(basisname)
         if fnameformat is None:
@@ -110,9 +112,15 @@ class CGTOBasis(BaseBasisModule):
                 all_poss = torch.cat((all_poss, atpos), dim=0)
             i = 1
 
-        self.all_alphas = torch.nn.Parameter(all_alphas)
-        self.all_coeffs = torch.nn.Parameter(all_coeffs)
-        self.all_poss = torch.nn.Parameter(all_poss)
+        if self.requires_grad:
+            self.all_alphas = torch.nn.Parameter(all_alphas)
+            self.all_coeffs = torch.nn.Parameter(all_coeffs)
+            self.all_poss = torch.nn.Parameter(all_poss)
+        else:
+            self.all_alphas = all_alphas
+            self.all_coeffs = all_coeffs
+            self.all_poss = all_poss
+
         self.all_nelmts = all_nelmts
         self.all_ijks = all_ijks
 
