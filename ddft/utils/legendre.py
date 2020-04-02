@@ -54,8 +54,7 @@ def legder(c, dim=-1):
         der = der.transpose(dim, -1)
     return der
 
-@torch.jit.script
-def legval(x:torch.Tensor, order:int) -> torch.Tensor:
+def legval(x, order):
     if order == 0:
         return x*0 + 1
     elif order == 1:
@@ -74,8 +73,8 @@ def legval(x:torch.Tensor, order:int) -> torch.Tensor:
         return (429*x**7 - 693*x**5 + 315*x**3 - 35*x) / 16
     elif order == 8:
         return (6435*x**8 - 12012*x**6 + 6930*x**4 - 1260*x**2 + 35) / 128
-    raise RuntimeError("The legendre polynomial order %d has not been implemented" % order)
-    return x
+    else:
+        raise RuntimeError("The legendre polynomial order %d has not been implemented" % order)
 
 def legvander(x, order, orderfirst=False):
     # x: (..., nx)
@@ -98,13 +97,12 @@ def legvander(x, order, orderfirst=False):
     else:
         return y
 
-@torch.jit.script
-def assoclegval(cost:torch.Tensor, l:int, m:int) -> torch.Tensor:
+def assoclegval(cost, l, m):
     sint = torch.sqrt(1-cost*cost)
     assert m <= l, "m must not be greater than l"
     assert l >= 0 and m >= 0, "l and m must be non-negative"
     if l == 0:
-        return cost * 0 + 1 # torch.ones_like(cost).to(cost.device)
+        return torch.ones_like(cost).to(cost.device)
     elif l == 1:
         if m == 0:
             return cost
@@ -201,8 +199,8 @@ def assoclegval(cost:torch.Tensor, l:int, m:int) -> torch.Tensor:
             return 2027025 * cost * sint**7
         elif m == 8:
             return 2027025 * sint**8
-    raise RuntimeError("The associated legendre polynomial order %d has not been implemented" % l)
-    return sint
+    else:
+        raise RuntimeError("The associated legendre polynomial order %d has not been implemented" % l)
 
 def deriv_assoclegval_azimuth(cost, l, m):
     sint = torch.sqrt(1-cost*cost)
