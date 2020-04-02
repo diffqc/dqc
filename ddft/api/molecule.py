@@ -144,16 +144,6 @@ def scf_dft(grid, basis, focc, eks_model,
     density = scf_model(density0, vext, focc, hparams)
     return dft_model
 
-# class BasisToEnergy(torch.nn.Module):
-#     def __init__(self, grid, eks_model, dtype, device):
-#         super(BasisToEnergy, self).__init__()
-#         self.grid = grid
-#         self.eks_model = eks_model
-#         self.dtype = dtype
-#         self.device = device
-#
-#     def forward(self)
-
 def ion_coulomb_energy(atomzs, atompos):
     # atomzs: (natoms,)
     # atompos: (natoms, ndim)
