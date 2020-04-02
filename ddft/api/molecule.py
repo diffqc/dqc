@@ -42,7 +42,7 @@ def molecule(atomzs, atompos,
         "min_eps": 1e-9,
     }, bck_options)
     opt_options = {
-        "verbose":True,
+        "verbose": False,
         "method": "sgd",
         "lr": 1e-2,
         "max_niter": 100,
