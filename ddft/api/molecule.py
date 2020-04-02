@@ -10,6 +10,7 @@ from ddft.grids.radialgrid import LegendreRadialShiftExp
 from ddft.grids.sphangulargrid import Lebedev
 from ddft.grids.multiatomsgrid import BeckeMultiGrid
 from ddft.modules.equilibrium import EquilibriumModule
+from ddft.modules.optimize import OptimizationModule
 from ddft.eks import BaseEKS, Hartree, xLDA
 
 __all__ = ["molecule"]
@@ -84,7 +85,7 @@ def molecule(atomzs, atompos,
     else:
         module = wrapped_module
 
-    energy = module()
+    energy = module(atomzs, atompos)
     dft_model = module.get_dftmodel()
     density = dft_model.density()
 
@@ -110,11 +111,12 @@ class WrapperModule(torch.nn.Module):
         self.scf_options = scf_options
         self.bck_options = bck_options
 
-    def forward(self):
+    def forward(self, atomzs, atomposs):
         self.dft_model = scf_dft(self.grid, self.basis, self.focc, self.eks_model,
             self.eig_options, self.scf_options, self.bck_options)
         energy = self.dft_model.energy()
-        return energy
+        ion_energy = ion_coulomb_energy(atomzs, atompos)
+        return energy + ion_energy
 
     def get_dftmodel(self):
         return self.dft_model
@@ -213,7 +215,7 @@ if __name__ == "__main__":
     if mode == "fwd":
         t0 = time.time()
         atompos = torch.tensor([[-distance[0]/2.0, 0.0, 0.0], [distance[0]/2.0, 0.0, 0.0]], dtype=dtype)
-        energy, density = molecule(atomzs, atompos, eks_model=eks_model)
+        energy, density = molecule(atomzs, atompos, eks_model=eks_model, optimize_basis=False)
         ion_energy = ion_coulomb_energy(atomzs, atompos)
         print("Electron energy: %f" % energy)
         print("Ion energy: %f" % ion_energy)
