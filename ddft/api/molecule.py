@@ -75,12 +75,16 @@ def molecule(atomzs, atompos,
     focc = torch.ones(nlowest, dtype=dtype, device=device).unsqueeze(0)
     focc[:,:nelectrons//2] = 2.0
 
+    # wrapper module wraps the setup and returns the total energy in forward()
     wrapped_module = WrapperModule(grid, b, focc, eks_model,
         eig_options=eig_options, scf_options=scf_options, bck_options=bck_options)
     if optimize_basis:
+        opt_options = {
+            "verbose":True
+        }
         opt_module = OptimizationModule(wrapped_module,
             optimized_nparams=0, optimize_model=True,
-            return_arg=False)
+            return_arg=False, forward_options=opt_options)
         module = opt_module
     else:
         module = wrapped_module
@@ -88,14 +92,6 @@ def molecule(atomzs, atompos,
     energy = module(atomzs, atompos)
     dft_model = module.get_dftmodel()
     density = dft_model.density()
-
-    # # run the self-consistent iterations
-    # dft_model = scf_dft(grid, b, focc, eks_model,
-    #     eig_options=eig_options, scf_options=scf_options,
-    #     bck_options=bck_options)
-    # # get the postprocess' components
-    # density = dft_model.density()
-    # energy = dft_model.energy()
 
     return energy, density
 
@@ -110,6 +106,7 @@ class WrapperModule(torch.nn.Module):
         self.eig_options = eig_options
         self.scf_options = scf_options
         self.bck_options = bck_options
+        self.dft_model = None
 
     def forward(self, atomzs, atomposs):
         self.dft_model = scf_dft(self.grid, self.basis, self.focc, self.eks_model,
@@ -119,6 +116,8 @@ class WrapperModule(torch.nn.Module):
         return energy + ion_energy
 
     def get_dftmodel(self):
+        if self.dft_model is None:
+            raise RuntimeError("forward() must be called before calling get_dftmodel()")
         return self.dft_model
 
 def scf_dft(grid, basis, focc, eks_model,
@@ -208,8 +207,7 @@ if __name__ == "__main__":
         if eks_model is None:
             eks_model = PseudoLDA(a, p)
         energy, _ = molecule(atomzs, atompos, eks_model=eks_model)
-        ion_energy = ion_coulomb_energy(atomzs, atompos)
-        loss = (energy+ion_energy).sum()
+        loss = energy.sum()
         return loss
 
     if mode == "fwd":
@@ -217,9 +215,9 @@ if __name__ == "__main__":
         atompos = torch.tensor([[-distance[0]/2.0, 0.0, 0.0], [distance[0]/2.0, 0.0, 0.0]], dtype=dtype)
         energy, density = molecule(atomzs, atompos, eks_model=eks_model, optimize_basis=False)
         ion_energy = ion_coulomb_energy(atomzs, atompos)
-        print("Electron energy: %f" % energy)
+        print("Electron energy: %f" % (energy-ion_energy))
         print("Ion energy: %f" % ion_energy)
-        print("Total energy: %f" % (ion_energy + energy))
+        print("Total energy: %f" % energy)
         t1 = time.time()
         print("Forward done in %fs" % (t1-t0))
     elif mode == "grad":
