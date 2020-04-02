@@ -50,10 +50,10 @@ def molecule(atomzs, atompos,
 
     # set up the basis
     natoms = atompos.shape[0]
-    b = CGTOBasis(basis)
-    ijks, alphas, coeffs, nelmts, poss = b.construct_basis(atomzs, atompos, cartesian=True)
-    H_model = HamiltonMoleculeCGauss(grid, ijks, alphas, poss, coeffs, nelmts, atompos, atomzs)\
-              .to(dtype).to(device)
+    b = CGTOBasis(basis, cartesian=True, dtype=dtype, device=device)
+    b.construct_basis(atomzs, atompos)
+    H_model = b.get_hamiltonian(grid).to(dtype).to(device)
+
     # gwidths = torch.logspace(np.log10(gwmin), np.log10(gwmax), ng, dtype=dtype).to(device) # (ng,)
     # alphas = 1./(2*gwidths*gwidths).unsqueeze(-1).repeat(natoms, 1) # (natoms*ng, 1)
     # centres = atompos.unsqueeze(1).repeat_interleave(ng, dim=0) # (natoms*ng, 1, ndim)
