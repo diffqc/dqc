@@ -75,6 +75,7 @@ class DFT(torch.nn.Module):
         self._lc_eigvals = eigvals
         self._lc_eigvecs = eigvecs
         self._lc_density = density
+        self._lc_new_density = new_density
         self._lc_focc = focc
         # parameters that would be computed later
         self._lc_energy = None
@@ -83,7 +84,7 @@ class DFT(torch.nn.Module):
 
     ############################# post processing #############################
     def density(self):
-        return self._lc_density
+        return self._lc_new_density
 
     def energy(self):
         # calculate the total potential experienced by Kohn-Sham particles
@@ -195,6 +196,7 @@ class DFTMulti(torch.nn.Module):
         self._lc_all_eigvals = all_eigvals
         self._lc_all_eigvecs = all_eigvecs
         self._lc_density = density
+        self._lc_new_density = new_density
         self._lc_foccs = foccs
         # parameters that would be computed later
         self._lc_energy = None
@@ -203,7 +205,7 @@ class DFTMulti(torch.nn.Module):
 
     ############################# post processing #############################
     def density(self):
-        return self._lc_density
+        return self._lc_new_density
 
     def energy(self):
         # calculate the total potential experienced by Kohn-Sham particles
