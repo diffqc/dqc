@@ -103,6 +103,8 @@ class _Backward(torch.autograd.Function):
         yinp = ctx.yinp
 
         nr = ymodel.shape[-1]
+        # NOTE: there is a problem in propagating for the second derivative
+        # (i.e. getting the backward of this)
         @lt.module(shape=(nr,nr), is_symmetric=False)
         def _apply_ImDfDy(gy, ymodel, yinp):
             gy = gy.squeeze(-1)
