@@ -51,6 +51,6 @@ def test_mol_grad():
             return density.abs().sum()
 
     gradcheck(get_energy, (a, p, atomzs, atomposs, "energy"))
-    # gradcheck(get_energy, (a, p, atomzs, atomposs, "density"))
+    gradcheck(get_energy, (a, p, atomzs, atomposs, "density"))
     # gradgradcheck(get_energy, (a, p, atomzs, atomposs, "energy"))
     # gradgradcheck(get_energy, (a, p, atomzs, atomposs, False))
