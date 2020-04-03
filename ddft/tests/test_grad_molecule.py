@@ -24,13 +24,17 @@ def test_mol_grad():
     p = torch.tensor([4./3]).to(dtype).requires_grad_()
     eks_model = PseudoLDA(a, p)
 
-    def get_energy(a, p, distance, eks_model=None):
+    def get_energy(a, p, distance, output="energy"):
         atompos = distance * torch.tensor([[-0.5], [0.5]], dtype=dtype) # (2,1)
         atompos = torch.cat((atompos, torch.zeros((2,2), dtype=dtype)), dim=-1)
-        if eks_model is None:
-            eks_model = PseudoLDA(a, p)
-        energy, _ = molecule(atomzs, atompos, eks_model=eks_model)
-        return energy
+        eks_model = PseudoLDA(a, p)
+        energy, density = molecule(atomzs, atompos, eks_model=eks_model)
+        if output == "energy":
+            return energy
+        elif output == "density":
+            return density.abs().sum()
 
-    gradcheck(get_energy, (a, p, distance))
-    # gradgradcheck(get_energy, (a, p, distance))
+    gradcheck(get_energy, (a, p, distance, "energy"))
+    gradcheck(get_energy, (a, p, distance, "density"))
+    # gradgradcheck(get_energy, (a, p, distance, "energy"))
+    # gradgradcheck(get_energy, (a, p, distance, False))
