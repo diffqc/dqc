@@ -27,7 +27,7 @@ def test_grad_dft_cgto():
         def forward(self, density):
             return self.a * safepow(density.abs(), self.p)
 
-    def fcn(atomzs, atomposs, a, p):
+    def fcn(atomzs, atomposs, a, p, output="energy"):
         radgrid = LegendreRadialShiftExp(rmin, rmax, nr, dtype=dtype)
         sphgrid = Lebedev(radgrid, prec=prec, basis_maxangmom=4, dtype=dtype)
         grid = BeckeMultiGrid(sphgrid, atomposs, dtype=dtype)
@@ -46,12 +46,18 @@ def test_grad_dft_cgto():
         dft_model = DFT(H_model, all_eks_models, nlowest, **eig_options)
         density0 = torch.zeros_like(vext)
         density = dft_model(density0, vext, focc, [])
-        return density.abs().sum()
+        energy = dft_model.energy()
+        if output == "energy":
+            return energy
+        elif output == "density":
+            return density.abs().sum()
 
     a = torch.tensor([-0.7385587663820223]).to(dtype).requires_grad_()
     p = torch.tensor([4./3]).to(dtype).requires_grad_()
     atomzs = torch.tensor([1.0, 1.0], dtype=dtype)
     atomposs = torch.tensor([[-0.5, 0.1, 0.1], [0.5, 0.1, 0.1]], dtype=dtype).requires_grad_()
 
-    gradcheck(fcn, (atomzs, atomposs, a, p))
-    gradgradcheck(fcn, (atomzs, atomposs, a, p), eps=1e-3)
+    gradcheck(fcn, (atomzs, atomposs, a, p, "energy"))
+    gradcheck(fcn, (atomzs, atomposs, a, p, "density"))
+    gradgradcheck(fcn, (atomzs, atomposs, a, p, "energy"))
+    gradgradcheck(fcn, (atomzs, atomposs, a, p, "density"), eps=1e-3)
