@@ -36,4 +36,4 @@ def test_grad_cgto():
     vext = torch.zeros((1,nrgrid), dtype=dtype)
 
     gradcheck(fcn, (atomzs, atomposs, wf, vext))
-    # gradgradcheck(fcn, (atomzs, atomposs, wf, vext))
+    gradgradcheck(fcn, (atomzs, atomposs, wf, vext))

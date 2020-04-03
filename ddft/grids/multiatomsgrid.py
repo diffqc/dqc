@@ -51,8 +51,11 @@ class BeckeMultiGrid(BaseMultiAtomsGrid):
     def get_atom_weights(self):
         xyz = self.rgrid_in_xyz # (nr, 3)
         rgatoms = torch.norm(xyz - self.atompos.unsqueeze(1), dim=-1) # (natoms, nr)
-        ratoms = torch.norm(self.atompos - self.atompos.unsqueeze(1), dim=-1) # (natoms, natoms)
-        mu_ij = (rgatoms - rgatoms.unsqueeze(1)) / (ratoms.unsqueeze(-1) + 1e-12) # (natoms, natoms, nr)
+        rdatoms = self.atompos - self.atompos.unsqueeze(1) # (natoms, natoms, ndim)
+        # add the diagonal to stabilize the gradient calculation
+        rdatoms = rdatoms + torch.eye(rdatoms.shape[0], dtype=rdatoms.dtype, device=rdatoms.device).unsqueeze(-1)
+        ratoms = torch.norm(rdatoms, dim=-1) # (natoms, natoms)
+        mu_ij = (rgatoms - rgatoms.unsqueeze(1)) / ratoms.unsqueeze(-1) # (natoms, natoms, nr)
 
         # calculate the distortion due to heterogeneity
         # (Appendix in Becke's https://doi.org/10.1063/1.454033)
