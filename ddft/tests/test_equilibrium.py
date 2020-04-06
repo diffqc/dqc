@@ -37,7 +37,7 @@ def test_equil_1():
     y = eqmodel(y0, x)
     assert torch.allclose(y, model(y, x))
 
-    def getloss(A, x, y0, return_model=False):
+    def getloss(A, x, y0):
         model = DummyModule(A)
         eqmodel = EquilibriumModule(model)
         y = eqmodel(y0, x)
