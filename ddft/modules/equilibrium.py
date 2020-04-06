@@ -105,6 +105,14 @@ class _Backward(torch.autograd.Function):
         nr = ymodel.shape[-1]
         # NOTE: there is a problem in propagating for the second derivative
         # (i.e. getting the backward of this)
+        # The cause is in backward operation of solve, there are lines:
+        #     params = [p.clone().detach().requires_grad_() for p in ctx.params]
+        #     with torch.enable_grad():
+        #         loss = -ctx.A(ctx.x, *params)
+        # where it copies the parameters and apply the operator.
+        # This does not work with the following module below because it assumes
+        #   ymodel and yinp are related in the computational graph, while in the
+        #   backward solve copies ymodel & yinp beforehand.
         @lt.module(shape=(nr,nr), is_symmetric=False)
         def _apply_ImDfDy(gy, ymodel, yinp):
             gy = gy.squeeze(-1)
