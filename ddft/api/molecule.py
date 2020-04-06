@@ -235,7 +235,7 @@ if __name__ == "__main__":
     if mode == "fwd":
         t0 = time.time()
         atompos = torch.tensor([[-distance[0]/2.0, 0.0, 0.0], [distance[0]/2.0, 0.0, 0.0]], dtype=dtype)
-        energy, density = molecule(atomzs, atompos, eks_model=eks_model, optimize_basis=True)
+        energy, density = molecule(atomzs, atompos, eks_model=eks_model, optimize_basis=False)
         ion_energy = ion_coulomb_energy(atomzs, atompos)
         print("Electron energy: %f" % (energy-ion_energy))
         print("Ion energy: %f" % ion_energy)
