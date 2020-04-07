@@ -104,27 +104,24 @@ class _Backward(torch.autograd.Function):
 
         nr = ymodel.shape[-1]
         # NOTE: there is a problem in propagating for the second derivative
-        # (i.e. getting the backward of this)
-        # The cause is in backward operation of solve, there are lines:
-        #     params = [p.clone().detach().requires_grad_() for p in ctx.params]
-        #     with torch.enable_grad():
-        #         loss = -ctx.A(ctx.x, *params)
-        # where it copies the parameters and apply the operator.
-        # This does not work with the following module below because it assumes
-        #   ymodel and yinp are related in the computational graph, while in the
-        #   backward solve copies ymodel & yinp beforehand.
-        @lt.module(shape=(nr,nr), is_symmetric=False)
-        def _apply_ImDfDy(gy, ymodel, yinp):
-            gy = gy.squeeze(-1)
-            dfdy, = torch.autograd.grad(ymodel, (yinp,), gy,
-                retain_graph=True, create_graph=torch.is_grad_enabled())
-            res = gy - dfdy
-            res = res.unsqueeze(-1)
-            return res
-
-        gymodel = lt.solve(_apply_ImDfDy, [ymodel, yinp], grad_yout.unsqueeze(-1),
+        # (i.e. the backward of this is wrong)
+        _apply_ImDfDy = _ImDfDy(nr, yinp)
+        gymodel = lt.solve(_apply_ImDfDy, [ymodel], grad_yout.unsqueeze(-1),
             fwd_options=ctx.options, bck_options=ctx.options).squeeze(-1)
         return (gymodel, None, None)
+
+class _ImDfDy(lt.Module):
+    def __init__(self, nr, yinp):
+        super(_ImDfDy, self).__init__(shape=(nr,nr), is_symmetric=False)
+        self.yinp = yinp
+
+    def forward(self, gy, ymodel):
+        gy = gy.squeeze(-1)
+        dfdy, = torch.autograd.grad(ymodel, (self.yinp,), gy,
+            retain_graph=True, create_graph=torch.is_grad_enabled())
+        res = gy - dfdy + ymodel.sum() * 0
+        res = res.unsqueeze(-1)
+        return res
 
 def approximate_newton(lossfn, y0, **config):
     # y0: (nbatch, nr)
