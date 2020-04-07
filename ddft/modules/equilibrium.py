@@ -23,7 +23,7 @@ class EquilibriumModule(torch.nn.Module):
         if self.training:
             yequi.requires_grad_()
             ymodel = self.model(yequi, *params)
-            yequi = _Backward.apply(ymodel, yequi, self.bck_options)
+            yequi = _Backward.apply(ymodel, yequi, self.bck_options, self.model, params)
         return yequi
 
 class _Forward(torch.autograd.Function):
@@ -85,7 +85,7 @@ class _Forward(torch.autograd.Function):
 
 class _Backward(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, ymodel, yinp, options):
+    def forward(ctx, ymodel, yinp, options, model, params):
         ctx.options = set_default_option({
             "max_niter": 50,
             "min_eps": 1e-9,
@@ -94,7 +94,11 @@ class _Backward(torch.autograd.Function):
 
         ctx.ymodel = ymodel
         ctx.yinp = yinp
-        return ymodel
+        ctx.model = model
+        ctx.params = params
+        ymodel_out = ymodel.clone()
+        ctx.ymodel_out = ymodel_out
+        return ymodel_out
 
     @staticmethod
     def backward(ctx, grad_yout):
@@ -105,21 +109,31 @@ class _Backward(torch.autograd.Function):
         nr = ymodel.shape[-1]
         # NOTE: there is a problem in propagating for the second derivative
         # (i.e. the backward of this is wrong)
-        _apply_ImDfDy = _ImDfDy(nr, yinp)
+        _apply_ImDfDy = _ImDfDy(nr, yinp, ctx.ymodel, ctx.ymodel_out, ctx.model, ctx.params)
         gymodel = lt.solve(_apply_ImDfDy, [ymodel], grad_yout.unsqueeze(-1),
             fwd_options=ctx.options, bck_options=ctx.options).squeeze(-1)
-        return (gymodel, None, None)
+        return (gymodel, None, None, None, None)
 
 class _ImDfDy(lt.Module):
-    def __init__(self, nr, yinp):
+    def __init__(self, nr, yinp, ymodel, yequil_out, model, params):
         super(_ImDfDy, self).__init__(shape=(nr,nr), is_symmetric=False)
         self.yinp = yinp
+        self.ymodel = ymodel
+        self.ymodel_out = yequil_out
+        self.model = model
+        self.params = params
 
     def forward(self, gy, ymodel):
         gy = gy.squeeze(-1)
-        dfdy, = torch.autograd.grad(ymodel, (self.yinp,), gy,
-            retain_graph=True, create_graph=torch.is_grad_enabled())
-        res = gy - dfdy + ymodel.sum() * 0
+        if torch.is_grad_enabled():
+            yout = self.model(ymodel, *self.params)
+            dfdy, = torch.autograd.grad(yout, (ymodel,), gy,
+                retain_graph=True, create_graph=torch.is_grad_enabled())
+        else:
+            dfdy, = torch.autograd.grad(self.ymodel, (self.yinp,), gy,
+                retain_graph=True, create_graph=torch.is_grad_enabled())
+
+        res = gy - dfdy
         res = res.unsqueeze(-1)
         return res
 
