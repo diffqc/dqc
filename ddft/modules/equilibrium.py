@@ -96,9 +96,7 @@ class _Backward(torch.autograd.Function):
         ctx.yinp = yinp
         ctx.model = model
         ctx.params = params
-        ymodel_out = ymodel.clone()
-        ctx.ymodel_out = ymodel_out
-        return ymodel_out
+        return ymodel
 
     @staticmethod
     def backward(ctx, grad_yout):
@@ -109,31 +107,33 @@ class _Backward(torch.autograd.Function):
         nr = ymodel.shape[-1]
         # NOTE: there is a problem in propagating for the second derivative
         # (i.e. the backward of this is wrong)
-        _apply_ImDfDy = _ImDfDy(nr, yinp, ctx.ymodel, ctx.ymodel_out, ctx.model, ctx.params)
+        _apply_ImDfDy = _ImDfDy(nr, yinp, ctx.ymodel, ctx.model, ctx.params)
         gymodel = lt.solve(_apply_ImDfDy, [ymodel], grad_yout.unsqueeze(-1),
             fwd_options=ctx.options, bck_options=ctx.options).squeeze(-1)
         return (gymodel, None, None, None, None)
 
 class _ImDfDy(lt.Module):
-    def __init__(self, nr, yinp, ymodel, yequil_out, model, params):
+    def __init__(self, nr, yinp, ymodel, model, params):
         super(_ImDfDy, self).__init__(shape=(nr,nr), is_symmetric=False)
         self.yinp = yinp
         self.ymodel = ymodel
-        self.ymodel_out = yequil_out
         self.model = model
         self.params = params
 
     def forward(self, gy, ymodel):
         gy = gy.squeeze(-1)
-        if torch.is_grad_enabled():
-            yout = self.model(ymodel, *self.params)
-            dfdy, = torch.autograd.grad(yout, (ymodel,), gy,
-                retain_graph=True, create_graph=torch.is_grad_enabled())
-        else:
-            dfdy, = torch.autograd.grad(self.ymodel, (self.yinp,), gy,
-                retain_graph=True, create_graph=torch.is_grad_enabled())
+        # if torch.is_grad_enabled():
+        #     yout = self.model(ymodel, *self.params)
+        #     dfdy, = torch.autograd.grad(yout, (ymodel,), gy,
+        #         retain_graph=True, create_graph=torch.is_grad_enabled())
+        # else:
+        #     dfdy, = torch.autograd.grad(self.ymodel, (self.yinp,), gy,
+        #         retain_graph=True, create_graph=torch.is_grad_enabled())
 
-        res = gy - dfdy
+        dfdy, = torch.autograd.grad(ymodel, (self.yinp,), gy,
+            retain_graph=True, create_graph=torch.is_grad_enabled())
+
+        res = gy - dfdy #+ ymodel.sum()*0
         res = res.unsqueeze(-1)
         return res
 
