@@ -153,8 +153,8 @@ def scf_dft(grid, basis, focc, eks_model, density0=None,
     # calculate the density
     if density0 is None:
         density0 = torch.zeros_like(vext).to(device)
-    density0 = dft_model(density0, vext, focc, hparams).detach()
-    density = scf_model(density0, vext, focc, hparams)
+    density0 = dft_model(density0, vext, focc, *hparams).detach()
+    density = scf_model(density0, vext, focc, *hparams)
 
     if torch.is_grad_enabled():
         # This redundant evaluation is needed to register the "density" from the

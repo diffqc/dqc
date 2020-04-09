@@ -79,8 +79,9 @@ def atom(atomz, charge=0,
     foccs = orbitals.get_foccs()
     density0 = torch.zeros_like(vext).to(device)
     all_hparams = [hparams for _ in range(len(H_models))]
-    density0 = dft_model(density0, vext, foccs, all_hparams).detach()
-    density = scf_model(density0, vext, foccs, all_hparams)
+    params_lineup = [item for sublist in all_hparams for item in sublist]
+    density0 = dft_model(density0, vext, foccs, *params_lineup).detach()
+    density = scf_model(density0, vext, foccs, *params_lineup)
     energy = dft_model.energy()
 
     return energy, density

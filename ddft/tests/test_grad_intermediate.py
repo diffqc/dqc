@@ -80,7 +80,7 @@ def test_grad_dft_cgto():
         eig_options = {"method": "exacteig"}
         dft_model = DFT(H_model, all_eks_models, nlowest, **eig_options)
         density0 = torch.zeros_like(vext)
-        density = dft_model(density0, vext, focc, [])
+        density = dft_model(density0, vext, focc)
         energy = dft_model.energy()
         if output == "energy":
             return energy

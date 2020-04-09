@@ -36,6 +36,13 @@ class BaseHamilton(lt.Module):
         """
         pass
 
+    @property
+    def nolp_params(self):
+        """
+        Returns the number of additional parameters in the ._overlap method
+        """
+        return 0
+
     @abstractmethod
     def forward(self, wf, vext, *params):
         """

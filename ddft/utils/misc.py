@@ -5,3 +5,16 @@ def set_default_option(defopt, opt=None):
         opt = {}
     defopt.update(opt)
     return defopt
+
+def unpack(arr, nums):
+    iarr = 0
+    res = []
+    for num in nums:
+        if isinstance(num, int):
+            res.append(arr[iarr:iarr+num])
+            iarr = iarr + num
+        elif isinstance(num, list):
+            ns = sum(num)
+            res.append(unpack(arr[iarr:iarr+ns], num))
+            iarr = iarr + ns
+    return res

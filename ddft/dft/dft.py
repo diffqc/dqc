@@ -2,7 +2,7 @@ import functools
 import torch
 import numpy as np
 from ddft.modules.eigen import EigenModule
-from ddft.utils.misc import set_default_option
+from ddft.utils.misc import set_default_option, unpack
 from ddft.utils.safeops import safepow
 from ddft.eks import VKS
 
@@ -51,10 +51,13 @@ class DFT(torch.nn.Module):
         self.eigen_model = EigenModule(H_model, nlowest,
             rlinmodule=H_model.overlap, **eigen_options)
 
-    def forward(self, density, vext, focc, hparams=[], rparams=[]):
+    def forward(self, density, vext, focc, *params):
         # density: (nbatch, nr)
         # vext: (nbatch, nr)
         # focc: (nbatch, nlowest)
+
+        # unpack the parameters
+        hparams, rparams = unpack(params, [self.H_model.nhparams, self.H_model.nolp_params])
 
         # calculate the total potential experienced by Kohn-Sham particles
         vks = self.vks_model(density) # (nbatch, nr)
@@ -162,10 +165,15 @@ class DFTMulti(torch.nn.Module):
             rlinmodule=H_model.overlap, **eigen_options) \
             for (H_model, nlowest) in zip(self.H_models, nlowests)]
 
-    def forward(self, density, vext, foccs, all_hparams=[], all_rparams=[]):
+    def forward(self, density, vext, foccs, *params):
         # density: (nbatch, nr)
         # vext: (nbatch, nr)
         # foccs: list of (nbatch, nlowest)
+
+        # unpack the parameters
+        nhparams = [H.nhparams for H in self.H_models]
+        nrparams = [H.nolp_params for H in self.H_models]
+        all_hparams, all_rparams = unpack(params, [nhparams, nrparams])
 
         # calculate the total potential experienced by Kohn-Sham particles
         vks = self.vks_model(density) # (nbatch, nr)
