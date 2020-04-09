@@ -152,6 +152,10 @@ class HamiltonAtomYGauss(BaseHamilton):
         self.lhat = torch.tensor(lhat, dtype=dtype, device=device) # (nsh,)
 
     ############################# basis part #############################
+    @property
+    def nhparams(self):
+        return 2 # atomz & charge
+
     def forward(self, wf, vext, atomz, charge):
         # wf: (nbatch, ns, ncols)
         # vext: (nbatch, nr)

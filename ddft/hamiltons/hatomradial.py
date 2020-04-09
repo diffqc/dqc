@@ -120,6 +120,10 @@ class HamiltonAtomRadial(BaseHamilton):
         self.coul = coul.unsqueeze(0)
 
     ############################# basis part #############################
+    @property
+    def nhparams(self):
+        return 2 # atomz & charge
+
     def forward(self, wf, vext, atomz, charge):
         # wf: (nbatch, ns, ncols)
         # vext: (nbatch, nr)

@@ -126,6 +126,10 @@ class HamiltonMoleculeCGauss(BaseHamilton):
         self.basis_dvolume = self.basis * self.grid.get_dvolume() # (nbasis, nr)
 
     ############################# basis part #############################
+    @property
+    def nhparams(self):
+        return 0
+
     def forward(self, wf, vext):
         # wf: (nbatch, nbasis, ncols)
         # vext: (nbatch, nr)

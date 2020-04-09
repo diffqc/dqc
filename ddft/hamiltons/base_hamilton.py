@@ -29,6 +29,13 @@ class BaseHamilton(lt.Module):
         return self
 
     ################################ Basis part ################################
+    @abstractproperty
+    def nhparams(self):
+        """
+        Returns the number of parameters in the .forward method
+        """
+        pass
+
     @abstractmethod
     def forward(self, wf, vext, *params):
         """

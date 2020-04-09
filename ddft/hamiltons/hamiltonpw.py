@@ -25,6 +25,10 @@ class HamiltonPlaneWave(BaseHamilton):
         self.ndim = self.space.ndim
         nr, self.ndim = rgrid.shape
 
+    @property
+    def nhparams(self):
+        return 0
+
     def forward(self, wf, vext):
         # wf: (nbatch, nr, ncols)
         # vext: (nbatch, nr)
