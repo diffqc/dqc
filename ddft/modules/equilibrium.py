@@ -92,23 +92,26 @@ class _Backward(torch.autograd.Function):
             "verbose": False,
         }, options)
 
+        yout = ymodel.clone()
         ctx.ymodel = ymodel
+        ctx.yout = yout
         ctx.yinp = yinp
         ctx.model = model
         ctx.params = params
-        return ymodel
+        return yout
 
     @staticmethod
     def backward(ctx, grad_yout):
         # grad_ymodel: (nbatch,...)
         ymodel = ctx.ymodel
         yinp = ctx.yinp
+        yout = ctx.yout
 
         nr = ymodel.shape[-1]
         # NOTE: there is a problem in propagating for the second derivative
         # (i.e. the backward of this is wrong)
         _apply_ImDfDy = _ImDfDy(nr, yinp, ctx.model)
-        gymodel = lt.solve(_apply_ImDfDy, [ymodel, *ctx.params], grad_yout.unsqueeze(-1),
+        gymodel = lt.solve(_apply_ImDfDy, [yout, *ctx.params], grad_yout.unsqueeze(-1),
             fwd_options=ctx.options, bck_options=ctx.options).squeeze(-1)
         return (gymodel, None, None, None, None)
 
@@ -128,13 +131,13 @@ class _ImDfDy(lt.Module):
         #     dfdy, = torch.autograd.grad(self.ymodel, (self.yinp,), gy,
         #         retain_graph=True, create_graph=torch.is_grad_enabled())
 
-        # with torch.enable_grad():
-        #     yout = self.model(ymodel, *params)
-        # dfdy, = torch.autograd.grad(yout, (ymodel,), gy,
-        #     retain_graph=True, create_graph=torch.is_grad_enabled())
-
-        dfdy, = torch.autograd.grad(ymodel, (self.yinp,), gy,
+        with torch.enable_grad():
+            yout = self.model(ymodel, *params)
+        dfdy, = torch.autograd.grad(yout, (ymodel,), gy,
             retain_graph=True, create_graph=torch.is_grad_enabled())
+
+        # dfdy, = torch.autograd.grad(ymodel, (self.yinp,), gy,
+        #     retain_graph=True, create_graph=torch.is_grad_enabled())
 
         res = gy - dfdy #+ ymodel.sum()*0
         res = res.unsqueeze(-1)
