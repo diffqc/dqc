@@ -107,20 +107,18 @@ class _Backward(torch.autograd.Function):
         nr = ymodel.shape[-1]
         # NOTE: there is a problem in propagating for the second derivative
         # (i.e. the backward of this is wrong)
-        _apply_ImDfDy = _ImDfDy(nr, yinp, ctx.ymodel, ctx.model, ctx.params)
-        gymodel = lt.solve(_apply_ImDfDy, [ymodel], grad_yout.unsqueeze(-1),
+        _apply_ImDfDy = _ImDfDy(nr, yinp, ctx.model)
+        gymodel = lt.solve(_apply_ImDfDy, [ymodel, *ctx.params], grad_yout.unsqueeze(-1),
             fwd_options=ctx.options, bck_options=ctx.options).squeeze(-1)
         return (gymodel, None, None, None, None)
 
 class _ImDfDy(lt.Module):
-    def __init__(self, nr, yinp, ymodel, model, params):
+    def __init__(self, nr, yinp, model):
         super(_ImDfDy, self).__init__(shape=(nr,nr), is_symmetric=False)
         self.yinp = yinp
-        self.ymodel = ymodel
         self.model = model
-        self.params = params
 
-    def forward(self, gy, ymodel):
+    def forward(self, gy, ymodel, *params):
         gy = gy.squeeze(-1)
         # if torch.is_grad_enabled():
         #     yout = self.model(ymodel, *self.params)
@@ -129,6 +127,11 @@ class _ImDfDy(lt.Module):
         # else:
         #     dfdy, = torch.autograd.grad(self.ymodel, (self.yinp,), gy,
         #         retain_graph=True, create_graph=torch.is_grad_enabled())
+
+        # with torch.enable_grad():
+        #     yout = self.model(ymodel, *params)
+        # dfdy, = torch.autograd.grad(yout, (ymodel,), gy,
+        #     retain_graph=True, create_graph=torch.is_grad_enabled())
 
         dfdy, = torch.autograd.grad(ymodel, (self.yinp,), gy,
             retain_graph=True, create_graph=torch.is_grad_enabled())
