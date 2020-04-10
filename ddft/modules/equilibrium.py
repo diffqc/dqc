@@ -22,8 +22,8 @@ class EquilibriumModule(torch.nn.Module):
         yequi = _Forward.apply(self.model, y0, self.fwd_options, params)
         if self.training:
             yequi.requires_grad_()
-            ymodel = self.model(yequi, *params)
-            yequi = _Backward.apply(ymodel, yequi, self.bck_options, self.model, params)
+            fmodel = self.model(yequi, *params)
+            yequi = _Backward.apply(fmodel, yequi, self.bck_options, self.model, params)
         return yequi
 
 class _Forward(torch.autograd.Function):
@@ -85,15 +85,15 @@ class _Forward(torch.autograd.Function):
 
 class _Backward(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, ymodel, yinp, options, model, params):
+    def forward(ctx, fmodel, yinp, options, model, params):
         ctx.options = set_default_option({
             "max_niter": 50,
             "min_eps": 1e-9,
             "verbose": False,
         }, options)
 
-        yout = ymodel.clone()
-        ctx.ymodel = ymodel
+        yout = yinp.clone()
+        ctx.fmodel = fmodel
         ctx.yout = yout
         ctx.yinp = yinp
         ctx.model = model
@@ -103,11 +103,11 @@ class _Backward(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_yout):
         # grad_ymodel: (nbatch,...)
-        ymodel = ctx.ymodel
+        fmodel = ctx.fmodel
         yinp = ctx.yinp
         yout = ctx.yout
 
-        nr = ymodel.shape[-1]
+        nr = fmodel.shape[-1]
         # NOTE: there is a problem in propagating for the second derivative
         # (i.e. the backward of this is wrong)
         _apply_ImDfDy = _ImDfDy(nr, yinp, ctx.model)
@@ -121,7 +121,7 @@ class _ImDfDy(lt.Module):
         self.yinp = yinp
         self.model = model
 
-    def forward(self, gy, ymodel, *params):
+    def forward(self, gy, yout, *params):
         gy = gy.squeeze(-1)
         # if torch.is_grad_enabled():
         #     yout = self.model(ymodel, *self.params)
@@ -132,8 +132,8 @@ class _ImDfDy(lt.Module):
         #         retain_graph=True, create_graph=torch.is_grad_enabled())
 
         with torch.enable_grad():
-            yout = self.model(ymodel, *params)
-        dfdy, = torch.autograd.grad(yout, (ymodel,), gy,
+            fout = self.model(yout, *params)
+        dfdy, = torch.autograd.grad(fout, (yout,), gy,
             retain_graph=True, create_graph=torch.is_grad_enabled())
 
         # dfdy, = torch.autograd.grad(ymodel, (self.yinp,), gy,
