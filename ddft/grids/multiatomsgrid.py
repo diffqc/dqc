@@ -137,9 +137,17 @@ class BeckeMultiGrid(BaseMultiAtomsGrid, lt.EditableModule):
     #################### editable module parts ####################
     def getparams(self, methodname):
         if methodname == "solve_poisson":
-            return [self.atompos, self._atomgrid.phithetargrid,
-                    self._atomgrid.wphitheta, self._atomgrid.radgrid._dvolume,
-                    self._atomgrid.radrgrid, self._rgrid]
+            # return [self.atompos, self._atomgrid.phithetargrid,
+            #         self._atomgrid.wphitheta, self._atomgrid.radgrid._dvolume,
+            #         self._atomgrid.radrgrid, self._rgrid]
+            self.natomgrid_get_dvolume = self.atom_grid.getparams("get_dvolume")
+            self.natomgrid_solve_poisson = self.atom_grid.getparams("solve_poisson")
+            self.natomgrid_interpolate = self.atom_grid.getparams("interpolate")
+
+            return [self.atompos, self._rgrid] + \
+                    self.atom_grid.getparams("get_dvolume") + \
+                    self.atom_grid.getparams("solve_poisson") + \
+                    self.atom_grid.getparams("interpolate")
         elif methodname == "get_dvolume":
             return [self._dvolume]
         else:
@@ -147,9 +155,14 @@ class BeckeMultiGrid(BaseMultiAtomsGrid, lt.EditableModule):
 
     def setparams(self, methodname, *params):
         if methodname == "solve_poisson":
-            self.atompos, self._atomgrid.phithetargrid, \
-            self._atomgrid.wphitheta, self._atomgrid.radgrid._dvolume, \
-            self._atomgrid.radrgrid, self._rgrid = params
+            idx0 = 2
+            idx1 = idx0 + self.natomgrid_get_dvolume
+            idx2 = idx1 + self.natomgrid_solve_poisson
+            idx3 = idx2 + self.natomgrid_interpolate
+            self.atompos, self._rgrid = params[:idx0]
+            self.atom_grid.setparams("get_dvolume", *params[idx0:idx1])
+            self.atom_grid.setparams("solve_poisson", *params[idx1:idx2])
+            self.atom_grid.setparams("interpolate", *params[idx2:idx3])
         elif methodname == "get_dvolume":
             self._dvolume, = params
         else:

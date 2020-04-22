@@ -286,9 +286,10 @@ class Lebedev(BaseRadialAngularGrid, lt.EditableModule):
     #################### editable module parts ####################
     def getparams(self, methodname):
         if methodname == "solve_poisson":
-            return [self.phithetargrid, self.wphitheta, self.radgrid._dvolume, self.radrgrid]
+            return [self.phithetargrid, self.wphitheta, self.radrgrid] + \
+                    self.radgrid.getparams("get_dvolume")
         elif methodname == "interpolate":
-            return [self.radgrid.logrmin, self.radgrid.logrmm, self.radgrid.xleggauss, self._basis_integrate_]
+            return [self._basis_integrate_] + self.radgrid.getparams("interpolate")
         elif methodname == "get_dvolume":
             return [self._dvolume]
         else:
@@ -296,9 +297,11 @@ class Lebedev(BaseRadialAngularGrid, lt.EditableModule):
 
     def setparams(self, methodname, *params):
         if methodname == "solve_poisson":
-            self.phithetargrid, self.wphitheta, self.radgrid._dvolume, self.radrgrid = params
+            self.phithetargrid, self.wphitheta, self.radrgrid = params[:3]
+            self.radgrid.setparams("get_dvolume", *params[3:])
         elif methodname == "interpolate":
-            self.radgrid.logrmin, self.radgrid.logrmm, self.radgrid.xleggauss, self._basis_integrate_ = params
+            self._basis_integrate_ = params[0]
+            self.radgrid.setparams("interpolate", *params[1:])
         elif methodname == "get_dvolume":
             self._dvolume, = params
         else:
