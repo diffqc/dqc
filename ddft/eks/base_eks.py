@@ -86,8 +86,8 @@ class BaseEKS(torch.nn.Module, lt.EditableModule):
     def setparams(self, methodname, *params):
         if methodname == "forward" or methodname == "__call__":
             self.setfwdparams(*params)
-        elif method == "potential":
-            nfwdparams = len(self.getfwdparams)
+        elif methodname == "potential":
+            nfwdparams = len(self.getfwdparams())
             self.setfwdparams(*params[:nfwdparams])
             self.grid.setparams("get_dvolume", *params[nfwdparams:])
         else:
@@ -151,6 +151,7 @@ class AddEKS(BaseEKS):
     def set_grid(self, grid):
         self.a.set_grid(grid)
         self.b.set_grid(grid)
+        self._grid = grid
 
     def forward(self, density):
         return self.a(density) + self.b(density)

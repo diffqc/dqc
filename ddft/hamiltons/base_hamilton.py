@@ -174,6 +174,6 @@ class BaseHamilton(lt.Module):
         if methodname == "getdens":
             ntorgrid = len(self.getparams("torgrid"))
             self.setparams("torgrid", *params[:ntorgrid])
-            self.setparams("get_dvolume", *params[ntorgrid:])
+            self.grid.setparams("get_dvolume", *params[ntorgrid:])
         else:
             raise RuntimeError("The method %s has not been defined in setparams" % methodname)

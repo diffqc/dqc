@@ -74,7 +74,7 @@ class EigenModule(torch.nn.Module, lt.EditableModule):
         name = "forward"
         idx = 0
         if isinstance(self.linmodule, lt.EditableModule):
-            idx = self.linmodule.getparams(name)
+            idx = len(self.linmodule.getparams(name))
             self.linmodule.setparams(name, *params[:idx])
         if isinstance(self.rlinmodule, lt.EditableModule):
             self.rlinmodule.setparams(name, *params[idx:])

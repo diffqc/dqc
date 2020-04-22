@@ -181,7 +181,7 @@ class HamiltonMoleculeCGauss(BaseHamilton):
         elif methodname == "torgrid":
             return [self.basis]
         else:
-            super().getparams(methodname)
+            return super().getparams(methodname)
 
     def setparams(self, methodname, *params):
         methods = ["fullmatrix", "forward", "__call__", "transpose"]

@@ -14,6 +14,12 @@ class PseudoLDA(BaseEKS):
     def forward(self, density):
         return self.a * safepow(density.abs(), self.p)
 
+    def getfwdparams(self):
+        return [self.a, self.p]
+
+    def setfwdparams(self, *params):
+        self.a, self.p = params
+
 def get_molecule(molname, with_energy=False):
     if molname == "H2":
         atomzs = torch.tensor([1.0, 1.0], dtype=dtype)
