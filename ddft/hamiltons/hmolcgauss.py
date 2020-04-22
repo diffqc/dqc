@@ -178,6 +178,8 @@ class HamiltonMoleculeCGauss(BaseHamilton):
             return [self.kin_coul_mat, self.basis_dvolume, self.basis]
         elif methodname == "_overlap":
             return [self.olp_mat]
+        elif methodname == "torgrid":
+            return [self.basis]
         else:
             super().getparams(methodname)
 
@@ -187,6 +189,8 @@ class HamiltonMoleculeCGauss(BaseHamilton):
             self.kin_coul_mat, self.basis_dvolume, self.basis = params
         elif methodname == "_overlap":
             self.olp_mat, = params
+        elif methodname == "torgrid":
+            self.basis, = params
         else:
             super().setparams(methodname, *params)
 

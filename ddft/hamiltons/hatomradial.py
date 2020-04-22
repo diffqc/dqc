@@ -179,6 +179,8 @@ class HamiltonAtomRadial(BaseHamilton):
             return res
         elif methodname == "_overlap":
             return [self.olp]
+        elif methodname == "torgrid":
+            return [self.basis]
         else:
             super().getparams(methodname)
 
@@ -192,6 +194,8 @@ class HamiltonAtomRadial(BaseHamilton):
             self.grid.setparams("get_dvolume", *params[3:])
         elif methodname == "_overlap":
             self.olp, = params
+        elif methodname == "torgrid":
+            self.basis, = params
         else:
             super().setparams(methodname, *params)
 

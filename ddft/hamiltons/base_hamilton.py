@@ -166,7 +166,7 @@ class BaseHamilton(lt.Module):
     ########################### editable module part ###########################
     def getparams(self, methodname):
         if methodname == "getdens":
-            return self.getparams("torgrid") + self.grid.getparams("integralbox")
+            return self.getparams("torgrid") + self.grid.getparams("get_dvolume")
         else:
             raise RuntimeError("The method %s has not been defined in getparams" % methodname)
 
@@ -174,6 +174,6 @@ class BaseHamilton(lt.Module):
         if methodname == "getdens":
             ntorgrid = len(self.getparams("torgrid"))
             self.setparams("torgrid", *params[:ntorgrid])
-            self.setparams("integralbox", *params[ntorgrid:])
+            self.setparams("get_dvolume", *params[ntorgrid:])
         else:
             raise RuntimeError("The method %s has not been defined in setparams" % methodname)
