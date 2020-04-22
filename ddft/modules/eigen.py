@@ -2,7 +2,7 @@ import torch
 import lintorch as lt
 from ddft.utils.misc import set_default_option
 
-class EigenModule(torch.nn.Module):
+class EigenModule(torch.nn.Module, lt.EditableModule):
     """
     Module to wrap a linear module to obtain `nlowest` eigenpairs.
 
@@ -60,6 +60,24 @@ class EigenModule(torch.nn.Module):
             mparams=rparams,
             fwd_options=self.options)
         return evals, evecs
+
+    def getparams(self, methodname):
+        name = "forward"
+        res = []
+        if isinstance(self.linmodule, lt.EditableModule):
+            res = res + self.linmodule.getparams(name)
+        if isinstance(self.rlinmodule, lt.EditableModule):
+            res = res + self.rlinmodule.getparams(name))
+        return res
+
+    def setparams(self, methodname, *params):
+        name = "forward"
+        idx = 0
+        if isinstance(self.linmodule, lt.EditableModule):
+            idx = self.linmodule.getparams(name)
+            self.linmodule.setparams(name, *params[:idx])
+        if isinstance(self.rlinmodule, lt.EditableModule):
+            self.rlinmodule.setparams(name, *params[idx:])
 
 if __name__ == "__main__":
     import time
