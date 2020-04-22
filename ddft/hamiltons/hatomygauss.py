@@ -240,6 +240,32 @@ class HamiltonAtomYGauss(BaseHamilton):
     def grid(self):
         return self._grid
 
+    ########################## editable module part #######################
+    def getparams(self, methodname):
+        methods = ["fullmatrix", "forward", "__call__", "transpose"]
+        if methodname in methods:
+            res = [self.coulexp, self.vext_coulexp] if self.use_coulexp else []
+            res = res + [self.basis, self.basis_dvolume, self.coul, self.kin_rad, self.kin_ang] + \
+                    self.grid.getparams("get_dvolume")
+            return res
+        elif methodname == "_overlap":
+            return [self.olp]
+        else:
+            super().getparams(methodname)
+
+    def setparams(self, methodname, *params):
+        methods = ["fullmatrix", "forward", "__call__", "transpose"]
+        if methodname in methods:
+            if self.use_coulexp:
+                self.coulexp, self.vext_coulexp = params[:2]
+                params = params[2:]
+            self.basis, self.basis_dvolume, self.coul, self.kin_rad, self.kin_ang = params[:5]
+            self.grid.setparams("get_dvolume", *params[5:])
+        elif methodname == "_overlap":
+            self.olp, = params
+        else:
+            super().setparams(methodname, *params)
+
 if __name__ == "__main__":
     from ddft.grids.radialgrid import LegendreRadialShiftExp
     from ddft.grids.sphangulargrid import Lebedev

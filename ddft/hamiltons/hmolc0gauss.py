@@ -166,6 +166,25 @@ class HamiltonMoleculeC0Gauss(BaseHamilton):
     def grid(self):
         return self._grid
 
+    ########################## editable module part #######################
+    def getparams(self, methodname):
+        methods = ["fullmatrix", "forward", "__call__", "transpose"]
+        if methodname in methods:
+            return [self.kin_coul_mat, self.basis_dvolume, self.basis]
+        elif methodname == "_overlap":
+            return [self.olp_mat]
+        else:
+            super().getparams(methodname)
+
+    def setparams(self, methodname, *params):
+        methods = ["fullmatrix", "forward", "__call__", "transpose"]
+        if methodname in methods:
+            self.kin_coul_mat, self.basis_dvolume, self.basis = params
+        elif methodname == "_overlap":
+            self.olp_mat, = params
+        else:
+            super().setparams(methodname, *params)
+
     ############################# helper functions #############################
     def _contract(self, mat):
         # multiply the matrix with the contracted coefficients

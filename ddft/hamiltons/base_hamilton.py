@@ -162,3 +162,18 @@ class BaseHamilton(lt.Module):
         dens = (eigvec_r * eigvec_r)
         sumdens = self.grid.integralbox(dens, dim=1).unsqueeze(1)
         return dens / sumdens
+
+    ########################### editable module part ###########################
+    def getparams(self, methodname):
+        if methodname == "getdens":
+            return self.getparams("torgrid") + self.grid.getparams("integralbox")
+        else:
+            raise RuntimeError("The method %s has not been defined in getparams" % methodname)
+
+    def setparams(self, methodname, *params):
+        if methodname == "getdens":
+            ntorgrid = len(self.getparams("torgrid"))
+            self.setparams("torgrid", *params[:ntorgrid])
+            self.setparams("integralbox", *params[ntorgrid:])
+        else:
+            raise RuntimeError("The method %s has not been defined in setparams" % methodname)
