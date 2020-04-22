@@ -1,12 +1,13 @@
 import functools
 import torch
 import numpy as np
+import lintorch as lt
 from ddft.modules.eigen import EigenModule
 from ddft.utils.misc import set_default_option, unpack
 from ddft.utils.safeops import safepow
 from ddft.eks import VKS
 
-class DFT(torch.nn.Module):
+class DFT(torch.nn.Module, lt.EditableModule):
     """
     Perform one forward pass of the DFT self-consistent field approach.
 
@@ -113,6 +114,27 @@ class DFT(torch.nn.Module):
         Etot = sum_eigvals - vks_integral + Eks
         self._lc_energy = Etot
         return Etot
+
+    ############################# editable module #############################
+    def getparams(self, methodname):
+        if methodname == "forward" or methodname == "__call__":
+            return self.vks_model.getparams("__call__") + \
+                   self.eigen_model.getparams("__call__") + \
+                   self.H_model.getparams("getdens")
+        else:
+            raise RuntimeError("The method %s is not defined for getparams"%methodname)
+
+    def setparams(self, methodname, *params):
+        if methodname == "forward" or methodname == "__call__":
+            idx0 = 0
+            idx1 = idx0 + len(self.vks_model.getparams("__call__"))
+            idx2 = idx1 + len(self.eigen_model.getparams("__call__"))
+            idx3 = idx2 + len(self.H_model.getparams("getdens"))
+            self.vks_model.setparams("__call__", *params[idx0:idx1])
+            self.eigen_model.setparams("__call__", *params[idx1:idx2])
+            self.H_model.setparams("getdens", *params[idx2:idx3])
+        else:
+            raise RuntimeError("The method %s is not defined for setparams"%methodname)
 
 class DFTMulti(torch.nn.Module):
     """
