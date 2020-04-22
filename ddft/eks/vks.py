@@ -1,8 +1,9 @@
 import torch
+import lintorch as lt
 
 __all__ = ["VKS"]
 
-class VKS(torch.nn.Module):
+class VKS(torch.nn.Module, lt.EditableModule):
     def __init__(self, eks_model, grid, use_potential=True):
         super(VKS, self).__init__()
         self.eks_model = eks_model
@@ -29,6 +30,25 @@ class VKS(torch.nn.Module):
         dx = torch.autograd.grad(ysum, (xinp,),
             create_graph=grad_enabled)[0]
         return dx / self.dv
+
+    def getparams(self, methodname):
+        if methodname == "forward" or methodname == "__call__":
+            if self.use_potential:
+                return self.eks_model.getparams("potential")
+            else:
+                return [self.dv] + self.eks_model.getparams("forward")
+        else:
+            raise RuntimeError("The method %s has not been specified for getparams" % methodname)
+
+    def setparams(self, methodname, *params):
+        if methodname == "forward" or methodname == "__call__":
+            if self.use_potential:
+                self.eks_model.getparams("potential", *params)
+            else:
+                self.dv = params[0]
+                self.eks_model.get_params("forward", params[1:])
+        else:
+            raise RuntimeError("The method %s has not been specified for setparams" % methodname)
 
 if __name__ == "__main__":
     from ddft.eks.base_eks import BaseEKS

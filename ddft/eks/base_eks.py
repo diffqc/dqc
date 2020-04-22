@@ -1,9 +1,10 @@
 import torch
 from abc import abstractmethod
+import lintorch as lt
 
 __all__ = ["BaseEKS"]
 
-class BaseEKS(torch.nn.Module):
+class BaseEKS(torch.nn.Module, lt.EditableModule):
     def __init__(self):
         super(BaseEKS, self).__init__()
         self._grid = None
@@ -65,6 +66,33 @@ class BaseEKS(torch.nn.Module):
     def __neg__(self):
         return NegEKS(self)
 
+    ############### editable module part ###############
+    @abstractmethod
+    def getfwdparams(self):
+        pass
+
+    @abstractmethod
+    def setfwdparams(self, *params):
+        pass
+
+    def getparams(self, methodname):
+        if methodname == "forward" or methodname == "__call__":
+            return self.getfwdparams()
+        elif methodname == "potential":
+            return self.getfwdparams() + self.grid.getparams("get_dvolume")
+        else:
+            raise RuntimeError("The method %s has not been specified for getparams" % methodname)
+
+    def setparams(self, methodname, *params):
+        if methodname == "forward" or methodname == "__call__":
+            self.setfwdparams(*params)
+        elif method == "potential":
+            nfwdparams = len(self.getfwdparams)
+            self.setfwdparams(*params[:nfwdparams])
+            self.grid.setparams("get_dvolume", *params[nfwdparams:])
+        else:
+            raise RuntimeError("The method %s has not been specified for setparams" % methodname)
+
 class TensorEKS(BaseEKS):
     def __init__(self, tensor):
         super(TensorEKS, self).__init__()
@@ -73,6 +101,12 @@ class TensorEKS(BaseEKS):
     def forward(self, density):
         return density * 0 + self.tensor
 
+    def getfwdparams(self):
+        return [self.tensor]
+
+    def setfwdparams(self, *params):
+        self.tensor, = params
+
 class ConstEKS(BaseEKS):
     def __init__(self, c):
         super(ConstEKS, self).__init__()
@@ -80,6 +114,12 @@ class ConstEKS(BaseEKS):
 
     def forward(self, density):
         return density * 0 + self.c
+
+    def getfwdparams(self):
+        return [self.c]
+
+    def setfwdparams(self, *params):
+        self.c, = params
 
 ######################## arithmetics ########################
 class NegEKS(BaseEKS):
@@ -95,6 +135,12 @@ class NegEKS(BaseEKS):
 
     def potential(self, density):
         return -self.eks.potential(density)
+
+    def getfwdparams(self):
+        return self.eks.getfwdparams()
+
+    def setfwdparams(self, *params):
+        self.eks.setfwdparams(*params)
 
 class AddEKS(BaseEKS):
     def __init__(self, a, b):
@@ -112,6 +158,14 @@ class AddEKS(BaseEKS):
     def potential(self, density):
         return self.a.potential(density) + self.b.potential(density)
 
+    def getfwdparams(self):
+        return self.a.getfwdparams() + self.b.getfwdparams()
+
+    def setfwdparams(self, *params):
+        na = len(self.a.getfwdparams())
+        self.a.setfwdparams(*params[:na])
+        self.b.setfwdparams(*params[na:])
+
 class MultEKS(BaseEKS):
     def __init__(self, a, b):
         super(MultEKS, self).__init__()
@@ -124,6 +178,14 @@ class MultEKS(BaseEKS):
 
     def forward(self, density):
         return self.a(density) * self.b(density)
+
+    def getfwdparams(self):
+        return self.a.getfwdparams() + self.b.getfwdparams()
+
+    def setfwdparams(self, *params):
+        na = len(self.a.getfwdparams())
+        self.a.setfwdparams(*params[:na])
+        self.b.setfwdparams(*params[na:])
 
 class DivEKS(BaseEKS):
     def __init__(self, a, b):
@@ -138,6 +200,13 @@ class DivEKS(BaseEKS):
     def forward(self, density):
         return self.a(density) / self.b(density)
 
+    def getfwdparams(self):
+        return self.a.getfwdparams() + self.b.getfwdparams()
+
+    def setfwdparams(self, *params):
+        na = len(self.a.getfwdparams())
+        self.a.setfwdparams(*params[:na])
+        self.b.setfwdparams(*params[na:])
 
 def _normalize(a):
     if isinstance(a, BaseEKS):

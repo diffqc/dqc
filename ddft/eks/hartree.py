@@ -17,6 +17,18 @@ class Hartree(BaseEKS):
         vks = self.grid.solve_poisson(-4.0*np.pi*density)
         return vks
 
+    def getfwdparams(self):
+        return self.grid.getparams("solve_poisson")
+
+    def setfwdparams(self, *params):
+        return self.grid.setparams("solve_poisson", *params)
+
+    def getparams(self, methodname):
+        return self.getfwdparams()
+
+    def setparams(self, methodname, *params):
+        return self.setfwdparams(*params)
+
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     from ddft.eks.vks import VKS
