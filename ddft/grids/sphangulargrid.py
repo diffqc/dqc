@@ -2,12 +2,11 @@ import os
 import warnings
 import torch
 import numpy as np
-import lintorch as lt
 import ddft
 from ddft.grids.base_grid import BaseGrid, BaseTransformed1DGrid, BaseRadialAngularGrid
 from ddft.utils.spharmonics import spharmonics, vspharmonics
 
-class Lebedev(BaseRadialAngularGrid, lt.EditableModule):
+class Lebedev(BaseRadialAngularGrid):
     def __init__(self, radgrid, prec, basis_maxangmom=None, dtype=torch.float, device=torch.device('cpu')):
         super(Lebedev, self).__init__()
 
@@ -308,6 +307,7 @@ class Lebedev(BaseRadialAngularGrid, lt.EditableModule):
             raise RuntimeError("The method %s has not been specified for setparams" % methodname)
 
 if __name__ == "__main__":
+    import lintorch as lt
     from ddft.grids.radialgrid import LegendreRadialShiftExp
     radgrid = LegendreRadialShiftExp(1e-4, 1e2, 100, dtype=torch.float64)
     grid = Lebedev(radgrid, prec=5, basis_maxangmom=4, dtype=torch.float64)

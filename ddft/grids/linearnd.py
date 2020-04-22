@@ -1,8 +1,7 @@
 import torch
-import lintorch as lt
 from ddft.grids.base_grid import BaseGrid
 
-class LinearNDGrid(BaseGrid, lt.EditableModule):
+class LinearNDGrid(BaseGrid):
     def __init__(self, boxsizes, boxshape):
         self.boxsizes = boxsizes
         self._boxshape = boxshape

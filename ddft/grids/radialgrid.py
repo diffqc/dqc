@@ -2,7 +2,6 @@ from abc import abstractmethod
 import torch
 import numpy as np
 from numpy.polynomial.legendre import leggauss
-import lintorch as lt
 from ddft.grids.base_grid import BaseGrid, BaseTransformed1DGrid
 from ddft.utils.legendre import legint, legvander, legder
 
@@ -207,7 +206,7 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
         yq = yl*tyl + yr*tyr + kl*tkl + kr*tkr
         return yq
 
-class LegendreRadialShiftExp(LegendreRadialTransform, lt.EditableModule):
+class LegendreRadialShiftExp(LegendreRadialTransform):
     def __init__(self, rmin, rmax, nr, dtype=torch.float, device=torch.device('cpu')):
         # setup the parameters needed for the transformation
         self.rmin = rmin
@@ -248,6 +247,7 @@ class LegendreRadialShiftExp(LegendreRadialTransform, lt.EditableModule):
             raise RuntimeError("The method %s has not been specified for setparams" % methodname)
 
 if __name__ == "__main__":
+    import lintorch as lt
     grid = LegendreRadialShiftExp(1e-4, 1e2, 100, dtype=torch.float64)
     rgrid = grid.rgrid.clone().detach()
     f = torch.exp(-rgrid[:,0].unsqueeze(0)**2*0.5)

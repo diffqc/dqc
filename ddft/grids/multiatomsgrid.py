@@ -2,12 +2,11 @@ import os
 import warnings
 import torch
 import numpy as np
-import lintorch as lt
 import ddft
 from ddft.grids.base_grid import BaseRadialAngularGrid, BaseMultiAtomsGrid, Base3DGrid
 from ddft.utils.spharmonics import spharmonics
 
-class BeckeMultiGrid(BaseMultiAtomsGrid, lt.EditableModule):
+class BeckeMultiGrid(BaseMultiAtomsGrid):
     """
     Using the Becke weighting to split a profile.
 
@@ -169,6 +168,7 @@ class BeckeMultiGrid(BaseMultiAtomsGrid, lt.EditableModule):
             raise RuntimeError("The method %s has not been specified for setparams" % methodname)
 
 if __name__ == "__main__":
+    import lintorch as lt
     from ddft.grids.radialgrid import LegendreRadialShiftExp
     from ddft.grids.sphangulargrid import Lebedev
     dtype = torch.float64
