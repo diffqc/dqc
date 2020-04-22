@@ -2,11 +2,12 @@ import os
 import warnings
 import torch
 import numpy as np
+import lintorch as lt
 import ddft
 from ddft.grids.base_grid import BaseRadialAngularGrid, BaseMultiAtomsGrid, Base3DGrid
 from ddft.utils.spharmonics import spharmonics
 
-class BeckeMultiGrid(BaseMultiAtomsGrid):
+class BeckeMultiGrid(BaseMultiAtomsGrid, lt.EditableModule):
     """
     Using the Becke weighting to split a profile.
 
@@ -132,3 +133,38 @@ class BeckeMultiGrid(BaseMultiAtomsGrid):
     @property
     def boxshape(self):
         warnings.warn("Boxshape is obsolete. Please refrain in using it.")
+
+    #################### editable module parts ####################
+    def getparams(self, methodname):
+        if methodname == "solve_poisson":
+            return [self.atompos, self._atomgrid.phithetargrid,
+                    self._atomgrid.wphitheta, self._atomgrid.radgrid._dvolume,
+                    self._atomgrid.radrgrid, self._rgrid]
+        elif methodname == "get_dvolume":
+            return [self._dvolume]
+        else:
+            raise RuntimeError("The method %s has not been specified for getparams" % methodname)
+
+    def setparams(self, methodname, *params):
+        if methodname == "solve_poisson":
+            self.atompos, self._atomgrid.phithetargrid, \
+            self._atomgrid.wphitheta, self._atomgrid.radgrid._dvolume, \
+            self._atomgrid.radrgrid, self._rgrid = params
+        elif methodname == "get_dvolume":
+            self._dvolume, = params
+        else:
+            raise RuntimeError("The method %s has not been specified for setparams" % methodname)
+
+if __name__ == "__main__":
+    from ddft.grids.radialgrid import LegendreRadialShiftExp
+    from ddft.grids.sphangulargrid import Lebedev
+    dtype = torch.float64
+    atompos = torch.tensor([[0.0, 0.0, 0.0]], dtype=dtype)
+    radgrid = LegendreRadialShiftExp(1e-4, 1e2, 100, dtype=dtype)
+    anggrid = Lebedev(radgrid, prec=5, basis_maxangmom=4, dtype=dtype)
+    grid = BeckeMultiGrid(anggrid, atompos, dtype=dtype)
+    rgrid = grid.rgrid.clone().detach()
+    f = torch.exp(-rgrid[:,0].unsqueeze(0)**2*0.5)
+
+    lt.list_operating_params(grid.solve_poisson, f)
+    lt.list_operating_params(grid.get_dvolume)

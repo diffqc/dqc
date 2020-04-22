@@ -2,11 +2,12 @@ import os
 import warnings
 import torch
 import numpy as np
+import lintorch as lt
 import ddft
 from ddft.grids.base_grid import BaseGrid, BaseTransformed1DGrid, BaseRadialAngularGrid
 from ddft.utils.spharmonics import spharmonics, vspharmonics
 
-class Lebedev(BaseRadialAngularGrid):
+class Lebedev(BaseRadialAngularGrid, lt.EditableModule):
     def __init__(self, radgrid, prec, basis_maxangmom=None, dtype=torch.float, device=torch.device('cpu')):
         super(Lebedev, self).__init__()
 
@@ -281,3 +282,35 @@ class Lebedev(BaseRadialAngularGrid):
                 lhat = lhat + [angmom]*(2*angmom+1)
             self._angmoms_ = torch.tensor(lhat, dtype=self.dtype, device=self.device) # (nsh,)
         return self._angmoms_
+
+    #################### editable module parts ####################
+    def getparams(self, methodname):
+        if methodname == "solve_poisson":
+            return [self.phithetargrid, self.wphitheta, self.radgrid._dvolume, self.radrgrid]
+        elif methodname == "interpolate":
+            return [self.radgrid.logrmin, self.radgrid.logrmm, self.radgrid.xleggauss, self._basis_integrate_]
+        elif methodname == "get_dvolume":
+            return [self._dvolume]
+        else:
+            raise RuntimeError("The method %s has not been specified for getparams" % methodname)
+
+    def setparams(self, methodname, *params):
+        if methodname == "solve_poisson":
+            self.phithetargrid, self.wphitheta, self.radgrid._dvolume, self.radrgrid = params
+        elif methodname == "interpolate":
+            self.radgrid.logrmin, self.radgrid.logrmm, self.radgrid.xleggauss, self._basis_integrate_ = params
+        elif methodname == "get_dvolume":
+            self._dvolume, = params
+        else:
+            raise RuntimeError("The method %s has not been specified for setparams" % methodname)
+
+if __name__ == "__main__":
+    from ddft.grids.radialgrid import LegendreRadialShiftExp
+    radgrid = LegendreRadialShiftExp(1e-4, 1e2, 100, dtype=torch.float64)
+    grid = Lebedev(radgrid, prec=5, basis_maxangmom=4, dtype=torch.float64)
+    rgrid = grid.rgrid.clone().detach()
+    f = torch.exp(-rgrid[:,0].unsqueeze(0)**2*0.5)
+
+    lt.list_operating_params(grid.solve_poisson, f)
+    lt.list_operating_params(grid.interpolate, f, rgrid)
+    lt.list_operating_params(grid.get_dvolume)

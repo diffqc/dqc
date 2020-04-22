@@ -1,7 +1,8 @@
 import torch
+import lintorch as lt
 from ddft.grids.base_grid import BaseGrid
 
-class LinearNDGrid(BaseGrid):
+class LinearNDGrid(BaseGrid, lt.EditableModule):
     def __init__(self, boxsizes, boxshape):
         self.boxsizes = boxsizes
         self._boxshape = boxshape
@@ -43,3 +44,16 @@ class LinearNDGrid(BaseGrid):
     @property
     def boxshape(self):
         return self._boxshape
+
+    #################### editable module parts ####################
+    def getparams(self, methodname):
+        if methodname == "get_dvolume":
+            return [self.dr3]
+        else:
+            raise RuntimeError("The method %s has not been specified for getparams" % methodname)
+
+    def setparams(self, methodname, *params):
+        if methodname == "get_dvolume":
+            self.dr3, = params
+        else:
+            raise RuntimeError("The method %s has not been specified for setparams" % methodname)

@@ -2,6 +2,7 @@ from abc import abstractmethod
 import torch
 import numpy as np
 from numpy.polynomial.legendre import leggauss
+import lintorch as lt
 from ddft.grids.base_grid import BaseGrid, BaseTransformed1DGrid
 from ddft.utils.legendre import legint, legvander, legder
 
@@ -206,7 +207,7 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
         yq = yl*tyl + yr*tyr + kl*tkl + kr*tkr
         return yq
 
-class LegendreRadialShiftExp(LegendreRadialTransform):
+class LegendreRadialShiftExp(LegendreRadialTransform, lt.EditableModule):
     def __init__(self, rmin, rmax, nr, dtype=torch.float, device=torch.device('cpu')):
         # setup the parameters needed for the transformation
         self.rmin = rmin
@@ -224,3 +225,33 @@ class LegendreRadialShiftExp(LegendreRadialTransform):
 
     def get_scaling(self, rs):
         return (rs + self.rmin) * self.logrmm * 0.5
+
+    #################### editable module parts ####################
+    def getparams(self, methodname):
+        if methodname == "solve_poisson":
+            return [self.rs, self._dvolume]
+        elif methodname == "interpolate":
+            return [self.logrmin, self.logrmm, self.xleggauss]
+        elif methodname == "get_dvolume":
+            return [self._dvolume]
+        else:
+            raise RuntimeError("The method %s has not been specified for getparams" % methodname)
+
+    def setparams(self, methodname, *params):
+        if methodname == "solve_poisson":
+            self.rs, self._dvolume = params
+        elif methodname == "interpolate":
+            self.logrmin, self.logrmm, self.xleggauss = params
+        elif methodname == "get_dvolume":
+            self._dvolume, = params
+        else:
+            raise RuntimeError("The method %s has not been specified for setparams" % methodname)
+
+if __name__ == "__main__":
+    grid = LegendreRadialShiftExp(1e-4, 1e2, 100, dtype=torch.float64)
+    rgrid = grid.rgrid.clone().detach()
+    f = torch.exp(-rgrid[:,0].unsqueeze(0)**2*0.5)
+
+    lt.list_operating_params(grid.solve_poisson, f)
+    lt.list_operating_params(grid.interpolate, f, rgrid)
+    lt.list_operating_params(grid.get_dvolume)
