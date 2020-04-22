@@ -21,13 +21,13 @@ class Hartree(BaseEKS):
         return self.grid.getparams("solve_poisson")
 
     def setfwdparams(self, *params):
-        return self.grid.setparams("solve_poisson", *params)
+        self.grid.setparams("solve_poisson", *params)
 
     def getparams(self, methodname):
         return self.getfwdparams()
 
     def setparams(self, methodname, *params):
-        return self.setfwdparams(*params)
+        self.setfwdparams(*params)
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
