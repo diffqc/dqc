@@ -67,7 +67,7 @@ class EigenModule(torch.nn.Module, lt.EditableModule):
         if isinstance(self.linmodule, lt.EditableModule):
             res = res + self.linmodule.getparams(name)
         if isinstance(self.rlinmodule, lt.EditableModule):
-            res = res + self.rlinmodule.getparams(name))
+            res = res + self.rlinmodule.getparams(name)
         return res
 
     def setparams(self, methodname, *params):
