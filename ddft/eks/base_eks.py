@@ -4,13 +4,16 @@ import lintorch as lt
 
 __all__ = ["BaseEKS"]
 
-class BaseEKS(torch.nn.Module, lt.EditableModule):
+class BaseEKS(lt.EditableModule):
     def __init__(self):
         super(BaseEKS, self).__init__()
         self._grid = None
 
     def set_grid(self, grid):
         self._grid = grid
+
+    def __call__(self, *args, **kwargs):
+        return self.forward(*args, **kwargs)
 
     # should be called internally only
     @property

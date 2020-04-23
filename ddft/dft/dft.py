@@ -7,7 +7,7 @@ from ddft.utils.misc import set_default_option, unpack
 from ddft.utils.safeops import safepow
 from ddft.eks import VKS
 
-class DFT(torch.nn.Module, lt.EditableModule):
+class DFT(lt.EditableModule):
     """
     Perform one forward pass of the DFT self-consistent field approach.
 
@@ -51,6 +51,9 @@ class DFT(torch.nn.Module, lt.EditableModule):
         self.vks_model = VKS(eks_model, H_model.grid)
         self.eigen_model = EigenModule(H_model, nlowest,
             rlinmodule=H_model.overlap, **eigen_options)
+
+    def __call__(self, *args, **kwargs):
+        return self.forward(*args, **kwargs)
 
     def forward(self, density, vext, focc, *params):
         # density: (nbatch, nr)
@@ -136,7 +139,7 @@ class DFT(torch.nn.Module, lt.EditableModule):
         else:
             raise RuntimeError("The method %s is not defined for setparams"%methodname)
 
-class DFTMulti(torch.nn.Module):
+class DFTMulti(lt.EditableModule):
     """
     Perform one forward pass of the DFT self-consistent field approach using
     multiple type of Hamiltonian.
@@ -186,6 +189,9 @@ class DFTMulti(torch.nn.Module):
         self.eigen_models = [EigenModule(H_model, nlowest,
             rlinmodule=H_model.overlap, **eigen_options) \
             for (H_model, nlowest) in zip(self.H_models, nlowests)]
+
+    def __call__(self, *args, **kwargs):
+        return self.forward(*args, **kwargs)
 
     def forward(self, density, vext, foccs, *params):
         # density: (nbatch, nr)
