@@ -230,7 +230,7 @@ class LegendreRadialShiftExp(LegendreRadialTransform):
         if methodname == "solve_poisson":
             return [self.rs, self._dvolume]
         elif methodname == "interpolate":
-            return [self.logrmin, self.logrmm, self.xleggauss]
+            return [self.logrmin, self.logrmm, self.xleggauss, self._spline_mat_inv_]
         elif methodname == "get_dvolume":
             return [self._dvolume]
         else:
@@ -240,7 +240,7 @@ class LegendreRadialShiftExp(LegendreRadialTransform):
         if methodname == "solve_poisson":
             self.rs, self._dvolume = params
         elif methodname == "interpolate":
-            self.logrmin, self.logrmm, self.xleggauss = params
+            self.logrmin, self.logrmm, self.xleggauss, self._spline_mat_inv_ = params
         elif methodname == "get_dvolume":
             self._dvolume, = params
         else:
