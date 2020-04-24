@@ -62,7 +62,8 @@ class EigenModule(torch.nn.Module, lt.EditableModule):
         return evals, evecs
 
     def getparams(self, methodname):
-        name = "forward"
+        eigmethod = self.options["method"]
+        name = "forward" if eigmethod != "exacteig" else "fullmatrix"
         res = []
         if isinstance(self.linmodule, lt.EditableModule):
             res = res + self.linmodule.getparams(name)
@@ -71,7 +72,8 @@ class EigenModule(torch.nn.Module, lt.EditableModule):
         return res
 
     def setparams(self, methodname, *params):
-        name = "forward"
+        eigmethod = self.options["method"]
+        name = "forward" if eigmethod != "exacteig" else "fullmatrix"
         idx = 0
         if isinstance(self.linmodule, lt.EditableModule):
             idx = len(self.linmodule.getparams(name))
