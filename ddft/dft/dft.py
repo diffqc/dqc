@@ -270,6 +270,38 @@ class DFTMulti(lt.EditableModule):
         self._lc_energy = Etot
         return Etot
 
+    ############################# editable module #############################
+    def getparams(self, methodname):
+        if methodname == "forward" or methodname == "__call__":
+            res = self.vks_model.getparams("__call__")
+            for eigen_model in self.eigen_models:
+                res = res + eigen_model.getparams("__call__")
+            for H_model in self.H_models:
+                res = res + H_model.getparams("getdens")
+            return res
+        else:
+            raise RuntimeError("The method %s is not defined for getparams"%methodname)
+
+    def setparams(self, methodname, *params):
+        if methodname == "forward" or methodname == "__call__":
+            idx0 = 0
+            nidx = len(self.vks_model.getparams("__call__"))
+            self.vks_model.setparams("__call__", *params[idx0:idx0+nidx])
+            idx0 += nidx
+
+            for eigen_model in self.eigen_models:
+                nidx = len(eigen_model.getparams("__call__"))
+                eigen_model.setparams("__call__", *params[idx0:idx0+nidx])
+                idx0 += nidx
+
+            for H_model in self.H_models:
+                nidx = len(H_model.getparams("getdens"))
+                H_model.setparams("getdens", *params[idx0:idx0+nidx])
+                idx0 += nidx
+        else:
+            raise RuntimeError("The method %s is not defined for setparams"%methodname)
+
+
 def _get_uniform_density(rgrid, nels):
     # rgrid: (nr,)
     # nels: (nbatch,)
