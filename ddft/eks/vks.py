@@ -43,10 +43,10 @@ class VKS(torch.nn.Module, lt.EditableModule):
     def setparams(self, methodname, *params):
         if methodname == "forward" or methodname == "__call__":
             if self.use_potential:
-                self.eks_model.setparams("potential", *params)
+                return self.eks_model.setparams("potential", *params)
             else:
                 self.dv = params[0]
-                self.eks_model.setparams("forward", *params[1:])
+                return 1 + self.eks_model.setparams("forward", *params[1:])
         else:
             raise RuntimeError("The method %s has not been specified for setparams" % methodname)
 

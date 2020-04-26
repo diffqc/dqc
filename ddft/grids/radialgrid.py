@@ -238,11 +238,14 @@ class LegendreRadialShiftExp(LegendreRadialTransform):
 
     def setparams(self, methodname, *params):
         if methodname == "solve_poisson":
-            self.rs, self._dvolume = params
+            self.rs, self._dvolume = params[:2]
+            return 2
         elif methodname == "interpolate":
-            self.logrmin, self.logrmm, self.xleggauss, self._spline_mat_inv_ = params
+            self.logrmin, self.logrmm, self.xleggauss, self._spline_mat_inv_ = params[:4]
+            return 4
         elif methodname == "get_dvolume":
-            self._dvolume, = params
+            self._dvolume, = params[:1]
+            return 1
         else:
             raise RuntimeError("The method %s has not been specified for setparams" % methodname)
 

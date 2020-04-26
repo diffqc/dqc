@@ -181,13 +181,16 @@ class HamiltonMoleculeC0Gauss(BaseHamilton):
     def setparams(self, methodname, *params):
         methods = ["fullmatrix", "forward", "__call__", "transpose"]
         if methodname in methods:
-            self.kin_coul_mat, self.basis_dvolume, self.basis = params
+            self.kin_coul_mat, self.basis_dvolume, self.basis = params[:3]
+            return 3
         elif methodname == "_overlap":
-            self.olp_mat, = params
+            self.olp_mat, = params[:1]
+            return 1
         elif methodname == "torgrid":
-            self.basis, = params
+            self.basis, = params[:1]
+            return 1
         else:
-            super().setparams(methodname, *params)
+            return super().setparams(methodname, *params)
 
     ############################# helper functions #############################
     def _contract(self, mat):

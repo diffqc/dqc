@@ -76,10 +76,10 @@ class EigenModule(torch.nn.Module, lt.EditableModule):
         name = "forward" if eigmethod != "exacteig" else "fullmatrix"
         idx = 0
         if isinstance(self.linmodule, lt.EditableModule):
-            idx = len(self.linmodule.getparams(name))
-            self.linmodule.setparams(name, *params[:idx])
+            idx += self.linmodule.setparams(name, *params[idx:])
         if isinstance(self.rlinmodule, lt.EditableModule):
-            self.rlinmodule.setparams(name, *params[idx:])
+            idx += self.rlinmodule.setparams(name, *params[idx:])
+        return idx
 
 if __name__ == "__main__":
     import time

@@ -18,7 +18,8 @@ class PseudoLDA(BaseEKS):
         return [self.a, self.p]
 
     def setfwdparams(self, *params):
-        self.a, self.p = params
+        self.a, self.p = params[:2]
+        return 2
 
 def get_molecule(molname, with_energy=False):
     if molname == "H2":

@@ -53,6 +53,7 @@ class LinearNDGrid(BaseGrid):
 
     def setparams(self, methodname, *params):
         if methodname == "get_dvolume":
-            self.dr3, = params
+            self.dr3 = params[0]
+            return 1
         else:
             raise RuntimeError("The method %s has not been specified for setparams" % methodname)

@@ -12,4 +12,4 @@ class xLDA(BaseEKS):
         return []
 
     def setfwdparams(self, *params):
-        pass
+        return 0

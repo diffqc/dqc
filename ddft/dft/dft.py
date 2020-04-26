@@ -129,13 +129,10 @@ class DFT(lt.EditableModule):
 
     def setparams(self, methodname, *params):
         if methodname == "forward" or methodname == "__call__":
-            idx0 = 0
-            idx1 = idx0 + len(self.vks_model.getparams("__call__"))
-            idx2 = idx1 + len(self.eigen_model.getparams("__call__"))
-            idx3 = idx2 + len(self.H_model.getparams("getdens"))
-            self.vks_model.setparams("__call__", *params[idx0:idx1])
-            self.eigen_model.setparams("__call__", *params[idx1:idx2])
-            self.H_model.setparams("getdens", *params[idx2:idx3])
+            idx = self.vks_model.setparams("__call__", *params)
+            idx += self.eigen_model.setparams("__call__", *params[idx:])
+            idx += self.H_model.setparams("getdens", *params[idx:])
+            return idx
         else:
             raise RuntimeError("The method %s is not defined for setparams"%methodname)
 
@@ -284,20 +281,14 @@ class DFTMulti(lt.EditableModule):
 
     def setparams(self, methodname, *params):
         if methodname == "forward" or methodname == "__call__":
-            idx0 = 0
-            nidx = len(self.vks_model.getparams("__call__"))
-            self.vks_model.setparams("__call__", *params[idx0:idx0+nidx])
-            idx0 += nidx
+            idx = self.vks_model.setparams("__call__", *params)
 
             for eigen_model in self.eigen_models:
-                nidx = len(eigen_model.getparams("__call__"))
-                eigen_model.setparams("__call__", *params[idx0:idx0+nidx])
-                idx0 += nidx
+                idx += eigen_model.setparams("__call__", *params[idx:])
 
             for H_model in self.H_models:
-                nidx = len(H_model.getparams("getdens"))
-                H_model.setparams("getdens", *params[idx0:idx0+nidx])
-                idx0 += nidx
+                idx += H_model.setparams("getdens", *params[idx:])
+            return idx
         else:
             raise RuntimeError("The method %s is not defined for setparams"%methodname)
 

@@ -150,16 +150,15 @@ class BeckeMultiGrid(BaseMultiAtomsGrid):
 
     def setparams(self, methodname, *params):
         if methodname == "solve_poisson":
-            idx0 = 2
-            idx1 = idx0 + len(self.atom_grid.getparams("get_dvolume"))
-            idx2 = idx1 + len(self.atom_grid.getparams("solve_poisson"))
-            idx3 = idx2 + len(self.atom_grid.getparams("interpolate"))
-            self.atompos, self._rgrid = params[:idx0]
-            self.atom_grid.setparams("get_dvolume", *params[idx0:idx1])
-            self.atom_grid.setparams("solve_poisson", *params[idx1:idx2])
-            self.atom_grid.setparams("interpolate", *params[idx2:idx3])
+            idx = 2
+            self.atompos, self._rgrid = params[:idx]
+            idx += self.atom_grid.setparams("get_dvolume", *params[idx:])
+            idx += self.atom_grid.setparams("solve_poisson", *params[idx:])
+            idx += self.atom_grid.setparams("interpolate", *params[idx:])
+            return idx
         elif methodname == "get_dvolume":
-            self._dvolume, = params
+            self._dvolume, = params[:1]
+            return 1
         else:
             raise RuntimeError("The method %s has not been specified for setparams" % methodname)
 

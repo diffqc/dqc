@@ -297,12 +297,13 @@ class Lebedev(BaseRadialAngularGrid):
     def setparams(self, methodname, *params):
         if methodname == "solve_poisson":
             self._basis_, self._basis_integrate_, self.radrgrid = params[:3]
-            self.radgrid.setparams("get_dvolume", *params[3:])
+            return 3 + self.radgrid.setparams("get_dvolume", *params[3:])
         elif methodname == "interpolate":
             self._basis_integrate_ = params[0]
-            self.radgrid.setparams("interpolate", *params[1:])
+            return 1 + self.radgrid.setparams("interpolate", *params[1:])
         elif methodname == "get_dvolume":
-            self._dvolume, = params
+            self._dvolume, = params[:1]
+            return 1
         else:
             raise RuntimeError("The method %s has not been specified for setparams" % methodname)
 

@@ -187,17 +187,22 @@ class HamiltonAtomRadial(BaseHamilton):
     def setparams(self, methodname, *params):
         methods = ["fullmatrix", "forward", "__call__", "transpose"]
         if methodname in methods:
+            idx = 0
             if self.use_coulexp:
                 self.coulexp, self.vext_coulexp = params[:2]
-                params = params[2:]
-            self.basis, self.coul, self.kin = params[:3]
-            self.grid.setparams("get_dvolume", *params[3:])
+                idx += 2
+            self.basis, self.coul, self.kin = params[idx:idx+3]
+            idx += 3
+            idx += self.grid.setparams("get_dvolume", *params[idx:])
+            return idx
         elif methodname == "_overlap":
-            self.olp, = params
+            self.olp, = params[:1]
+            return 1
         elif methodname == "torgrid":
-            self.basis, = params
+            self.basis, = params[:1]
+            return 1
         else:
-            super().setparams(methodname, *params)
+            return super().setparams(methodname, *params)
 
 if __name__ == "__main__":
     from ddft.grids.radialgrid import LegendreRadialShiftExp
