@@ -19,16 +19,16 @@ class EquilibriumModule(torch.nn.Module):
 
     def forward(self, y0, *params):
         # y0 & each of params: (nbatch, ...)
-        # return lt.equilibrium(self.model, y0,
-        #     params=params,
-        #     fwd_options=self.fwd_options,
-        #     bck_options=self.bck_options)
-        yequi = _Forward.apply(self.model, y0, self.fwd_options, params)
-        if self.training:
-            yequi.requires_grad_()
-            fmodel = self.model(yequi, *params)
-            yequi = _Backward.apply(fmodel, yequi, self.bck_options, self.model, params)
-        return yequi
+        return lt.equilibrium(self.model, y0,
+            params=params,
+            fwd_options=self.fwd_options,
+            bck_options=self.bck_options)
+        # yequi = _Forward.apply(self.model, y0, self.fwd_options, params)
+        # if self.training:
+        #     yequi.requires_grad_()
+        #     fmodel = self.model(yequi, *params)
+        #     yequi = _Backward.apply(fmodel, yequi, self.bck_options, self.model, params)
+        # return yequi
 
 class _Forward(torch.autograd.Function):
     @staticmethod
