@@ -75,15 +75,19 @@ def atom(atomz, charge=0,
     dft_model = DFTMulti(H_models, all_eks_models, nlowests, **eig_options)
     scf_model = EquilibriumModule(dft_model, forward_options=scf_options, backward_options=bck_options)
 
-    # calculate the density
+    # set up the dft object
     foccs = orbitals.get_foccs()
     density0 = torch.zeros_like(vext).to(device)
     all_hparams = [hparams for _ in range(len(H_models))]
-    params_lineup = [item for sublist in all_hparams for item in sublist]
-    density0 = dft_model(density0, vext, foccs, *params_lineup).detach()
-    density = scf_model(density0, vext, foccs, *params_lineup)
-    density = dft_model(density, vext, foccs, *params_lineup)
-    energy = dft_model.energy(density, vext, foccs, *params_lineup)
+    dft_model.set_vext(vext)
+    dft_model.set_focc(foccs)
+    dft_model.set_hparams(all_hparams)
+
+    # calculate the density
+    density0 = dft_model(density0).detach()
+    density = scf_model(density0)
+    density = dft_model(density)
+    energy = dft_model.energy(density)
 
     return energy, density
 

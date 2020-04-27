@@ -90,16 +90,21 @@ def molecule(atomzs, atompos,
     dft_model = DFT(H_model, all_eks_models, nlowest, **eig_options)
     scf_model = EquilibriumModule(dft_model, forward_options=scf_options, backward_options=bck_options)
 
-    # calculate the density
+    # set up the dft model
     hparams = []
     vext = torch.zeros_like(grid.rgrid[:,0]).unsqueeze(0).to(device)
+    dft_model.set_vext(vext)
+    dft_model.set_focc(focc)
+    dft_model.set_hparams(hparams)
+
+    # calculate the density
     density0 = torch.zeros_like(vext).to(device)
-    density0 = dft_model(density0, vext, focc, *hparams).detach()
-    density = scf_model(density0, vext, focc, *hparams)
-    density = dft_model(density, vext, focc, *hparams)
+    density0 = dft_model(density0).detach()
+    density = scf_model(density0)
+    density = dft_model(density)
 
     # calculate the energy
-    el_energy = dft_model.energy(density, vext, focc, *hparams)
+    el_energy = dft_model.energy(density)
     ion_energy = ion_coulomb_energy(atomzs, atompos)
     energy = el_energy + ion_energy
 

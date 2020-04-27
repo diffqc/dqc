@@ -79,9 +79,16 @@ def test_grad_dft_cgto():
 
         eig_options = {"method": "exacteig"}
         dft_model = DFT(H_model, all_eks_models, nlowest, **eig_options)
+
+        # set up the dft model
+        dft_model.set_vext(vext)
+        dft_model.set_focc(focc)
+        dft_model.set_hparams([])
+
+        # get the density and energy
         density0 = torch.zeros_like(vext)
-        density = dft_model(density0, vext, focc)
-        energy = dft_model.energy()
+        density = dft_model(density0)
+        energy = dft_model.energy(density)
         if output == "energy":
             return energy
         elif output == "density":
@@ -94,6 +101,6 @@ def test_grad_dft_cgto():
 
     gradcheck(fcn, (atomzs, atomposs, a, p, "energy"))
     gradcheck(fcn, (atomzs, atomposs, a, p, "density"))
-    gradgradcheck(fcn, (atomzs, atomposs, a, p, "energy"))
     # choosing smaller eps make the numerical method produces nan, don't know why
+    gradgradcheck(fcn, (atomzs, atomposs, a, p, "energy"), eps=1e-3)
     gradgradcheck(fcn, (atomzs, atomposs, a, p, "density"), eps=1e-3)

@@ -52,35 +52,49 @@ class DFT(lt.EditableModule):
         self.eigen_model = EigenModule(H_model, nlowest,
             rlinmodule=H_model.overlap, **eigen_options)
 
+    def set_vext(self, vext):
+        self.vext = vext
+
+    def set_focc(self, focc):
+        self.focc = focc
+
+    def set_hparams(self, hparams, rparams=None):
+        self.hparams = hparams
+        if rparams is None:
+            rparams = []
+        self.rparams = rparams
+        self.nhparams = len(hparams)
+        self.nrparams = len(rparams)
+
     def __call__(self, *args, **kwargs):
         return self.forward(*args, **kwargs)
 
-    def forward(self, density, vext, focc, *params):
+    def forward(self, density):
         # density: (nbatch, nr)
         # vext: (nbatch, nr)
         # focc: (nbatch, nlowest)
 
-        eigvals, eigvecs, vks = self._diagonalize(density, vext, focc, *params)
+        eigvals, eigvecs, vks = self._diagonalize(density)
 
         # normalize the norm of density
         eigvec_dens = self.H_model.getdens(eigvecs) # (nbatch, nr, nlowest)
-        dens = eigvec_dens * focc.unsqueeze(1) # (nbatch, nr, nlowest)
+        dens = eigvec_dens * self.focc.unsqueeze(1) # (nbatch, nr, nlowest)
         new_density = dens.sum(dim=-1) # (nbatch, nr)
 
         return new_density
 
     ############################# post processing #############################
-    def energy(self, density, vext, focc, *params):
+    def energy(self, density):
         # calculate the total potential experienced by Kohn-Sham particles
         # from the last forward calculation
-        eigvals, eigvecs, vks = self._diagonalize(density, vext, focc, *params)
+        eigvals, eigvecs, vks = self._diagonalize(density)
 
         # calculates the Kohn-Sham energy
         eks_density = self.eks_model(density) # energy density (nbatch, nr)
         Eks = self.H_model.grid.integralbox(eks_density, dim=-1) # (nbatch,)
 
         # calculate the individual non-interacting particles energy
-        sum_eigvals = (eigvals * focc).sum(dim=-1) # (nbatch,)
+        sum_eigvals = (eigvals * self.focc).sum(dim=-1) # (nbatch,)
         vks_integral = self.H_model.grid.integralbox(vks*density, dim=-1)
 
         # compute the interacting particles energy
@@ -88,24 +102,22 @@ class DFT(lt.EditableModule):
         return Etot
 
     ############################# helper functions #############################
-    def _diagonalize(self, density, vext, focc, *params):
-        # unpack the parameters
-        hparams, rparams = unpack(params, [self.H_model.nhparams, self.H_model.nolp_params])
-
+    def _diagonalize(self, density):
         # calculate the total potential experienced by Kohn-Sham particles
         vks = self.vks_model(density) # (nbatch, nr)
-        vext_tot = vext + vks
+        vext_tot = self.vext + vks
 
         # compute the eigenpairs
         # evals: (nbatch, nlowest), evecs: (nbatch, nr, nlowest)
-        eigvals, eigvecs = self.eigen_model((vext_tot, *hparams), rparams=rparams)
+        eigvals, eigvecs = self.eigen_model((vext_tot, *self.hparams), rparams=self.rparams)
 
         return eigvals, eigvecs, vks
 
     ############################# editable module #############################
     def getparams(self, methodname):
         if methodname == "forward" or methodname == "__call__":
-            return self.vks_model.getparams("__call__") + \
+            res = [self.vext, self.focc, *self.hparams, *self.rparams]
+            return res + self.vks_model.getparams("__call__") + \
                    self.eigen_model.getparams("__call__") + \
                    self.H_model.getparams("getdens")
         else:
@@ -113,7 +125,13 @@ class DFT(lt.EditableModule):
 
     def setparams(self, methodname, *params):
         if methodname == "forward" or methodname == "__call__":
-            idx = self.vks_model.setparams("__call__", *params)
+            self.vext, self.focc = params[:2]
+            idx = 2
+            self.hparams = params[idx:idx+self.nhparams]
+            idx += self.nhparams
+            self.rparams = params[idx:idx+self.nrparams]
+            idx += self.nrparams
+            idx += self.vks_model.setparams("__call__", *params[idx:])
             idx += self.eigen_model.setparams("__call__", *params[idx:])
             idx += self.H_model.setparams("getdens", *params[idx:])
             return idx
@@ -171,30 +189,45 @@ class DFTMulti(lt.EditableModule):
             rlinmodule=H_model.overlap, **eigen_options) \
             for (H_model, nlowest) in zip(self.H_models, nlowests)]
 
+    def set_vext(self, vext):
+        self.vext = vext
+
+    def set_focc(self, foccs):
+        self.foccs = foccs
+        self.nfoccs = len(foccs)
+
+    def set_hparams(self, all_hparams, all_rparams=None):
+        self.all_hparams = [list(h) for h in all_hparams]
+        if all_rparams is None:
+            all_rparams = [[] for _ in range(len(self.H_models))]
+        self.all_rparams = [list(r) for r in all_rparams]
+        self.len_all_hparams = [len(p) for p in all_hparams]
+        self.len_all_rparams = [len(p) for p in all_rparams]
+
     def __call__(self, *args, **kwargs):
         return self.forward(*args, **kwargs)
 
-    def forward(self, density, vext, foccs, *params):
+    def forward(self, density):
         # density: (nbatch, nr)
         # vext: (nbatch, nr)
         # foccs: list of (nbatch, nlowest)
 
-        all_eigvals, all_eigvecs, vks = self._diagonalize(density, vext, foccs, *params)
+        all_eigvals, all_eigvecs, vks = self._diagonalize(density)
 
         # normalize the norm of density
         # dens: list of (nbatch, nr)
         dens = [(H_model.getdens(eigvecs) * focc.unsqueeze(1)).sum(dim=-1) \
             for (H_model, eigvecs, focc)\
-            in zip(self.H_models, all_eigvecs, foccs)] # (nbatch, nr, nlowest)
+            in zip(self.H_models, all_eigvecs, self.foccs)] # (nbatch, nr, nlowest)
         new_density = functools.reduce(lambda x,y: x + y, dens)
 
         return new_density
 
     ############################# post processing #############################
-    def energy(self, density, vext, foccs, *params):
+    def energy(self, density):
         # calculate the total potential experienced by Kohn-Sham particles
 
-        all_eigvals, all_eigvecs, vks = self._diagonalize(density, vext, foccs, *params)
+        all_eigvals, all_eigvecs, vks = self._diagonalize(density)
 
         # calculates the Kohn-Sham energy
         eks_density = self.eks_model(density) # energy density (nbatch, nr)
@@ -203,34 +236,26 @@ class DFTMulti(lt.EditableModule):
         # calculate the individual non-interacting particles energy
         # sum_eigvals_list: list of (nbatch,)
         sum_eigvals_list = [(eigvals * focc).sum(dim=-1) \
-            for (eigvals, focc) in zip(all_eigvals, foccs)]
+            for (eigvals, focc) in zip(all_eigvals, self.foccs)]
         sum_eigvals = functools.reduce(lambda x,y: x+y, sum_eigvals_list)
         vks_integral = self.grid.integralbox(vks*density, dim=-1)
 
         # compute the interacting particles energy
         Etot = sum_eigvals - vks_integral + Eks
-        self._lc_energy = Etot
         return Etot
 
     ############################# helper functions #############################
-    def _diagonalize(self, density, vext, foccs, *params):
-        # unpack the parameters
-        nhparams = [H.nhparams for H in self.H_models]
-        nrparams = [H.nolp_params for H in self.H_models]
-        all_hparams, all_rparams = unpack(params, [nhparams, nrparams])
-
+    def _diagonalize(self, density):
         # calculate the total potential experienced by Kohn-Sham particles
         vks = self.vks_model(density) # (nbatch, nr)
-        vext_tot = vext + vks
+        vext_tot = self.vext + vks
 
         # compute the eigenpairs
         # all_evals: list of (nbatch, nlowest)
         # all_evecs: list of (nbatch, nr, nlowest)
-        if all_rparams == []:
-            all_rparams = [[] for _ in range(len(self.H_models))]
         rs = [eigen_model((vext_tot, *hparams), rparams=rparams) \
               for (eigen_model, hparams, rparams) \
-              in zip(self.eigen_models, all_hparams, all_rparams)]
+              in zip(self.eigen_models, self.all_hparams, self.all_rparams)]
         all_eigvals = [r[0] for r in rs]
         all_eigvecs = [r[1] for r in rs]
         return all_eigvals, all_eigvecs, vks
@@ -238,7 +263,12 @@ class DFTMulti(lt.EditableModule):
     ############################# editable module #############################
     def getparams(self, methodname):
         if methodname == "forward" or methodname == "__call__":
-            res = self.vks_model.getparams("__call__")
+            res = [self.vext, *self.foccs]
+            for hparams in self.all_hparams:
+                res = res + list(hparams)
+            for rparams in self.all_rparams:
+                res = res + list(rparams)
+            res = res + self.vks_model.getparams("__call__")
             for eigen_model in self.eigen_models:
                 res = res + eigen_model.getparams("__call__")
             for H_model in self.H_models:
@@ -249,13 +279,26 @@ class DFTMulti(lt.EditableModule):
 
     def setparams(self, methodname, *params):
         if methodname == "forward" or methodname == "__call__":
-            idx = self.vks_model.setparams("__call__", *params)
+            self.vext, = params[:1]
+            self.foccs = params[1:1+self.nfoccs]
+            idx = 1+self.nfoccs
+
+            for i in range(len(self.all_hparams)):
+                self.all_hparams[i] = params[idx:idx+self.len_all_hparams[i]]
+                idx += self.len_all_hparams[i]
+
+            for i in range(len(self.all_rparams)):
+                self.all_rparams[i] = params[idx:idx+self.len_all_rparams[i]]
+                idx += self.len_all_rparams[i]
+
+            idx += self.vks_model.setparams("__call__", *params[idx:])
 
             for eigen_model in self.eigen_models:
                 idx += eigen_model.setparams("__call__", *params[idx:])
 
             for H_model in self.H_models:
                 idx += H_model.setparams("getdens", *params[idx:])
+
             return idx
         else:
             raise RuntimeError("The method %s is not defined for setparams"%methodname)
