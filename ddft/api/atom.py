@@ -86,7 +86,6 @@ def atom(atomz, charge=0,
     # calculate the density
     density0 = dft_model(density0).detach()
     density = scf_model(density0)
-    density = dft_model(density)
     energy = dft_model.energy(density)
 
     return energy, density

@@ -70,5 +70,5 @@ def test_atom_grad():
             return density.abs().sum()
 
     gradcheck(get_output, (a, p, "energy"))
-    gradcheck(get_output, (a, p, "density"))
+    gradcheck(get_output, (a, p, "density"), eps=1e-4)
     # gradgradcheck(get_output, (a, p, "energy"))
