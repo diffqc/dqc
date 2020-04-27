@@ -23,10 +23,10 @@ def atom(atomz, charge=0,
         "method": "exacteig",
     }, eig_options)
     scf_options = set_default_option({
-        "min_eps": 1e-5,
+        "min_eps": 1e-9,
         "jinv0": 0.5,
         "alpha0": 1.0,
-        "verbose": True,
+        "verbose": False,
         "method": "selfconsistent",
     }, scf_options)
     bck_options = set_default_option({
