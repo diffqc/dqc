@@ -1,8 +1,12 @@
 import torch
+from torch.autograd import gradcheck, gradgradcheck
 from ddft.api.atom import atom
+from ddft.eks import BaseEKS
+from ddft.utils.safeops import safepow
+
+dtype = torch.float64
 
 def test_atom():
-    dtype = torch.float64
     energies = {
         1: -0.4063,
         2: -2.7221,
@@ -33,3 +37,38 @@ def test_radial():
         energy_nonradial, density = atom(atomz, is_radial=False, **config)
         print(atomz)
         assert torch.allclose(energy_radial, energy_nonradial)
+
+class PseudoLDA(BaseEKS):
+    def __init__(self, a, p):
+        super(PseudoLDA, self).__init__()
+        self.a = a
+        self.p = p
+
+    def forward(self, density):
+        return self.a * safepow(density.abs(), self.p)
+
+    def getfwdparams(self):
+        return [self.a, self.p]
+
+    def setfwdparams(self, *params):
+        self.a, self.p = params[:2]
+        return 2
+
+def test_atom_grad():
+    atomz = 1
+    a = torch.tensor([-0.7385587663820223]).to(dtype).requires_grad_()
+    p = torch.tensor([4./3]).to(dtype).requires_grad_()
+
+    def get_output(a, p, output="energy"):
+        eks_model = PseudoLDA(a, p)
+        energy, density = atom(atomz, eks_model=eks_model,
+            gwmin=1e-5, gwmax=1e3, ng=60,
+            rmin=1e-6, rmax=1e2, nr=200, dtype=dtype)
+        if output == "energy":
+            return energy
+        else:
+            return density.abs().sum()
+
+    gradcheck(get_output, (a, p, "energy"))
+    gradcheck(get_output, (a, p, "density"))
+    # gradgradcheck(get_output, (a, p, "energy"))
