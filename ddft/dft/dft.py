@@ -60,50 +60,20 @@ class DFT(lt.EditableModule):
         # vext: (nbatch, nr)
         # focc: (nbatch, nlowest)
 
-        # unpack the parameters
-        hparams, rparams = unpack(params, [self.H_model.nhparams, self.H_model.nolp_params])
-
-        # calculate the total potential experienced by Kohn-Sham particles
-        vks = self.vks_model(density) # (nbatch, nr)
-        vext_tot = vext + vks
-
-        # compute the eigenpairs
-        # evals: (nbatch, nlowest), evecs: (nbatch, nr, nlowest)
-        eigvals, eigvecs = self.eigen_model((vext_tot, *hparams), rparams=rparams)
+        eigvals, eigvecs, vks = self._diagonalize(density, vext, focc, *params)
 
         # normalize the norm of density
         eigvec_dens = self.H_model.getdens(eigvecs) # (nbatch, nr, nlowest)
         dens = eigvec_dens * focc.unsqueeze(1) # (nbatch, nr, nlowest)
         new_density = dens.sum(dim=-1) # (nbatch, nr)
 
-        # save variables for the post-process calculations
-        self._lc_vks = vks
-        self._lc_vext_tot = vext_tot
-        self._lc_eigvals = eigvals
-        self._lc_eigvecs = eigvecs
-        self._lc_density = density
-        self._lc_focc = focc
-        # parameters that would be computed later
-        self._lc_energy = None
-
         return new_density
 
     ############################# post processing #############################
-    def density(self):
-        return self._lc_density
-
-    def energy(self):
+    def energy(self, density, vext, focc, *params):
         # calculate the total potential experienced by Kohn-Sham particles
         # from the last forward calculation
-        if self._lc_energy is not None:
-            return self._lc_energy
-
-        vks = self._lc_vks
-        vext_tot = self._lc_vext_tot
-        eigvals = self._lc_eigvals
-        eigvecs = self._lc_eigvecs
-        density = self._lc_density
-        focc = self._lc_focc
+        eigvals, eigvecs, vks = self._diagonalize(density, vext, focc, *params)
 
         # calculates the Kohn-Sham energy
         eks_density = self.eks_model(density) # energy density (nbatch, nr)
@@ -115,8 +85,22 @@ class DFT(lt.EditableModule):
 
         # compute the interacting particles energy
         Etot = sum_eigvals - vks_integral + Eks
-        self._lc_energy = Etot
         return Etot
+
+    ############################# helper functions #############################
+    def _diagonalize(self, density, vext, focc, *params):
+        # unpack the parameters
+        hparams, rparams = unpack(params, [self.H_model.nhparams, self.H_model.nolp_params])
+
+        # calculate the total potential experienced by Kohn-Sham particles
+        vks = self.vks_model(density) # (nbatch, nr)
+        vext_tot = vext + vks
+
+        # compute the eigenpairs
+        # evals: (nbatch, nlowest), evecs: (nbatch, nr, nlowest)
+        eigvals, eigvecs = self.eigen_model((vext_tot, *hparams), rparams=rparams)
+
+        return eigvals, eigvecs, vks
 
     ############################# editable module #############################
     def getparams(self, methodname):
@@ -195,6 +179,41 @@ class DFTMulti(lt.EditableModule):
         # vext: (nbatch, nr)
         # foccs: list of (nbatch, nlowest)
 
+        all_eigvals, all_eigvecs, vks = self._diagonalize(density, vext, foccs, *params)
+
+        # normalize the norm of density
+        # dens: list of (nbatch, nr)
+        dens = [(H_model.getdens(eigvecs) * focc.unsqueeze(1)).sum(dim=-1) \
+            for (H_model, eigvecs, focc)\
+            in zip(self.H_models, all_eigvecs, foccs)] # (nbatch, nr, nlowest)
+        new_density = functools.reduce(lambda x,y: x + y, dens)
+
+        return new_density
+
+    ############################# post processing #############################
+    def energy(self, density, vext, foccs, *params):
+        # calculate the total potential experienced by Kohn-Sham particles
+
+        all_eigvals, all_eigvecs, vks = self._diagonalize(density, vext, foccs, *params)
+
+        # calculates the Kohn-Sham energy
+        eks_density = self.eks_model(density) # energy density (nbatch, nr)
+        Eks = self.grid.integralbox(eks_density, dim=-1) # (nbatch,)
+
+        # calculate the individual non-interacting particles energy
+        # sum_eigvals_list: list of (nbatch,)
+        sum_eigvals_list = [(eigvals * focc).sum(dim=-1) \
+            for (eigvals, focc) in zip(all_eigvals, foccs)]
+        sum_eigvals = functools.reduce(lambda x,y: x+y, sum_eigvals_list)
+        vks_integral = self.grid.integralbox(vks*density, dim=-1)
+
+        # compute the interacting particles energy
+        Etot = sum_eigvals - vks_integral + Eks
+        self._lc_energy = Etot
+        return Etot
+
+    ############################# helper functions #############################
+    def _diagonalize(self, density, vext, foccs, *params):
         # unpack the parameters
         nhparams = [H.nhparams for H in self.H_models]
         nrparams = [H.nolp_params for H in self.H_models]
@@ -214,58 +233,7 @@ class DFTMulti(lt.EditableModule):
               in zip(self.eigen_models, all_hparams, all_rparams)]
         all_eigvals = [r[0] for r in rs]
         all_eigvecs = [r[1] for r in rs]
-
-        # normalize the norm of density
-        # dens: list of (nbatch, nr)
-        dens = [(H_model.getdens(eigvecs) * focc.unsqueeze(1)).sum(dim=-1) \
-            for (H_model, eigvecs, focc)\
-            in zip(self.H_models, all_eigvecs, foccs)] # (nbatch, nr, nlowest)
-        new_density = functools.reduce(lambda x,y: x + y, dens)
-
-        # save variables for the post-process calculations
-        self._lc_vks = vks
-        self._lc_vext_tot = vext_tot
-        self._lc_all_eigvals = all_eigvals
-        self._lc_all_eigvecs = all_eigvecs
-        self._lc_density = density
-        self._lc_foccs = foccs
-        # parameters that would be computed later
-        self._lc_energy = None
-
-        return new_density
-
-    ############################# post processing #############################
-    def density(self):
-        return self._lc_density
-
-    def energy(self):
-        # calculate the total potential experienced by Kohn-Sham particles
-        # from the last forward calculation
-        if self._lc_energy is not None:
-            return self._lc_energy
-
-        vks = self._lc_vks
-        vext_tot = self._lc_vext_tot
-        all_eigvals = self._lc_all_eigvals
-        all_eigvecs = self._lc_all_eigvecs
-        density = self._lc_density
-        foccs = self._lc_foccs
-
-        # calculates the Kohn-Sham energy
-        eks_density = self.eks_model(density) # energy density (nbatch, nr)
-        Eks = self.grid.integralbox(eks_density, dim=-1) # (nbatch,)
-
-        # calculate the individual non-interacting particles energy
-        # sum_eigvals_list: list of (nbatch,)
-        sum_eigvals_list = [(eigvals * focc).sum(dim=-1) \
-            for (eigvals, focc) in zip(all_eigvals, foccs)]
-        sum_eigvals = functools.reduce(lambda x,y: x+y, sum_eigvals_list)
-        vks_integral = self.grid.integralbox(vks*density, dim=-1)
-
-        # compute the interacting particles energy
-        Etot = sum_eigvals - vks_integral + Eks
-        self._lc_energy = Etot
-        return Etot
+        return all_eigvals, all_eigvecs, vks
 
     ############################# editable module #############################
     def getparams(self, methodname):

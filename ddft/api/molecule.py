@@ -81,68 +81,8 @@ def molecule(atomzs, atompos,
     focc = torch.ones(nlowest, dtype=dtype, device=device).unsqueeze(0)
     focc[:,:nelectrons//2] = 2.0
 
-    # wrapper module wraps the setup and returns the total energy in forward()
-    wrapped_module = WrapperModule(grid, b, focc, eks_model,
-        eig_options=eig_options, scf_options=scf_options, bck_options=bck_options)
-    if optimize_basis:
-        opt_module = OptimizationModule(wrapped_module,
-            optimized_nparams=0, optimize_model=True,
-            return_arg=False, forward_options=opt_options)
-        module = opt_module
-    else:
-        module = wrapped_module
-
-    energy = module(atomzs, atompos)
-    dft_model = wrapped_module.get_dftmodel()
-    density = dft_model.density()
-
-    return energy, density
-
-class WrapperModule(torch.nn.Module):
-    def __init__(self, grid, basis, focc, eks_model,
-            eig_options={}, scf_options={}, bck_options={}):
-        super(WrapperModule, self).__init__()
-        self.grid = grid
-        self.basis = basis
-        self.focc = focc
-        self.eks_model = eks_model
-        self.eig_options = eig_options
-        self.scf_options = scf_options
-        self.bck_options = bck_options
-        self.dft_model = None
-        self.density0 = None
-
-    def optimizing_parameters(self):
-        return self.basis.parameters()
-
-    def forward(self, atomzs, atomposs):
-        self.dft_model = scf_dft(self.grid, self.basis, self.focc, self.eks_model,
-            self.density0, self.eig_options, self.scf_options, self.bck_options)
-        energy = self.dft_model.energy()
-        ion_energy = ion_coulomb_energy(atomzs, atomposs)
-
-        # set up the initial density for the next iteration
-        self.density0 = self.dft_model.density().clone().detach()
-
-        return energy + ion_energy
-
-    def get_dftmodel(self):
-        if self.dft_model is None:
-            raise RuntimeError("forward() must be called before calling get_dftmodel()")
-        return self.dft_model
-
-def scf_dft(grid, basis, focc, eks_model, density0=None,
-        eig_options={}, scf_options={}, bck_options={}):
-    # focc: tensor of (nbatch, nlowest)
-
-    H_model = basis.get_hamiltonian(grid)
-    dtype, device = basis.dtype, basis.device
-    nlowest = focc.shape[1]
-
-    hparams = []
-    vext = torch.zeros_like(grid.rgrid[:,0]).unsqueeze(0).to(device)
-
     # setup the modules
+    H_model = b.get_hamiltonian(grid)
     all_eks_models = Hartree()
     if eks_model is not None:
         all_eks_models = all_eks_models + eks_model
@@ -151,21 +91,19 @@ def scf_dft(grid, basis, focc, eks_model, density0=None,
     scf_model = EquilibriumModule(dft_model, forward_options=scf_options, backward_options=bck_options)
 
     # calculate the density
-    if density0 is None:
-        density0 = torch.zeros_like(vext).to(device)
+    hparams = []
+    vext = torch.zeros_like(grid.rgrid[:,0]).unsqueeze(0).to(device)
+    density0 = torch.zeros_like(vext).to(device)
     density0 = dft_model(density0, vext, focc, *hparams).detach()
     density = scf_model(density0, vext, focc, *hparams)
+    density = dft_model(density, vext, focc, *hparams)
 
-    if torch.is_grad_enabled():
-        # This redundant evaluation is needed to register the "density" from the
-        # scf_model in the backpropagation graph, for the postprocess calculation.
-        #
-        # Without this redundant evaluation, the backward calculation is wrong,
-        # because the postprocess uses the density which is not from the SCF
-        # output.
-        density = dft_model(density, vext, focc, hparams)
+    # calculate the energy
+    el_energy = dft_model.energy(density, vext, focc, *hparams)
+    ion_energy = ion_coulomb_energy(atomzs, atompos)
+    energy = el_energy + ion_energy
 
-    return dft_model
+    return energy, density
 
 def ion_coulomb_energy(atomzs, atompos):
     # atomzs: (natoms,)
