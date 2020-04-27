@@ -82,7 +82,7 @@ def atom(atomz, charge=0,
     params_lineup = [item for sublist in all_hparams for item in sublist]
     density0 = dft_model(density0, vext, foccs, *params_lineup).detach()
     density = scf_model(density0, vext, foccs, *params_lineup)
-    if torch.enable_grad():
+    if torch.is_grad_enabled():
         density = dft_model(density, vext, foccs, *params_lineup)
     energy = dft_model.energy()
 
