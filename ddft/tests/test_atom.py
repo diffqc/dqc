@@ -47,6 +47,9 @@ class PseudoLDA(BaseEKS):
     def forward(self, density):
         return self.a * safepow(density.abs(), self.p)
 
+    def potential(self, density):
+        return self.a * self.p * safepow(density.abs(), self.p-1)
+
     def getfwdparams(self):
         return [self.a, self.p]
 
@@ -57,7 +60,8 @@ class PseudoLDA(BaseEKS):
 def test_atom_grad():
     atomz = 1
     a = torch.tensor([-0.7385587663820223]).to(dtype).requires_grad_()
-    p = torch.tensor([4./3]).to(dtype).requires_grad_()
+    # NOTE: it does not work for 4/3 (the difference is very subtle)
+    p = torch.tensor([5./3]).to(dtype).requires_grad_()
 
     def get_output(a, p, output="energy"):
         eks_model = PseudoLDA(a, p)
@@ -67,8 +71,10 @@ def test_atom_grad():
         if output == "energy":
             return energy
         else:
-            return density.abs().sum()
+            return (density**4).sum()
 
-    gradcheck(get_output, (a, p, "energy"))
-    gradcheck(get_output, (a, p, "density"), eps=1e-4)
-    # gradgradcheck(get_output, (a, p, "energy"))
+    eps = 1e-4
+    gradcheck(get_output, (a, p, "energy"), eps=eps)
+    gradcheck(get_output, (a, p, "density"), eps=eps)
+    gradgradcheck(get_output, (a, p, "energy"), eps=eps)
+    gradgradcheck(get_output, (a, p, "density"), eps=eps)
