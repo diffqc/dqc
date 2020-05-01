@@ -32,14 +32,12 @@ class BaseEKS(lt.EditableModule):
         else:
             xinp = density.detach().requires_grad_()
 
-        dv = self.grid.get_dvolume()
+        dv = self.grid.get_dvolume().expand(density.shape[0], -1)
         with torch.enable_grad():
             y = self.forward(xinp) # (nbatch,nr)
-            y = y * dv
-            ysum = y.sum()
-        grad_enabled = torch.is_grad_enabled()
-        dx = torch.autograd.grad(ysum, (xinp,),
-            create_graph=grad_enabled)[0]
+
+        dx, = torch.autograd.grad(y, (xinp,), grad_outputs=dv,
+            create_graph=torch.is_grad_enabled())
         return dx / dv
 
     def __add__(self, other):

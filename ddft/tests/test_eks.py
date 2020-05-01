@@ -43,18 +43,19 @@ def test_hartree_becke():
 def run_vks_test(gridname, fcnname, rtol=1e-5, atol=1e-8):
     dtype = torch.float64
     grid, density = _setup_density(gridname, fcnname, dtype=dtype)
+    density = density * density # avoid negative profile
 
     a = torch.tensor([1.0]).to(dtype)
     p = torch.tensor([1.3333]).to(dtype)
     eks_mdl = EKS1(a, p)
-    # use_potential=False to use the derivative to check if the poisson
-    # solver is stable and implemented correctly
-    vks_mdl = VKS(eks_mdl, grid, use_potential=False)
+    vks_mdl = VKS(eks_mdl, grid)
     eks = eks_mdl(density)
     vks = vks_mdl(density)
 
-    torch.allclose(eks, a*density**p, rtol=rtol, atol=atol)
-    torch.allclose(vks, a*p*density**(p-1.0), rtol=rtol, atol=atol)
+    eks_theory = a*density**p
+    vks_theory = a*p*density**(p-1.0)
+    assert torch.allclose(eks, eks_theory, rtol=rtol, atol=atol)
+    assert torch.allclose(vks, vks_theory, rtol=rtol, atol=atol)
 
 def run_hartree_test(gridname, fcnname, rtol=1e-5, atol=1e-8):
     dtype = torch.float64
