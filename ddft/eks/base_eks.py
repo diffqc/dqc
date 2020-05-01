@@ -32,7 +32,17 @@ class BaseEKS(lt.EditableModule):
         else:
             xinp = density.detach().requires_grad_()
 
-        dv = self.grid.get_dvolume().expand(density.shape[0], -1)
+        dv = self.grid.get_dvolume()
+        # the factor will be cancelled out, so removing it from graph will
+        # increase the numerical stability
+        factor = dv.min().detach()
+        # making the minimum to be 1 seem to make it more robust
+        # this is probably because it will be multiplied with the potential
+        # which could be very small due to small density and could cause
+        # underflow
+        dv = dv / factor
+        dv = dv.expand(density.shape[0], -1)
+
         with torch.enable_grad():
             y = self.forward(xinp) # (nbatch,nr)
 
