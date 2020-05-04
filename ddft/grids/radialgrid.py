@@ -4,6 +4,7 @@ import numpy as np
 from numpy.polynomial.legendre import leggauss
 from ddft.grids.base_grid import BaseGrid, BaseTransformed1DGrid
 from ddft.utils.legendre import legint, legvander, legder
+from ddft.utils.interp import searchsorted
 
 class LegendreRadialTransform(BaseTransformed1DGrid):
     def __init__(self, nx, dtype=torch.float, device=torch.device('cpu')):
@@ -179,9 +180,8 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
 
         # find the index location of xq
         nr = x.shape[0]
-        idxr = torch.sum((xq > x.unsqueeze(-1)).to(torch.int32), dim=0) # (nrq,) from (1 to nr-1)
-        idxr[idxr == 0] = 1
-        idxr[idxr == nr] = nr-1
+        idxr = searchsorted(x, xq)
+        idxr = torch.clamp(idxr, 1, nr-1)
         idxl = idxr - 1 # (nrq,) from (0 to nr-2)
         xl = x[idxl].contiguous()
         xr = x[idxr].contiguous()
