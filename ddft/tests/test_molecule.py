@@ -1,5 +1,6 @@
 import time
 import numpy as np
+import matplotlib.pyplot as plt
 import torch
 from torch.autograd import gradcheck, gradgradcheck
 from ddft.api.molecule import molecule
@@ -66,11 +67,18 @@ def test_mol_grad():
     # gradgradcheck(get_energy, (a, p, atomzs, atomposs, False))
 
 def test_h2_vibration():
+    molname = "H2"
+    dists = torch.tensor(
+        [1.475, 1.4775, 1.48, 1.481, 1.4825, 1.485],
+        dtype=dtype)
+    runtest_vibration(molname, dists)
+
+def runtest_vibration(molname, dists, plot=False):
     def get_energy(a, p, dist):
         bck_options = {
             "max_niter": 100,
         }
-        atomzs, atomposs = get_molecule("H2", distance=dist)
+        atomzs, atomposs = get_molecule(molname, distance=dist)
         eks_model = PseudoLDA(a, p)
         energy, density = molecule(atomzs, atomposs, eks_model=eks_model,
             bck_options=bck_options)
@@ -80,11 +88,10 @@ def test_h2_vibration():
     a = torch.tensor([-0.7385587663820223]).to(dtype).requires_grad_()
     p = torch.tensor([4./3]).to(dtype).requires_grad_()
 
-    dists = torch.tensor(
-        [1.475, 1.4775, 1.48, 1.481, 1.4825, 1.485],
-        dtype=dtype)
-
     energies = [float(get_energy(a, p, dist).view(-1)[0]) for dist in dists]
+    if plot:
+        plt.plot(dists, energies)
+        plt.show()
 
     # get the minimum index
     min_idx = 0
@@ -109,12 +116,14 @@ def test_h2_vibration():
     ana_k = torch.autograd.grad(deds, min_dist)
     t3 = time.time()
 
+    print("Molecule %s" % molname)
     print("Numerical: %.8e" % num_k)
     print("Analytical: %.8e" % ana_k)
     print("Running time:")
     print("* Forward: %.3e" % (t1-t0))
     print("* 1st backward: %.3e" % (t2-t1))
     print("* 2nd backward: %.3e" % (t3-t2))
+    print("")
 
     assert np.abs(num_k-ana_k)/num_k < 5e-3
 
