@@ -110,4 +110,4 @@ def test_h2_vibration():
     assert np.abs(num_k-ana_k)/num_k < 1e-2
 
 if __name__ == "__main__":
-    vibration_h2()
+    test_h2_vibration()
