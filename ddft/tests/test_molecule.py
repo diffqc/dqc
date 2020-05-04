@@ -1,3 +1,4 @@
+import time
 import numpy as np
 import torch
 from torch.autograd import gradcheck, gradgradcheck
@@ -100,14 +101,22 @@ def test_h2_vibration():
 
     # get the vibration frequency
     min_dist = dists[min_idx].requires_grad_()
+    t0 = time.time()
     min_energy = get_energy(a, p, min_dist)
+    t1 = time.time()
     deds = torch.autograd.grad(min_energy, min_dist, create_graph=True)
+    t2 = time.time()
     ana_k = torch.autograd.grad(deds, min_dist)
+    t3 = time.time()
 
     print("Numerical: %.8e" % num_k)
     print("Analytical: %.8e" % ana_k)
+    print("Running time:")
+    print("* Forward: %.3e" % (t1-t0))
+    print("* 1st backward: %.3e" % (t2-t1))
+    print("* 2nd backward: %.3e" % (t3-t2))
 
-    assert np.abs(num_k-ana_k)/num_k < 1e-2
+    assert np.abs(num_k-ana_k)/num_k < 5e-3
 
 if __name__ == "__main__":
     test_h2_vibration()
