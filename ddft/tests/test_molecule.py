@@ -24,12 +24,21 @@ class PseudoLDA(BaseEKS):
         self.a, self.p = params[:2]
         return 2
 
-def get_molecule(molname, distance=1.0, with_energy=False):
+def get_molecule(molname, distance=None, with_energy=False):
     if molname == "H2":
+        if distance is None:
+            distance = 1.0
         atomzs = torch.tensor([1.0, 1.0], dtype=dtype)
         atomposs = distance * torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype)
         atomposs = atomposs.requires_grad_()
         energy = torch.tensor(-0.976186, dtype=dtype) # only works for LDA
+    elif molname == "Li2":
+        if distance is None:
+            distance = 3.0
+        atomzs = torch.tensor([3.0, 3.0], dtype=dtype)
+        atomposs = distance * torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype)
+        atomposs = atomposs.requires_grad_()
+        energy = torch.tensor(-14.1116, dtype=dtype) # only works for LDA
     else:
         raise RuntimeError("Unknown molecule %s" % molname)
     if not with_energy:
@@ -38,12 +47,14 @@ def get_molecule(molname, distance=1.0, with_energy=False):
         return atomzs, atomposs, energy
 
 def test_mol():
-    atomzs, atomposs, energy_true = get_molecule("H2", with_energy=True)
-    a = torch.tensor([-0.7385587663820223]).to(dtype).requires_grad_()
-    p = torch.tensor([4./3]).to(dtype).requires_grad_()
-    eks_model = PseudoLDA(a, p)
-    energy, _ = molecule(atomzs, atomposs, eks_model=eks_model)
-    assert torch.allclose(energy, energy_true)
+    molnames = ["H2", "Li2"]
+    for molname in molnames:
+        atomzs, atomposs, energy_true = get_molecule(molname, with_energy=True)
+        a = torch.tensor([-0.7385587663820223]).to(dtype).requires_grad_()
+        p = torch.tensor([4./3]).to(dtype).requires_grad_()
+        eks_model = PseudoLDA(a, p)
+        energy, _ = molecule(atomzs, atomposs, eks_model=eks_model)
+        assert torch.allclose(energy, energy_true)
 
 def test_mol_grad():
     # setup the molecule's atoms positions
@@ -66,12 +77,17 @@ def test_mol_grad():
     # gradgradcheck(get_energy, (a, p, atomzs, atomposs, "energy"))
     # gradgradcheck(get_energy, (a, p, atomzs, atomposs, False))
 
-def test_h2_vibration():
-    molname = "H2"
-    dists = torch.tensor(
-        [1.475, 1.4775, 1.48, 1.481, 1.4825, 1.485],
-        dtype=dtype)
-    runtest_vibration(molname, dists)
+def test_vibration():
+    all_dists = {
+        "H2": torch.tensor(
+            [1.475, 1.4775, 1.48, 1.481, 1.4825, 1.485],
+            dtype=dtype),
+        "Li2": torch.tensor(
+            [3.11, 3.12, 3.13, 3.14, 3.15, 3.16, 3.17, 3.18, 3.19, 3.2, 3.21],
+            dtype=dtype)
+    }
+    for molname,dists in all_dists.items():
+        runtest_vibration(molname, dists)
 
 def runtest_vibration(molname, dists, plot=False):
     def get_energy(a, p, dist):
@@ -104,7 +120,9 @@ def runtest_vibration(molname, dists, plot=False):
     # fit the square curve
     dists_np = np.asarray(dists)
     energies_np = np.asarray(energies)
-    num_k = np.polyfit(dists_np, energies_np, 2)[0] * 2
+    polycoeffs = np.polyfit(dists_np, energies_np, 2)
+    num_k = polycoeffs[0] * 2
+    dist_opt = -polycoeffs[1] / (2.*polycoeffs[0])
 
     # get the vibration frequency
     min_dist = dists[min_idx].requires_grad_()
@@ -116,9 +134,11 @@ def runtest_vibration(molname, dists, plot=False):
     ana_k = torch.autograd.grad(deds, min_dist)
     t3 = time.time()
 
+    print(energies)
     print("Molecule %s" % molname)
     print("Numerical: %.8e" % num_k)
     print("Analytical: %.8e" % ana_k)
+    print("Optimum distance: %.3e" % dist_opt)
     print("Running time:")
     print("* Forward: %.3e" % (t1-t0))
     print("* 1st backward: %.3e" % (t2-t1))
@@ -128,4 +148,4 @@ def runtest_vibration(molname, dists, plot=False):
     assert np.abs(num_k-ana_k)/num_k < 5e-3
 
 if __name__ == "__main__":
-    test_h2_vibration()
+    test_vibration()
