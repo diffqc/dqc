@@ -76,6 +76,17 @@ def legval(x, order):
         res = res + x**pow * legcoeffs[pow]
     return res
 
+def deriv_legval(x, order):
+    if order >= len(all_legcoeffs):
+        raise RuntimeError("The legendre polynomial order %d has not been implemented" % order)
+    legcoeffs = all_legcoeffs[order]
+    res = 0
+    if order == 0:
+        return x * 0
+    for pow in range(2-order%2, order+1, 2):
+        res = res + pow * x**(pow-1) * legcoeffs[pow]
+    return res
+
 def legvander(x, order, orderfirst=False):
     # x: (..., nx)
     # order: int
