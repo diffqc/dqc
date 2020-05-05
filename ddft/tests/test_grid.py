@@ -425,6 +425,10 @@ def get_fcn(fcnname, rgrid, with_grad=False, with_laplace=False):
                 grad_phi = fcn*0
                 grad_theta = norm * (-3) * rs * exp_factor * costheta * sintheta
                 return fcn, [grad_r, grad_phi, grad_theta]
+            elif with_laplace:
+                laplace_fcn = norm*exp_factor*rg*rg*(rg*rg-7)*ylm/2.0
+                return fcn, laplace_fcn
+
             return fcn
 
         elif fcnname == "gauss2-l1m1":
@@ -438,7 +442,8 @@ def get_fcn(fcnname, rgrid, with_grad=False, with_laplace=False):
                 grad_theta = norm * exp_factor * costheta * cosphi
                 return fcn, [grad_r, grad_phi, grad_theta]
             elif with_laplace:
-                pass
+                laplace_fcn = norm*exp_factor*(4-7*rg*rg+rg**4) * ylm
+                return fcn, laplace_fcn
             return fcn
 
         elif fcnname == "gauss2-l2m2":
@@ -455,7 +460,8 @@ def get_fcn(fcnname, rgrid, with_grad=False, with_laplace=False):
                 grad_theta = norm * 6 * exp_factor * rs * (costheta*cos2phi*sintheta)
                 return fcn, [grad_r, grad_phi, grad_theta]
             elif with_laplace:
-                pass
+                laplace_fcn = norm * exp_factor * rg*rg * (rg*rg - 7) * ylm
+                return fcn, laplace_fcn
 
     # note that the function below is not supposed to be squared when integrated
     elif fcnname in multiatoms_fcnnames:
