@@ -55,27 +55,26 @@ def legder(c, dim=-1):
         der = der.transpose(dim, -1)
     return der
 
+all_legcoeffs = [
+    [1.],
+    [0., 1.],
+    [-0.5, 0., 1.5],
+    [0., -1.5, 0., 2.5],
+    [0.375, 0., -3.75, 0., 4.375],
+    [0., 1.875, 0., -8.75, 0., 7.875],
+    [-5./16, 0., 105./16, 0., -315./16, 0., 231./16],
+    [0., -35./16, 0., 315./16, 0., -693./16, 0., 429./16],
+    [35./128, 0., -1260./128, 0., 6930./128, 0., -12012./128, 0., 6435./128],
+]
+
 def legval(x, order):
-    if order == 0:
-        return x*0 + 1
-    elif order == 1:
-        return x
-    elif order == 2:
-        return 1.5*x**2 - 0.5
-    elif order == 3:
-        return 2.5*x**3 - 1.5*x
-    elif order == 4:
-        return 4.375*x**4 - 3.75*x**2 + 0.375
-    elif order == 5:
-        return 7.875*x**5 - 8.75*x**3 + 1.875*x
-    elif order == 6:
-        return (231*x**6 - 315*x**4 + 105*x**2 - 5) / 16
-    elif order == 7:
-        return (429*x**7 - 693*x**5 + 315*x**3 - 35*x) / 16
-    elif order == 8:
-        return (6435*x**8 - 12012*x**6 + 6930*x**4 - 1260*x**2 + 35) / 128
-    else:
+    if order >= len(all_legcoeffs):
         raise RuntimeError("The legendre polynomial order %d has not been implemented" % order)
+    legcoeffs = all_legcoeffs[order]
+    res = 0
+    for pow in range(order%2, order+1, 2):
+        res = res + x**pow * legcoeffs[pow]
+    return res
 
 def legvander(x, order, orderfirst=False):
     # x: (..., nx)
