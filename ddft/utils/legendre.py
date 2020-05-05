@@ -41,18 +41,29 @@ def legder(c, dim=-1):
     der = torch.zeros_like(c).to(c.device)
     if nr_even:
         der[..., ::2] = (torch.sum(c_odd, dim=-1, keepdim=True) - \
-                         torch.cumsum(c_odd, dim=-1) + c_odd) * (4*n_odd+1)
+                         cumsum_zero(c_odd, dim=-1)) * (4*n_odd+1)
         der[..., 1::2] = (torch.sum(c_even, dim=-1, keepdim=True) - \
                           torch.cumsum(c_even, dim=-1)) * (4*n_even+3)
     else:
         der[..., :-1:2] = (torch.sum(c_odd, dim=-1, keepdim=True) - \
-                         torch.cumsum(c_odd, dim=-1) + c_odd) * (4*n_odd+1)
+                           cumsum_zero(c_odd, dim=-1)) * (4*n_odd+1)
         der[..., 1::2] = (torch.sum(c_even, dim=-1, keepdim=True) - \
-                          torch.cumsum(c_even, dim=-1) + c_even) * (4*n_even+3)
+                          cumsum_zero(c_even, dim=-1)) * (4*n_even+3)
 
     if dim != -1:
         der = der.transpose(dim, -1)
     return der
+
+@torch.jit.script
+def cumsum_zero(x:torch.Tensor, dim:int=-1):
+    if dim != -1:
+        x = x.transpose(dim, -1)
+    nx = x.shape[-1]
+    res = torch.zeros_like(x).to(x.device)
+    res[...,1:] = torch.cumsum(x[...,:-1], dim=-1)
+    if dim != -1:
+        res = res.transpose(dim, -1)
+    return res
 
 def legval(x, order):
     if order == 0:
