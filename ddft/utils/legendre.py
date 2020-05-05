@@ -1,4 +1,5 @@
 import torch
+from ddft.utils.misc import cumsum_zero
 
 def legint(coeffs, dim=-1, zeroat="left"):
     # Integrate the coefficients of Legendre polynomial one time
@@ -53,17 +54,6 @@ def legder(c, dim=-1):
     if dim != -1:
         der = der.transpose(dim, -1)
     return der
-
-@torch.jit.script
-def cumsum_zero(x:torch.Tensor, dim:int=-1):
-    if dim != -1:
-        x = x.transpose(dim, -1)
-    nx = x.shape[-1]
-    res = torch.zeros_like(x).to(x.device)
-    res[...,1:] = torch.cumsum(x[...,:-1], dim=-1)
-    if dim != -1:
-        res = res.transpose(dim, -1)
-    return res
 
 def legval(x, order):
     if order == 0:
