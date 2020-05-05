@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 from ddft.utils.misc import cumsum_zero
 
 def legint(coeffs, dim=-1, zeroat="left"):
@@ -55,31 +56,34 @@ def legder(c, dim=-1):
         der = der.transpose(dim, -1)
     return der
 
-all_legcoeffs = [
-    [1.],
-    [0., 1.],
-    [-0.5, 0., 1.5],
-    [0., -1.5, 0., 2.5],
-    [0.375, 0., -3.75, 0., 4.375],
-    [0., 1.875, 0., -8.75, 0., 7.875],
-    [-5./16, 0., 105./16, 0., -315./16, 0., 231./16],
-    [0., -35./16, 0., 315./16, 0., -693./16, 0., 429./16],
-    [35./128, 0., -1260./128, 0., 6930./128, 0., -12012./128, 0., 6435./128],
-]
+def _get_legcoeff(order):
+    all_legcoeffs = [
+        [1.],
+        [0., 1.],
+        [-0.5, 0., 1.5],
+        [0., -1.5, 0., 2.5],
+        [0.375, 0., -3.75, 0., 4.375],
+        [0., 1.875, 0., -8.75, 0., 7.875],
+        [-5./16, 0., 105./16, 0., -315./16, 0., 231./16],
+        [0., -35./16, 0., 315./16, 0., -693./16, 0., 429./16],
+        [35./128, 0., -1260./128, 0., 6930./128, 0., -12012./128, 0., 6435./128],
+    ]
+    if order < len(all_legcoeffs):
+        return all_legcoeffs[order]
+    else:
+        arr = np.zeros(order+1)
+        arr[-1] = 1.0
+        return np.polynomial.legendre.leg2poly(arr)
 
 def legval(x, order):
-    if order >= len(all_legcoeffs):
-        raise RuntimeError("The legendre polynomial order %d has not been implemented" % order)
-    legcoeffs = all_legcoeffs[order]
+    legcoeffs = _get_legcoeff(order)
     res = 0
     for pow in range(order%2, order+1, 2):
         res = res + x**pow * legcoeffs[pow]
     return res
 
 def deriv_legval(x, order):
-    if order >= len(all_legcoeffs):
-        raise RuntimeError("The legendre polynomial order %d has not been implemented" % order)
-    legcoeffs = all_legcoeffs[order]
+    legcoeffs = _get_legcoeff(order)
     res = 0
     if order == 0:
         return x * 0
