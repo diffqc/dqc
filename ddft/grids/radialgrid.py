@@ -3,7 +3,7 @@ import torch
 import numpy as np
 from numpy.polynomial.legendre import leggauss
 from ddft.grids.base_grid import BaseGrid, BaseTransformed1DGrid
-from ddft.utils.legendre import legint, legvander, legder
+from ddft.utils.legendre import legint, legvander, legder, deriv_legval
 from ddft.utils.interp import searchsorted
 
 class LegendreRadialTransform(BaseTransformed1DGrid):
@@ -27,6 +27,14 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
         # legendre basis (from tinydft/tinygrid.py)
         self.basis = legvander(self.xleggauss, nx-1, orderfirst=True) # (nr, nr)
         self.inv_basis = self.basis.inverse()
+
+        # # construct the differentiation matrix
+        # dlegval = deriv_legval(self.xleggauss, nx)
+        # eye = torch.eye(nx, dtype=dtype, device=device)
+        # dxleg = self.xleggauss - self.xleggauss.unsqueeze(-1) + eye
+        # dmat = dlegval / (dlegval.unsqueeze(-1) * dxleg) # (nr, nr)
+        # dmat_diag = self.xleggauss / (1. - self.xleggauss) / (1 + self.xleggauss) # (nr,)
+        # self.diff_matrix = dmat * (1.-eye) + torch.diag_embed(dmat_diag)
 
     def get_dvolume(self):
         return self._dvolume
@@ -105,17 +113,18 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
         return frq
 
     def grad(self, p, dim=-1, idim=0):
-        # p: (..., nr, ...)
         if dim != -1:
-            p = p.transpose(dim, -1) # p: (..., nr)
+            p = p.transpose(dim, -1) # (..., nr)
 
         # get the derivative w.r.t. the legendre basis
         coeff = torch.matmul(p, self.inv_basis) # (..., nr)
         dcoeff = legder(coeff) # (..., nr)
         dpdq = torch.matmul(dcoeff, self.basis) # (..., nr)
+        # # multiply with the differentiation matrix to get dp/dq
+        # dpdq = torch.matmul(p, self.diff_matrix)
 
         # get the derivative w.r.t. r
-        dpdr = dpdq / self.get_scaling(self.rgrid[:,0]) # (..., nr)
+        dpdr = dpdq / self.get_scaling(self.rgrid[:,0])
         if dim != -1:
             dpdr = dpdr.transpose(dim, -1)
         return dpdr
@@ -224,6 +233,9 @@ class LegendreRadialShiftExp(LegendreRadialTransform):
 
     def get_scaling(self, rs):
         return (rs + self.rmin) * self.logrmm * 0.5
+
+    def get_d2q_dr2(self, rs):
+        return -2 / self.logrmm / ((rs + self.rmin)*(rs + self.rmin))
 
     #################### editable module parts ####################
     def getparams(self, methodname):
