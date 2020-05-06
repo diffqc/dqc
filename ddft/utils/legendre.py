@@ -2,6 +2,7 @@ import torch
 import numpy as np
 from ddft.utils.misc import cumsum_zero
 
+################# operations on coefficients #################
 def legint(coeffs, dim=-1, zeroat="left"):
     # Integrate the coefficients of Legendre polynomial one time
     # The resulting integral always have coeffs[0] == 0.
@@ -56,7 +57,9 @@ def legder(c, dim=-1):
         der = der.transpose(dim, -1)
     return der
 
-def _get_legcoeff(order):
+################# get the value of legendre in x #################
+@torch.jit.script
+def _get_legcoeff(order:int):
     all_legcoeffs = [
         [1.],
         [0., 1.],
@@ -71,25 +74,79 @@ def _get_legcoeff(order):
     if order < len(all_legcoeffs):
         return all_legcoeffs[order]
     else:
-        arr = np.zeros(order+1)
-        arr[-1] = 1.0
-        return np.polynomial.legendre.leg2poly(arr)
+        raise RuntimeError("Legendre coefficients for order %d is not stored" % order)
+        # arr = np.zeros(order+1)
+        # arr[-1] = 1.0
+        # return np.polynomial.legendre.leg2poly(arr)
 
-def legval(x, order):
-    legcoeffs = _get_legcoeff(order)
-    res = 0
-    for pow in range(order%2, order+1, 2):
-        res = res + x**pow * legcoeffs[pow]
-    return res
+@torch.jit.script
+def legval(x:torch.Tensor, order:int):
+    assert order >= 0, "Order must be a non-negative integer"
 
-def deriv_legval(x, order):
-    legcoeffs = _get_legcoeff(order)
-    res = 0
+    # for small order, use the saved coefficients for fast calculation
+    # for higher order, use the recursive equation for stable calculation
+
+    if order <= 8:
+        legcoeffs = _get_legcoeff(order)
+        res = x*0
+        xsq = x*x
+        xpow = x*0+1 if order%2 == 0 else x
+        for pow in range(order%2, order+1, 2):
+            res = res + xpow * legcoeffs[pow]
+            xpow = xpow * xsq
+        return res
+
+    # y: (*xshape)
+    y = x*0+1
+    if order > 0:
+        ym1 = y
+        y = x
+        for i in range(2, order+1):
+            ym2 = ym1
+            ym1 = y
+            y = ym1 * x * ((2.0*i-1.0)/i) - ym2 * ((i-1.0)/i)
+    return y
+
+@torch.jit.script
+def deriv_legval(x:torch.Tensor, order:int):
+    assert order >= 0, "Order must be a non-negative integer"
+
+    # for small order, use the saved coefficients for fast calculation
+    # for higher order, use the recursive equation for stable calculation
+
     if order == 0:
-        return x * 0
-    for pow in range(2-order%2, order+1, 2):
-        res = res + pow * x**(pow-1) * legcoeffs[pow]
-    return res
+        return x*0
+
+    elif order <= 8:
+        legcoeffs = _get_legcoeff(order)
+        res = x*0
+        xsq = x*x
+        xpow = x if order%2 == 0 else x*0+1
+        for pow in range(2-order%2, order+1, 2):
+            res = res + pow * xpow * legcoeffs[pow]
+            xpow = xpow * xsq
+        return res
+
+    else:
+        # y: (*xshape)
+        coeffs = torch.arange(order, dtype=x.dtype, device=x.device) * 2. + 1.
+        addition = order % 2
+        y = x*0+1
+        res = x*0
+        if addition % 2 == 1:
+            res = res + y * coeffs[0]
+        if order > 0:
+            ym1 = y
+            y = x
+            if addition % 2 == 0:
+                res = res + y * coeffs[1]
+            for i in range(2, order):
+                ym2 = ym1
+                ym1 = y
+                y = ym1 * x * ((2.0*i-1.0)/i) - ym2 * ((i-1.0)/i)
+                if (i + addition) % 2 == 1:
+                    res = res + y * coeffs[i]
+        return res
 
 def legvander(x, order, orderfirst=False):
     # x: (..., nx)
@@ -112,6 +169,7 @@ def legvander(x, order, orderfirst=False):
     else:
         return y
 
+################# associated legendre polynomial #################
 def assoclegval(cost, l, m):
     sint = torch.sqrt(1-cost*cost)
     assert m <= l, "m must not be greater than l"
