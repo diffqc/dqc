@@ -212,11 +212,15 @@ def runtest_grad(grid, prof, deriv_profs, rtol, atol):
     assert ndim == len(deriv_profs), "The deriv profiles must match the dimension of the grid"
     if ndim > 2: ndim = 2 # ???
 
+    pm = prof.abs().max()
     for i in range(ndim):
-        pm = deriv_profs[i].abs().max()
         dprof = grid.grad(prof, idim=i, dim=0)
         p1 = dprof/pm
         p2 = deriv_profs[i]/pm
+        # import matplotlib.pyplot as plt
+        # plt.plot(p1.reshape(-1))
+        # plt.plot(p2.reshape(-1), alpha=0.3)
+        # plt.show()
         assert torch.allclose(p1, p2, rtol=rtol, atol=atol)
 
 def runtest_laplace(grid, prof, laplace_prof, rtol, atol):
