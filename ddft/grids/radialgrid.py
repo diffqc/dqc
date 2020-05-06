@@ -234,9 +234,6 @@ class LegendreRadialShiftExp(LegendreRadialTransform):
     def get_scaling(self, rs):
         return (rs + self.rmin) * self.logrmm * 0.5
 
-    def get_d2q_dr2(self, rs):
-        return -2 / self.logrmm / ((rs + self.rmin)*(rs + self.rmin))
-
     #################### editable module parts ####################
     def getparams(self, methodname):
         if methodname == "solve_poisson":
