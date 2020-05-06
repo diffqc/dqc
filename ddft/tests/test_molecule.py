@@ -78,16 +78,21 @@ def test_mol_grad():
     # gradgradcheck(get_energy, (a, p, atomzs, atomposs, False))
 
 def test_vibration():
+    plot = False
     all_dists = {
         "H2": torch.tensor(
-            [1.475, 1.4775, 1.48, 1.481, 1.4825, 1.485],
+            ([0.5, 0.75, 1.0, 1.25] if plot else []) +
+            [1.475, 1.4775, 1.48, 1.481, 1.4825, 1.485] +
+            ([1.5, 1.75, 2.0, 2.5] if plot else []),
             dtype=dtype),
         "Li2": torch.tensor(
-            [3.11, 3.12, 3.13, 3.14, 3.15, 3.16, 3.17, 3.18, 3.19, 3.2, 3.21],
+            ([1.0, 1.5, 2.0, 2.2, 2.5, 2.7, 3.0] if plot else []) +
+            [3.11, 3.12, 3.13, 3.14, 3.15, 3.16, 3.17, 3.18, 3.19, 3.2, 3.21] +
+            ([3.25, 3.5, 4.0] if plot else []),
             dtype=dtype)
     }
     for molname,dists in all_dists.items():
-        runtest_vibration(molname, dists)
+        runtest_vibration(molname, dists, plot=plot)
 
 def runtest_vibration(molname, dists, plot=False):
     def get_energy(a, p, dist):
@@ -106,8 +111,9 @@ def runtest_vibration(molname, dists, plot=False):
 
     energies = [float(get_energy(a, p, dist).view(-1)[0]) for dist in dists]
     if plot:
-        plt.plot(dists, energies)
+        plt.plot(dists, energies, 'o-')
         plt.show()
+        return
 
     # get the minimum index
     min_idx = 0
