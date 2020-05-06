@@ -150,15 +150,22 @@ if __name__ == "__main__":
     class PseudoLDA(BaseEKS):
         def __init__(self, a, p):
             super(PseudoLDA, self).__init__()
-            self.a = torch.nn.Parameter(a)
-            self.p = torch.nn.Parameter(p)
+            self.a = a
+            self.p = p
 
         def forward(self, density):
             return self.a * safepow(density.abs(), self.p)
 
+        def getfwdparams(self):
+            return [self.a, self.p]
+
+        def setfwdparams(self, *params):
+            self.a, self.p = params[:2]
+            return 2
+
     # setup the molecule's atoms positions
-    atomzs = torch.tensor([1.0, 1.0], dtype=dtype)
-    distance = torch.tensor([1.0], dtype=dtype).requires_grad_()
+    atomzs = torch.tensor([7.0, 7.0], dtype=dtype)
+    distance = torch.tensor([3.0], dtype=dtype).requires_grad_()
 
     # pseudo-lda eks model
     a = torch.tensor([-0.7385587663820223]).to(dtype).requires_grad_()
@@ -178,7 +185,8 @@ if __name__ == "__main__":
     if mode == "fwd":
         t0 = time.time()
         atompos = torch.tensor([[-distance[0]/2.0, 0.0, 0.0], [distance[0]/2.0, 0.0, 0.0]], dtype=dtype)
-        energy, density = molecule(atomzs, atompos, eks_model=eks_model, optimize_basis=False)
+        energy, density = molecule(atomzs, atompos, eks_model=eks_model, optimize_basis=False,
+            scf_options={"verbose":True})
         ion_energy = ion_coulomb_energy(atomzs, atompos)
         print("Electron energy: %f" % (energy-ion_energy))
         print("Ion energy: %f" % ion_energy)
