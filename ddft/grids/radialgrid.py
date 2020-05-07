@@ -192,28 +192,49 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
         idxr = searchsorted(x, xq)
         idxr = torch.clamp(idxr, 1, nr-1)
         idxl = idxr - 1 # (nrq,) from (0 to nr-2)
-        xl = x[idxl].contiguous()
-        xr = x[idxr].contiguous()
-        yl = y[:,idxl].contiguous()
-        yr = y[:,idxr].contiguous()
-        kl = ks[:,idxl].contiguous()
-        kr = ks[:,idxr].contiguous()
 
-        dxrl = xr - xl # (nrq,)
-        dyrl = yr - yl # (nbatch, nrq)
+        if len(xq) > len(x):
+            # get the variables needed
+            yl = y[:,:-1]
+            xl = x[:-1]
+            dy = y[:,1:] - yl # (nbatch, nr-1)
+            dx = x[1:] - xl # (nr-1)
+            a = ks[:,:-1] * dx - dy # (nbatch, nr-1)
+            b = -ks[:,1:] * dx + dy # (nbatch, nr-1)
 
-        # calculate the coefficients of the large matrices
-        t = (xq - xl) / dxrl # (nrq,)
-        tinv = 1 - t # nrq
-        tta = t*tinv*tinv
-        ttb = t*tinv*t
-        tyl = tinv + tta - ttb
-        tyr = t - tta + ttb
-        tkl = tta * dxrl
-        tkr = -ttb * dxrl
+            # calculate the coefficients for the t-polynomial
+            p0 = yl # (nbatch, nr-1)
+            p1 = (dy + a) # (nbatch, nr-1)
+            p2 = (b - 2*a) # (nbatch, nr-1)
+            p3 = a - b # (nbatch, nr-1)
 
-        yq = yl*tyl + yr*tyr + kl*tkl + kr*tkr
-        return yq
+            t = (xq - xl[idxl]) / (dx[idxl]) # (nrq,)
+            yq = p0[:,idxl] + t * (p1[:,idxl] + t * (p2[:,idxl] + t * p3[:,idxl])) # (nbatch, nrq)
+            return yq
+
+        else:
+            xl = x[idxl].contiguous()
+            xr = x[idxr].contiguous()
+            yl = y[:,idxl].contiguous()
+            yr = y[:,idxr].contiguous()
+            kl = ks[:,idxl].contiguous()
+            kr = ks[:,idxr].contiguous()
+
+            dxrl = xr - xl # (nrq,)
+            dyrl = yr - yl # (nbatch, nrq)
+
+            # calculate the coefficients of the large matrices
+            t = (xq - xl) / dxrl # (nrq,)
+            tinv = 1 - t # nrq
+            tta = t*tinv*tinv
+            ttb = t*tinv*t
+            tyl = tinv + tta - ttb
+            tyr = t - tta + ttb
+            tkl = tta * dxrl
+            tkr = -ttb * dxrl
+
+            yq = yl*tyl + yr*tyr + kl*tkl + kr*tkr
+            return yq
 
 class LegendreRadialShiftExp(LegendreRadialTransform):
     def __init__(self, rmin, rmax, nr, dtype=torch.float, device=torch.device('cpu')):
