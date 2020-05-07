@@ -179,6 +179,7 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
         return self._spline_mat_inv_
 
     def _cubic_spline(self, xq, x, y):
+        # https://en.wikipedia.org/wiki/Spline_interpolation#Algorithm_to_find_the_interpolating_cubic_spline
         # xq: (nrq,)
         # x: (nr,)
         # y: (nbatch, nr)
