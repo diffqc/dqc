@@ -39,6 +39,13 @@ def get_molecule(molname, distance=None, with_energy=False):
         atomposs = distance * torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype)
         atomposs = atomposs.requires_grad_()
         energy = torch.tensor(-14.0419, dtype=dtype) # only works for LDA and 6-311++G** basis
+    elif molname == "N2":
+        if distance is None:
+            distance = 2.0
+        atomzs = torch.tensor([7.0, 7.0], dtype=dtype)
+        atomposs = distance * torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype)
+        atomposs = atomposs.requires_grad_()
+        energy = torch.tensor(-107.5768, dtype=dtype) # only works for LDA and cc-pvdz
     else:
         raise RuntimeError("Unknown molecule %s" % molname)
     if not with_energy:
@@ -50,6 +57,7 @@ def test_mol():
     molnames = {
         "H2" : "6-311++G**",
         "Li2": "6-311++G**",
+        "N2": "cc-pvdz",
     }
     for molname, basis in molnames.items():
         atomzs, atomposs, energy_true = get_molecule(molname, with_energy=True)
@@ -84,20 +92,24 @@ def test_mol_grad():
 
 def test_vibration():
     plot = False
-    basis = "cc-pvdz"
     all_dists = {
-        "H2": torch.tensor(
+        "H2": (torch.tensor(
             ([0.5, 0.75, 1.0, 1.25] if plot else []) +
             [1.475, 1.4775, 1.48, 1.481, 1.4825, 1.485] +
             ([1.5, 1.75, 2.0, 2.5] if plot else []),
-            dtype=dtype),
-        "Li2": torch.tensor(
+            dtype=dtype), "6-311++G**"),
+        "Li2": (torch.tensor(
             ([2.0, 3.0, 4.0, 4.5, 5.0] if plot else []) +
             [5.13, 5.15, 5.17, 5.2, 5.23, 5.25, 5.27, 5.3, 5.33] +
             ([5.5, 6.0, 7.0] if plot else []),
-            dtype=dtype),
+            dtype=dtype), "cc-pvdz"),
+        "N2": (torch.tensor(
+            ([1.0, 1.5] if plot else []) +
+            [2.05625, 2.0625, 2.06875, 2.075, 2.08125, 2.0875, 2.09375] +
+            ([3.0, 4.0] if plot else []),
+            dtype=dtype), "cc-pvdz"),
     }
-    for molname,dists in all_dists.items():
+    for molname,(dists, basis) in all_dists.items():
         runtest_vibration(molname, dists, basis=basis, plot=plot)
 
 def runtest_vibration(molname, dists, basis="cc-pvdz", plot=False):
