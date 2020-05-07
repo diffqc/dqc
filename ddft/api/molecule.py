@@ -25,6 +25,48 @@ def molecule(atomzs, atompos,
          angprec=13, lmax_poisson=4,
          dtype=torch.float64, device="cpu",
          eig_options=None, scf_options=None, bck_options=None):
+    """
+    Perform the restricted Kohn-Sham DFT calculation for a given molecule.
+
+    Arguments
+    ---------
+    * atomzs: torch.tensor (natoms,)
+        The tensor containing the atomic number in the molecule.
+    * atompos: torch.tensor (natoms, ndim)
+        The position of each atom.
+    * spin: int or None
+        The difference between the spin up and spin down electrons.
+    * eks_model: string or BaseEKS object
+        The total exchange-correlation energy object or string.
+    * basis: string
+        Basis to use for the molecule
+
+    * rmin, rmax, nr: float
+        The minimum, maximum, and number of points in the radial grid
+    * angprec: int
+        Angular precision of the grid
+    * lmax_poisson: int
+        The maximum angular momentum in solving the Poisson equation
+
+    * dtype: torch.dtype
+        The type of the tensors used for operation inside this function.
+    * device: torch.device or string
+        The device to store the tensors.
+
+    * eig_options: dict or None
+        Option for solving the eigendecomposition problem.
+    * scf_options: dict or None
+        Options for the self-consistent iteration.
+    * bck_options: dict or None
+        Options for the backward of self-consisten iteration (i.e. linear solve)
+
+    Returns
+    -------
+    * energy: torch.tensor
+        The total energy of the molecule
+    * density: torch.tensor
+        The electron density profile of the molecule
+    """
 
     # atomzs: (natoms,)
     # atompos: (natoms, ndim)
