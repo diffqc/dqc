@@ -17,7 +17,7 @@ __all__ = ["molecule"]
 
 def molecule(atomzs, atompos,
          eks_model="lda",
-         basis="6-311++G**",
+         basis="cc-pvdz",
          # gwmin=1e-5, gwmax=1e2, ng=60,
          optimize_basis=False,
          rmin=1e-5, rmax=1e2, nr=100,
