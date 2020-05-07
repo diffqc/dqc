@@ -77,7 +77,8 @@ def test_mol():
         assert torch.allclose(energy, energy_true)
 
 def test_mol_grad():
-    molnames = ["H2", "F2"]
+    profiling = False
+    molnames = ["H2", "N2"]
     molnames = molnames[0:1] # just to shorten the test time
     for molname in molnames:
         # setup the molecule's atoms positions
@@ -95,6 +96,16 @@ def test_mol_grad():
                 return energy
             elif output == "density":
                 return density.abs().sum()
+
+        if profiling:
+            t0 = time.time()
+            energy = get_energy(a, p, atomzs, atomposs, "energy")
+            t1 = time.time()
+            print("Forward: %.3es" % (t1-t0))
+            grads = torch.autograd.grad(energy, (a, p, atomposs))
+            t2 = time.time()
+            print("Backward: %.3es" % (t2-t1))
+            continue
 
         gradcheck(get_energy, (a, p, atomzs, atomposs, "energy"))
         gradcheck(get_energy, (a, p, atomzs, atomposs, "density"))
