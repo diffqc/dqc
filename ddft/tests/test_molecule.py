@@ -37,6 +37,10 @@ def get_molecule(molname, distance=None, with_energy=False):
         def_distance = 2.0
         atomz = 7.0
         energy = -107.5768 # only works for LDA and cc-pvdz
+    elif molname == "CO":
+        def_distance = 2.0
+        atomz = torch.tensor([6.0, 8.0], dtype=dtype)
+        energy = -111.3264 # only works for LDA and cc-pvdz
     elif molname == "F2":
         def_distance = 2.5
         atomz = 9.0
@@ -63,6 +67,7 @@ def test_mol():
         "Li2": "6-311++G**",
         "N2": "cc-pvdz",
         "F2": "cc-pvdz",
+        "CO": "cc-pvdz",
     }
     for molname, basis in molnames.items():
         atomzs, atomposs, energy_true = get_molecule(molname, with_energy=True)
@@ -113,6 +118,11 @@ def test_vibration():
             [2.05625, 2.0625, 2.06875, 2.075, 2.08125, 2.0875, 2.09375] +
             ([3.0, 4.0] if plot else []),
             dtype=dtype), "cc-pvdz"),
+        # "CO": (torch.tensor(
+        #     ([1.0, 1.5, 2.0] if plot else []) +
+        #     [2.125, 2.15625, 2.1875, 2.21875, 2.25, 2.28125, 2.3125] +
+        #     ([2.5, 3.0, 4.0] if plot else []),
+        #     dtype=dtype), "cc-pvdz"),
         # "F2": (torch.tensor(
         #     ([1.5, 2.0] if plot else []) +
         #     [2.45, 2.475, 2.5, 2.525, 2.55, 2.575, 2.6] +
