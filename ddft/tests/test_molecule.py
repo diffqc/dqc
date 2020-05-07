@@ -34,12 +34,11 @@ def get_molecule(molname, distance=None, with_energy=False):
         energy = torch.tensor(-0.976186, dtype=dtype) # only works for LDA and 6-311++G** basis
     elif molname == "Li2":
         if distance is None:
-            distance = 3.0
+            distance = 5.0
         atomzs = torch.tensor([3.0, 3.0], dtype=dtype)
         atomposs = distance * torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype)
         atomposs = atomposs.requires_grad_()
-        energy = torch.tensor(-14.1116, dtype=dtype) # only works for LDA and 6-311++G** basis
-        energy = torch.tensor(-14.1116, dtype=dtype) # only works for LDA
+        energy = torch.tensor(-14.0419, dtype=dtype) # only works for LDA and 6-311++G** basis
     else:
         raise RuntimeError("Unknown molecule %s" % molname)
     if not with_energy:
