@@ -1,0 +1,9 @@
+Reasons for non-convergence of self-consistent iteration:
+* inadequate basis
+    sol: trying more complete basis might help
+* presence of (near-)degenerate states
+    sol: this is hard problem, but might be solved in some cases by setting the
+         spin number in a molecule so that the degenerate states are evenly
+         occupied
+* inadequacy of algorithm
+    sol: tune the scf parameters or change the algorithm
