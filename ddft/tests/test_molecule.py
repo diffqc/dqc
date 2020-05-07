@@ -28,22 +28,27 @@ def get_molecule(molname, distance=None, with_energy=False):
     if molname == "H2":
         def_distance = 1.0
         atomz = 1.0
+        basis = "6-311++G**"
         energy = -0.976186 # only works for LDA and 6-311++G** basis
     elif molname == "Li2":
         def_distance = 5.0
         atomz = 3.0
+        basis = "6-311++G**"
         energy = -14.0419 # only works for LDA and 6-311++G** basis
     elif molname == "N2":
         def_distance = 2.0
         atomz = 7.0
+        basis = "cc-pvdz"
         energy = -107.5768 # only works for LDA and cc-pvdz
     elif molname == "CO":
         def_distance = 2.0
         atomz = torch.tensor([6.0, 8.0], dtype=dtype)
+        basis = "cc-pvdz"
         energy = -111.3264 # only works for LDA and cc-pvdz
     elif molname == "F2":
         def_distance = 2.5
         atomz = 9.0
+        basis = "cc-pvdz"
         energy = -196.7553 # only works for LDA and cc-pvdz
     else:
         raise RuntimeError("Unknown molecule %s" % molname)
@@ -57,20 +62,14 @@ def get_molecule(molname, distance=None, with_energy=False):
     atomposs = atomposs.requires_grad_()
 
     if not with_energy:
-        return atomzs, atomposs
+        return atomzs, atomposs, basis
     else:
-        return atomzs, atomposs, energy
+        return atomzs, atomposs, basis, energy
 
 def test_mol():
-    molnames = {
-        "H2" : "6-311++G**",
-        "Li2": "6-311++G**",
-        "N2": "cc-pvdz",
-        "F2": "cc-pvdz",
-        "CO": "cc-pvdz",
-    }
-    for molname, basis in molnames.items():
-        atomzs, atomposs, energy_true = get_molecule(molname, with_energy=True)
+    molnames = ["H2", "Li2", "N2", "F2", "CO"]
+    for molname in molnames:
+        atomzs, atomposs, basis, energy_true = get_molecule(molname, with_energy=True)
         a = torch.tensor([-0.7385587663820223]).to(dtype).requires_grad_()
         p = torch.tensor([4./3]).to(dtype).requires_grad_()
         eks_model = PseudoLDA(a, p)
@@ -78,70 +77,96 @@ def test_mol():
         assert torch.allclose(energy, energy_true)
 
 def test_mol_grad():
-    # setup the molecule's atoms positions
-    atomzs, atomposs = get_molecule("H2")
-    basis = "6-311++G**"
+    molnames = ["H2", "F2"]
+    molnames = molnames[0:1] # just to shorten the test time
+    for molname in molnames:
+        # setup the molecule's atoms positions
+        atomzs, atomposs, basis = get_molecule(molname)
 
-    # pseudo-lda eks model
-    a = torch.tensor([-0.7385587663820223]).to(dtype).requires_grad_()
-    p = torch.tensor([4./3]).to(dtype).requires_grad_()
+        # pseudo-lda eks model
+        a = torch.tensor([-0.7385587663820223]).to(dtype).requires_grad_()
+        p = torch.tensor([4./3]).to(dtype).requires_grad_()
 
-    def get_energy(a, p, atomzs, atomposs, output="energy"):
-        eks_model = PseudoLDA(a, p)
-        energy, density = molecule(atomzs, atomposs, eks_model=eks_model,
-            basis=basis)
-        if output == "energy":
-            return energy
-        elif output == "density":
-            return density.abs().sum()
+        def get_energy(a, p, atomzs, atomposs, output="energy"):
+            eks_model = PseudoLDA(a, p)
+            energy, density = molecule(atomzs, atomposs, eks_model=eks_model,
+                basis=basis)
+            if output == "energy":
+                return energy
+            elif output == "density":
+                return density.abs().sum()
 
-    gradcheck(get_energy, (a, p, atomzs, atomposs, "energy"))
-    gradcheck(get_energy, (a, p, atomzs, atomposs, "density"))
-    # gradgradcheck(get_energy, (a, p, atomzs, atomposs, "energy"))
-    # gradgradcheck(get_energy, (a, p, atomzs, atomposs, False))
+        gradcheck(get_energy, (a, p, atomzs, atomposs, "energy"))
+        gradcheck(get_energy, (a, p, atomzs, atomposs, "density"))
+        # gradgradcheck(get_energy, (a, p, atomzs, atomposs, "energy"))
+        # gradgradcheck(get_energy, (a, p, atomzs, atomposs, False))
 
 def test_vibration():
     plot = False
+    toshow = ["H2", "N2"]
     all_dists = {
-        "H2": (torch.tensor(
-            ([0.5, 0.75, 1.0, 1.25] if plot else []) +
-            [1.475, 1.4775, 1.48, 1.481, 1.4825, 1.485] +
-            ([1.5, 1.75, 2.0, 2.5] if plot else []),
-            dtype=dtype), "6-311++G**"),
-        "Li2": (torch.tensor(
-            ([2.0, 3.0, 4.0, 4.5, 5.0] if plot else []) +
-            [5.13, 5.15, 5.17, 5.2, 5.23, 5.25, 5.27, 5.3, 5.33] +
-            ([5.5, 6.0, 7.0] if plot else []),
-            dtype=dtype), "cc-pvdz"),
-        "N2": (torch.tensor(
-            ([1.0, 1.5] if plot else []) +
-            [2.05625, 2.0625, 2.06875, 2.075, 2.08125, 2.0875, 2.09375] +
-            ([3.0, 4.0] if plot else []),
-            dtype=dtype), "cc-pvdz"),
-        # "CO": (torch.tensor(
-        #     ([1.0, 1.5, 2.0] if plot else []) +
-        #     [2.125, 2.15625, 2.1875, 2.21875, 2.25, 2.28125, 2.3125] +
-        #     ([2.5, 3.0, 4.0] if plot else []),
-        #     dtype=dtype), "cc-pvdz"),
-        # "F2": (torch.tensor(
-        #     ([1.5, 2.0] if plot else []) +
-        #     [2.45, 2.475, 2.5, 2.525, 2.55, 2.575, 2.6] +
-        #     ([3.0] if plot else []),
-        #     dtype=dtype), "cc-pvdz"),
+        "H2": {
+            "dists": torch.tensor(
+                ([0.5, 0.75, 1.0, 1.25] if plot else []) +
+                [1.475, 1.4775, 1.48, 1.481, 1.4825, 1.485] +
+                ([1.5, 1.75, 2.0, 2.5] if plot else []),
+                dtype=dtype),
+            "scfmethod": "selfconsistent",
+        },
+        "Li2": {
+            "dists": torch.tensor(
+                ([2.0, 3.0, 4.0, 4.5, 5.0] if plot else []) +
+                [5.13, 5.15, 5.17, 5.2, 5.23, 5.25, 5.27, 5.3, 5.33] +
+                ([5.5, 6.0, 7.0] if plot else []),
+                dtype=dtype),
+            "scfmethod": "selfconsistent",
+        },
+        "N2": {
+            "dists": torch.tensor(
+                ([1.0, 1.5] if plot else []) +
+                [2.05625, 2.0625, 2.06875, 2.075, 2.08125, 2.0875, 2.09375] +
+                ([3.0, 4.0] if plot else []),
+                dtype=dtype),
+            "scfmethod": "selfconsistent",
+        },
+        "CO": {
+            "dists": torch.tensor(
+                ([1.0, 1.5, 2.0] if plot else []) +
+                [2.125, 2.15625, 2.1875, 2.21875, 2.25, 2.28125, 2.3125] +
+                ([2.5, 3.0, 4.0] if plot else []),
+                dtype=dtype),
+            "scfmethod": "np_broyden1",
+        },
+        "F2": {
+            "dists": torch.tensor(
+                ([1.5, 2.0] if plot else []) +
+                [2.45, 2.475, 2.5, 2.525, 2.55, 2.575, 2.6] +
+                ([3.0] if plot else []),
+                dtype=dtype),
+            "scfmethod": "selfconsistent",
+        },
     }
-    for molname,(dists, basis) in all_dists.items():
-        runtest_vibration(molname, dists, basis=basis, plot=plot)
+    for molname,dct in all_dists.items():
+        if toshow != None and molname not in toshow: continue
+        dists = dct["dists"]
+        scfmethod = dct["scfmethod"]
+        runtest_vibration(molname, dists, plot=plot, scf_method=scfmethod)
 
-def runtest_vibration(molname, dists, basis="cc-pvdz", plot=False):
+def runtest_vibration(molname, dists, scf_method="selfconsistent",
+        plot=False):
     def get_energy(a, p, dist):
         bck_options = {
             "max_niter": 100,
         }
-        atomzs, atomposs = get_molecule(molname, distance=dist)
+        scf_options = {
+            "method": scf_method,
+        }
+        atomzs, atomposs, basis = get_molecule(molname, distance=dist)
         eks_model = PseudoLDA(a, p)
         energy, density = molecule(atomzs, atomposs, basis=basis,
             eks_model=eks_model,
-            bck_options=bck_options)
+            bck_options=bck_options,
+            scf_options=scf_options)
         return energy
 
     # pseudo-lda eks model
