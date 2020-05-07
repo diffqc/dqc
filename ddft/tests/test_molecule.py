@@ -26,28 +26,28 @@ class PseudoLDA(BaseEKS):
 
 def get_molecule(molname, distance=None, with_energy=False):
     if molname == "H2":
-        if distance is None:
-            distance = 1.0
-        atomzs = torch.tensor([1.0, 1.0], dtype=dtype)
-        atomposs = distance * torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype)
-        atomposs = atomposs.requires_grad_()
-        energy = torch.tensor(-0.976186, dtype=dtype) # only works for LDA and 6-311++G** basis
+        def_distance = 1.0
+        atomz = 1.0
+        energy = -0.976186 # only works for LDA and 6-311++G** basis
     elif molname == "Li2":
-        if distance is None:
-            distance = 5.0
-        atomzs = torch.tensor([3.0, 3.0], dtype=dtype)
-        atomposs = distance * torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype)
-        atomposs = atomposs.requires_grad_()
-        energy = torch.tensor(-14.0419, dtype=dtype) # only works for LDA and 6-311++G** basis
+        def_distance = 5.0
+        atomz = 3.0
+        energy = -14.0419 # only works for LDA and 6-311++G** basis
     elif molname == "N2":
-        if distance is None:
-            distance = 2.0
-        atomzs = torch.tensor([7.0, 7.0], dtype=dtype)
-        atomposs = distance * torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype)
-        atomposs = atomposs.requires_grad_()
-        energy = torch.tensor(-107.5768, dtype=dtype) # only works for LDA and cc-pvdz
+        def_distance = 2.0
+        atomz = 7.0
+        energy = -107.5768 # only works for LDA and cc-pvdz
     else:
         raise RuntimeError("Unknown molecule %s" % molname)
+
+    # setup the tensors
+    if distance is None:
+        distance = def_distance
+    energy = torch.tensor(energy, dtype=dtype)
+    atomzs = torch.tensor([1.0, 1.0], dtype=dtype) * atomz
+    atomposs = distance * torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype)
+    atomposs = atomposs.requires_grad_()
+
     if not with_energy:
         return atomzs, atomposs
     else:
