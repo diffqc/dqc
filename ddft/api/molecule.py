@@ -16,6 +16,7 @@ from ddft.eks import BaseEKS, Hartree, xLDA
 __all__ = ["molecule"]
 
 def molecule(atomzs, atompos,
+         spin=None,
          eks_model="lda",
          basis="cc-pvdz",
          # gwmin=1e-5, gwmax=1e2, ng=60,
@@ -77,9 +78,15 @@ def molecule(atomzs, atompos,
 
     # set up the occupation number
     nelectrons = int(atomzs.sum())
-    nlowest = (nelectrons // 2) + (nelectrons % 2)
+    if spin is None:
+        spin = nelectrons % 2
+    assert spin <= nelectrons, "spin cannot be greater than the number of electrons"
+    assert (nelectrons - spin) % 2 == 0, "Cannot fulfill the desired number of spins"
+    nspindown = (nelectrons - spin) // 2
+    nspinup = nspindown + spin
+    nlowest = nspinup
     focc = torch.ones(nlowest, dtype=dtype, device=device).unsqueeze(0)
-    focc[:,:nelectrons//2] = 2.0
+    focc[:,:nspindown] = 2.0
 
     # setup the modules
     H_model = b.get_hamiltonian(grid)
