@@ -122,7 +122,7 @@ class RadialGrid(BaseGrid):
         else:
             raise RuntimeError("Unimplemented %s for setparams" % methodname)
 
-class LegendreRadialTransform(RadialGrid):
+class LegendreRadialGrid(RadialGrid):
     def __init__(self, nx, transformobj, dtype=torch.float, device=torch.device('cpu')):
         xleggauss, wleggauss = leggauss(nx)
         self.xleggauss = torch.tensor(xleggauss, dtype=dtype, device=device)
@@ -200,13 +200,13 @@ class LegendreRadialTransform(RadialGrid):
         else:
             return super().setparams(methodname, *params)
 
-class LegendreRadialShiftExp(LegendreRadialTransform):
+class LegendreRadialShiftExp(LegendreRadialGrid):
     def __init__(self, rmin, rmax, nr, dtype=torch.float, device=torch.device('cpu')):
         # setup the parameters needed for the transformation
         transformobj = ShiftExp(rmin, rmax, nr, dtype=dtype, device=device)
         super(LegendreRadialShiftExp, self).__init__(nr, transformobj, dtype=dtype, device=device)
 
-class LegendreRadialDoubleExp2(LegendreRadialTransform):
+class LegendreRadialDoubleExp2(LegendreRadialGrid):
     def __init__(self, alpha, rmin, rmax, nr, dtype=torch.float, device=torch.device('cpu')):
         # setup the parameters needed for the transformation
         transformobj = DoubleExp2(alpha, rmin, rmax, nr, dtype=dtype, device=device)
