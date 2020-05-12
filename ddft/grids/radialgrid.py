@@ -122,6 +122,70 @@ class RadialGrid(BaseGrid):
         else:
             raise RuntimeError("Unimplemented %s for setparams" % methodname)
 
+class NaiveRadialGrid(RadialGrid):
+    def __init__(self, nx, transformobj, dtype=torch.float, device=torch.device('cpu')):
+        self.x = torch.linspace(-1, 1, nx)
+        self.w = self.x[1] - self.x[0]
+        self._boxshape = (nx,)
+        self._interpolator = CubicSpline(self.x)
+
+        self._transformobj = transformobj
+        self.rs = self.transformobj.transform(self.x)
+        self._rgrid = self.rs.unsqueeze(-1) # (nx, 1)
+
+        # integration elements
+        self._scaling = self.transformobj.get_scaling(self.rs) # dr/dg
+        self._dr = self._scaling * self.w
+        self._dvolume = (4*np.pi*self.rs*self.rs) * self._dr
+
+    @property
+    def interpolator(self):
+        return self._interpolator
+
+    @property
+    def transformobj(self):
+        return self._transformobj
+
+    def get_dvolume(self):
+        return self._dvolume
+
+    @property
+    def rgrid(self):
+        return self._rgrid
+
+    @property
+    def boxshape(self):
+        return self._boxshape
+
+    def grad(self, p, dim=-1, idim=0):
+        if dim != -1:
+            p = p.transpose(dim, -1) # (..., nr)
+
+        dpdq = torch.cat((
+            p[:,1:2] - p[:,0:1],
+            (p[:,2:] - p[:,:-2])*0.5,
+            p[:,-1].unsqueeze(-1) - p[:,-2:-1],
+        ), dim=-1) # (..., nr)
+
+        # get the derivative w.r.t. r
+        dpdr = dpdq / self.transformobj.get_scaling(self.rgrid[:,0])
+        if dim != -1:
+            dpdr = dpdr.transpose(dim, -1)
+        return dpdr
+
+    def getparams(self, methodname):
+        if methodname == "get_dvolume":
+            return [self._dvolume]
+        else:
+            return super().getparams(methodname)
+
+    def setparams(self, methodname, *params):
+        if methodname == "get_dvolume":
+            self._dvolume, = params[:1]
+            return 1
+        else:
+            return super().setparams(methodname, *params)
+
 class LegendreRadialGrid(RadialGrid):
     def __init__(self, nx, transformobj, dtype=torch.float, device=torch.device('cpu')):
         xleggauss, wleggauss = leggauss(nx)
