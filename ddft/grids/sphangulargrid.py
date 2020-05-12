@@ -4,6 +4,7 @@ import torch
 import numpy as np
 import ddft
 from ddft.grids.base_grid import BaseGrid, BaseTransformed1DGrid, BaseRadialAngularGrid
+from ddft.grids.radialgrid import RadialGrid
 from ddft.utils.spharmonics import spharmonics, vspharmonics
 
 class Lebedev(BaseRadialAngularGrid):
@@ -11,8 +12,8 @@ class Lebedev(BaseRadialAngularGrid):
         super(Lebedev, self).__init__()
 
         # radgrid must be a BaseTransformed1DGrid
-        if not isinstance(radgrid, BaseTransformed1DGrid):
-            raise TypeError("Argument radgrid must be a BaseTransformed1DGrid")
+        if not isinstance(radgrid, RadialGrid):
+            raise TypeError("Argument radgrid must be a RadialGrid")
 
         # cached variables
         self._basis_ = None

@@ -1,4 +1,4 @@
-from abc import abstractmethod
+from abc import abstractmethod, abstractproperty
 import torch
 import numpy as np
 from numpy.polynomial.legendre import leggauss
@@ -7,37 +7,18 @@ from ddft.utils.legendre import legint, legvander, legder, deriv_legval
 from ddft.utils.interp import CubicSpline
 from ddft.grids.radialtransform import ShiftExp, DoubleExp2
 
-class LegendreRadialTransform(BaseTransformed1DGrid):
-    def __init__(self, nx, transformobj, dtype=torch.float, device=torch.device('cpu')):
-        xleggauss, wleggauss = leggauss(nx)
-        self.xleggauss = torch.tensor(xleggauss, dtype=dtype, device=device)
-        self.wleggauss = torch.tensor(wleggauss, dtype=dtype, device=device)
-        self._boxshape = (nx,)
-        self.interpolator = CubicSpline(self.xleggauss)
+class RadialGrid(BaseGrid):
+    @abstractproperty
+    def interpolator(self):
+        pass
 
-        self.transformobj = transformobj
-        self.rs = self.transformobj.transform(self.xleggauss)
-        self._rgrid = self.rs.unsqueeze(-1) # (nx, 1)
+    @abstractproperty
+    def transformobj(self):
+        pass
 
-        # integration elements
-        self._scaling = self.transformobj.get_scaling(self.rs) # dr/dg
-        self._dr = self._scaling * self.wleggauss
-        self._dvolume = (4*np.pi*self.rs*self.rs) * self._dr
-
-        # legendre basis (from tinydft/tinygrid.py)
-        self.basis = legvander(self.xleggauss, nx-1, orderfirst=True) # (nr, nr)
-        self.inv_basis = self.basis.inverse()
-
-        # # construct the differentiation matrix
-        # dlegval = deriv_legval(self.xleggauss, nx)
-        # eye = torch.eye(nx, dtype=dtype, device=device)
-        # dxleg = self.xleggauss - self.xleggauss.unsqueeze(-1) + eye
-        # dmat = dlegval / (dlegval.unsqueeze(-1) * dxleg) # (nr, nr)
-        # dmat_diag = self.xleggauss / (1. - self.xleggauss) / (1 + self.xleggauss) # (nr,)
-        # self.diff_matrix = dmat * (1.-eye) + torch.diag_embed(dmat_diag)
-
+    @abstractmethod
     def get_dvolume(self):
-        return self._dvolume
+        pass
 
     def solve_poisson(self, f):
         # f: (nbatch, nr)
@@ -49,8 +30,9 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
         # where rless = min(r,r1) and rgreat = max(r,r1)
 
         # calculate the matrix rless / rgreat
-        rless = torch.min(self.rs.unsqueeze(-1), self.rs) # (nr, nr)
-        rgreat = torch.max(self.rs.unsqueeze(-1), self.rs)
+        rs = self.rgrid[:,0]
+        rless = torch.min(rs.unsqueeze(-1), rs) # (nr, nr)
+        rgreat = torch.max(rs.unsqueeze(-1), rs)
         rratio = 1. / rgreat
 
         # the integralbox for radial grid is integral[4*pi*r^2 f(r) dr] while here
@@ -60,14 +42,6 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
         vrad_lm = self.integralbox(intgn / (4*np.pi), dim=-1)
 
         return -vrad_lm
-
-    @property
-    def rgrid(self):
-        return self._rgrid
-
-    @property
-    def boxshape(self):
-        return self._boxshape
 
     def interpolate(self, f, rq, extrap=None):
         # f: (nbatch, nr)
@@ -108,6 +82,94 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
 
         return frq
 
+    @abstractmethod
+    def grad(self, p, dim, idim):
+        pass
+
+    def laplace(self, p, dim=-1):
+        if dim != -1:
+            p = p.transpose(dim, -1) # p: (..., nr)
+
+        pder1 = self.grad(p)
+        pder2 = self.grad(pder1)
+        res = pder2 + 2 * pder1 / (self.rgrid[:,0] + 1e-15)
+
+        if dim != -1:
+            res = res.transpose(dim, -1)
+        return res
+
+    def getparams(self, methodname):
+        if methodname == "solve_poisson":
+            return self.getparams("get_dvolume")
+        elif methodname == "interpolate":
+            return self.transformobj.getparams("invtransform") + \
+                   self.interpolator.getparams("interp")
+        elif methodname == "laplace":
+            return self.getparams("laplace")
+        else:
+            raise RuntimeError("Unimplemented %s for getparams" % methodname)
+
+    def setparams(self, methodname, *params):
+        if methodname == "solve_poisson":
+            return self.setparams("get_dvolume", *params)
+        elif methodname == "interpolate":
+            idx = 0
+            idx += self.transformobj.setparams("invtransform", *params)
+            idx += self.interpolator.setparams("interp", *params[idx:])
+            return idx
+        elif methodname == "laplace":
+            return self.setparams("laplace", *params)
+        else:
+            raise RuntimeError("Unimplemented %s for setparams" % methodname)
+
+class LegendreRadialTransform(RadialGrid):
+    def __init__(self, nx, transformobj, dtype=torch.float, device=torch.device('cpu')):
+        xleggauss, wleggauss = leggauss(nx)
+        self.xleggauss = torch.tensor(xleggauss, dtype=dtype, device=device)
+        self.wleggauss = torch.tensor(wleggauss, dtype=dtype, device=device)
+        self._boxshape = (nx,)
+        self._interpolator = CubicSpline(self.xleggauss)
+
+        self._transformobj = transformobj
+        self.rs = self.transformobj.transform(self.xleggauss)
+        self._rgrid = self.rs.unsqueeze(-1) # (nx, 1)
+
+        # integration elements
+        self._scaling = self.transformobj.get_scaling(self.rs) # dr/dg
+        self._dr = self._scaling * self.wleggauss
+        self._dvolume = (4*np.pi*self.rs*self.rs) * self._dr
+
+        # legendre basis (from tinydft/tinygrid.py)
+        self.basis = legvander(self.xleggauss, nx-1, orderfirst=True) # (nr, nr)
+        self.inv_basis = self.basis.inverse()
+
+        # # construct the differentiation matrix
+        # dlegval = deriv_legval(self.xleggauss, nx)
+        # eye = torch.eye(nx, dtype=dtype, device=device)
+        # dxleg = self.xleggauss - self.xleggauss.unsqueeze(-1) + eye
+        # dmat = dlegval / (dlegval.unsqueeze(-1) * dxleg) # (nr, nr)
+        # dmat_diag = self.xleggauss / (1. - self.xleggauss) / (1 + self.xleggauss) # (nr,)
+        # self.diff_matrix = dmat * (1.-eye) + torch.diag_embed(dmat_diag)
+
+    @property
+    def interpolator(self):
+        return self._interpolator
+
+    @property
+    def transformobj(self):
+        return self._transformobj
+
+    def get_dvolume(self):
+        return self._dvolume
+
+    @property
+    def rgrid(self):
+        return self._rgrid
+
+    @property
+    def boxshape(self):
+        return self._boxshape
+
     def grad(self, p, dim=-1, idim=0):
         if dim != -1:
             p = p.transpose(dim, -1) # (..., nr)
@@ -125,43 +187,18 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
             dpdr = dpdr.transpose(dim, -1)
         return dpdr
 
-    def laplace(self, p, dim=-1):
-        if dim != -1:
-            p = p.transpose(dim, -1) # p: (..., nr)
-
-        pder1 = self.grad(p)
-        pder2 = self.grad(pder1)
-        res = pder2 + 2 * pder1 / (self.rs + 1e-15)
-
-        if dim != -1:
-            res = res.transpose(dim, -1)
-        return res
-
     def getparams(self, methodname):
-        if methodname == "interpolate":
-            return self.transformobj.getparams("invtransform") + \
-                   self.interpolator.getparams("interp")
-        elif methodname == "solve_poisson":
-            return [self.rs, self._dvolume]
-        elif methodname == "get_dvolume":
+        if methodname == "get_dvolume":
             return [self._dvolume]
         else:
-            raise RuntimeError("The method %s has not been specified for getparams" % methodname)
+            return super().getparams(methodname)
 
     def setparams(self, methodname, *params):
-        if methodname == "interpolate":
-            idx = 0
-            idx += self.transformobj.setparams("invtransform", *params[idx:])
-            idx += self.interpolator.setparams("interp", *params[idx:])
-            return idx
-        elif methodname == "solve_poisson":
-            self.rs, self._dvolume = params[:2]
-            return 2
-        elif methodname == "get_dvolume":
+        if methodname == "get_dvolume":
             self._dvolume, = params[:1]
             return 1
         else:
-            raise RuntimeError("The method %s has not been specified for setparams" % methodname)
+            return super().setparams(methodname, *params)
 
 class LegendreRadialShiftExp(LegendreRadialTransform):
     def __init__(self, rmin, rmax, nr, dtype=torch.float, device=torch.device('cpu')):
