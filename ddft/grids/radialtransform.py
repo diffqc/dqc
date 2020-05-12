@@ -21,14 +21,20 @@ class ShiftExp(BaseTransformed1DGrid):
 
     #################### editable module parts ####################
     def getparams(self, methodname):
-        if methodname == "invtransform":
+        if methodname == "invtransform" or methodname == "transform":
             return [self.logrmin, self.logrmm]
+        elif methodname == "get_scaling":
+            return [self.logrmm]
         else:
             raise RuntimeError("Unimplemented %s method for getparams" % methodname)
 
     def setparams(self, methodname, *params):
-        if methodname == "invtransform":
+        if methodname == "invtransform" or methodname == "transform":
             self.logrmin, self.logrmm = params[:2]
             return 2
+        elif methodname == "get_scaling":
+            self.logrmm, = params[:1]
+            return 1
         else:
             raise RuntimeError("Unimplemented %s method for setparams" % methodname)
+
