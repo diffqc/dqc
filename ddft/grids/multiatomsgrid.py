@@ -12,7 +12,7 @@ class BeckeMultiGrid(BaseMultiAtomsGrid):
 
     Arguments
     ---------
-    * atomgrid: Base3DGrid
+    * atomgrid: Base3DGrid or list of Base3DGrid
         The grid for each individual atom.
     * atompos: torch.tensor (natoms, 3)
         The position of each atom.
@@ -25,28 +25,40 @@ class BeckeMultiGrid(BaseMultiAtomsGrid):
         super(BeckeMultiGrid, self).__init__()
 
         # atomgrid must be a 3DGrid
-        if not isinstance(atomgrid, Base3DGrid):
-            raise TypeError("Argument atomgrid must be a Base3DGrid")
+        if not isinstance(atomgrid, Base3DGrid) and not hasattr(atomgrid, "__iter__"):
+            raise TypeError("Argument atomgrid must be a Base3DGrid or a list of Base3DGrid")
 
         natoms = atompos.shape[0]
         self.natoms = natoms
         self.atompos = atompos
         self.atomradius = atomradius
 
+        if isinstance(atomgrid, Base3DGrid):
+            self.same_grid = True
+            self._atomgrids = [atomgrid for _ in range(natoms)]
+        else:
+            self.same_grid = False
+            self._atomgrids = atomgrid
+
+        # construct the size of each grids
+        self.ngrids = np.asarray([gr.rgrid.shape[0] for gr in self._atomgrids])
+        self.idx_grids_r = np.cumsum(self.ngrids)
+        self.idx_grids_l = self.idx_grids_r - self.ngrids
+        self.same_sizes = np.all(self.ngrids == self.ngrids[0])
+
         # obtain the grid position
-        self._atomgrid = atomgrid
-        rgrid_atom = atomgrid.rgrid_in_xyz # (ngrid, 3)
-        rgrid = rgrid_atom + atompos.unsqueeze(1) # (natoms, ngrid, 3)
-        self._rgrid = rgrid.view(-1, rgrid.shape[-1]) # (natoms*ngrid, 3)
+        # list of natoms (ngrid, 3)
+        self._rgrid = [(gr.rgrid_in_xyz + pos) for (gr,pos) in zip(self._atomgrids, atompos)]
+        self._rgrid = torch.cat(self._rgrid, dim=0) # (nr, 3)
 
         # obtain the dvolume
-        dvolume_atom = atomgrid.get_dvolume().repeat(natoms) # (natoms*ngrid,)
-        weights_atom = self.get_atom_weights().view(-1) # (natoms*ngrid,)
-        self._dvolume = dvolume_atom * weights_atom
+        dvolume_atoms = torch.cat([gr.get_dvolume() for gr in self._atomgrids], dim=0) # (nr,)
+        weights_atoms = self.get_atom_weights() # (nr,)
+        self._dvolume = dvolume_atoms * weights_atoms
 
     @property
-    def atom_grid(self):
-        return self._atomgrid
+    def atom_grids(self):
+        return self._atomgrids
 
     def get_atom_weights(self):
         xyz = self.rgrid_in_xyz # (nr, 3)
@@ -75,8 +87,14 @@ class BeckeMultiGrid(BaseMultiAtomsGrid):
         p = s.prod(dim=0) # (natoms, nr)
         p = p / p.sum(dim=0, keepdim=True) # (natoms, nr)
 
-        watoms0 = p.view(self.natoms, self.natoms, -1) # (natoms, natoms, ngrid)
-        watoms = watoms0.diagonal(dim1=0, dim2=1).transpose(-2,-1).contiguous() # (natoms, ngrid)
+        if self.same_sizes:
+            watoms0 = p.view(self.natoms, self.natoms, -1) # (natoms, natoms, ngrid)
+            watoms = watoms0.diagonal(dim1=0, dim2=1).transpose(-2,-1).contiguous().view(-1) # (natoms*ngrid)
+        else:
+            watoms_list = []
+            for i in range(self.natoms):
+                watoms_list.append(p[i,self.idx_grids_l[i]:self.idx_grids_r[i]]) # (ngrid)
+            watoms = torch.cat(watoms_list, dim=0) # (nr,)
         return watoms
 
     def get_dvolume(self):
@@ -86,39 +104,45 @@ class BeckeMultiGrid(BaseMultiAtomsGrid):
         # f: (nbatch, nr)
         # split the f first
         nbatch = f.shape[0]
-        fatoms = f.view(nbatch, self.natoms, -1) * self.get_atom_weights() # (nbatch, natoms, ngrid)
-        natoms = self.atom_grid.integralbox(-fatoms / (4*np.pi), dim=-1) # (nbatch, natoms)
-        fatoms = fatoms.contiguous().view(-1, fatoms.shape[-1]) # (nbatch*natoms, ngrid)
+        fatoms = f * self.get_atom_weights() # (nbatch, nr)
+        fatoms_list = []
+        for i in range(self.natoms):
+            fatoms_list.append(fatoms[:,self.idx_grids_l[i]:self.idx_grids_r[i]]) # (nbatch, ngrid)
 
-        Vatoms = self.atom_grid.solve_poisson(fatoms).view(nbatch, self.natoms, -1) # (nbatch, natoms, ngrid)
+        natoms_list = []
+        Vatoms_list = []
+        for (agr,fa) in zip(self.atom_grids, fatoms_list):
+            natoms_list.append(agr.integralbox(-fa/(4*np.pi), dim=-1)) # (nbatch,)
+            Vatoms_list.append(agr.solve_poisson(fa)) # (nbatch, ngrid)
+
         def get_extrap_fcn(iatom):
-            natom = natoms[:,iatom] # (nbatch,)
+            natom = natoms_list[iatom] # (nbatch,)
             # rgrid: (nrextrap, ndim)
             extrapfcn = lambda rgrid: natom.unsqueeze(-1) / (rgrid[:,0] + 1e-12)
             return extrapfcn
 
         # get the grid outside the original grid for the indexed atom
         def get_outside_rgrid(iatom):
-            rgrid = self._rgrid.view(self.natoms, -1, self._rgrid.shape[-1]) # (natoms, ngrid, ndim)
-            res = torch.cat((rgrid[:iatom,:,:], rgrid[iatom+1:,:,:]), dim=0) # (natoms-1, ngrid, ndim)
-            return res.view(-1, res.shape[-1]) # ((natoms-1) * ngrid, ndim)
+            rgrid = self._rgrid # (nr, ndim)
+            res = torch.cat((rgrid[:self.idx_grids_l[iatom],:], rgrid[self.idx_grids_r[iatom]:,:]), dim=0)
+            return res
 
         if self.natoms == 1:
-            return Vatoms.view(Vatoms.shape[0], -1) # (nbatch, natoms*ngrid)
+            return Vatoms_list[0]
 
-        # combine the potentials with interpolation and extrapolation
-        Vtot = torch.zeros_like(Vatoms).to(Vatoms.device).view(nbatch, -1) # (nbatch, natoms*ngrid)
+        # perform interpolation and extrapolation
+        Vtot = torch.zeros_like(fatoms).to(fatoms.device) # (nbatch, nr)
         for i in range(self.natoms):
-            gridxyz = get_outside_rgrid(i) - self.atompos[i,:] # ((natoms-1)*ngrid, 3)
-            gridi = self.atom_grid.xyz_to_rgrid(gridxyz)
-            Vinterp = self.atom_grid.interpolate(Vatoms[:,i,:], gridi,
+            agr = self.atom_grids[i]
+            gridxyz = get_outside_rgrid(i) - self.atompos[i,:] # ((natoms-1)*ngrid, ndim)
+            gridi = agr.xyz_to_rgrid(gridxyz)
+            Vinterp = agr.interpolate(Vatoms_list[i], gridi,
                 extrap=get_extrap_fcn(i)) # (nbatch, (natoms-1)*ngrid)
-            Vinterp = Vinterp.view(Vinterp.shape[0], self.natoms-1, -1) # (nbatch, natoms-1, ngrid)
 
-            # combine the interpolated function with the original function
-            Vinterp = torch.cat((Vinterp[:,:i,:], Vatoms[:,i:i+1,:], Vinterp[:,i:,:]), dim=1).view(Vinterp.shape[0], -1)
-            Vtot += Vinterp
-
+            idxl = self.idx_grids_l[i]
+            Vinterp = torch.cat(
+                (Vinterp[:,:idxl], Vatoms_list[i], Vinterp[:,idxl:]), dim=1)
+            Vtot = Vtot + Vinterp
         return Vtot
 
     @property
@@ -139,10 +163,13 @@ class BeckeMultiGrid(BaseMultiAtomsGrid):
             # return [self.atompos, self._atomgrid.phithetargrid,
             #         self._atomgrid.wphitheta, self._atomgrid.radgrid._dvolume,
             #         self._atomgrid.radrgrid, self._rgrid]
-            return [self.atompos, self._rgrid] + \
-                    self.atom_grid.getparams("get_dvolume") + \
-                    self.atom_grid.getparams("solve_poisson") + \
-                    self.atom_grid.getparams("interpolate")
+            if self.same_grid:
+                return [self.atompos, self._rgrid] + \
+                        self.atom_grids[0].getparams("get_dvolume") + \
+                        self.atom_grids[0].getparams("solve_poisson") + \
+                        self.atom_grids[0].getparams("interpolate")
+            else:
+                raise RuntimeError("Unimplemented")
         elif methodname == "get_dvolume":
             return [self._dvolume]
         else:
@@ -152,9 +179,12 @@ class BeckeMultiGrid(BaseMultiAtomsGrid):
         if methodname == "solve_poisson":
             idx = 2
             self.atompos, self._rgrid = params[:idx]
-            idx += self.atom_grid.setparams("get_dvolume", *params[idx:])
-            idx += self.atom_grid.setparams("solve_poisson", *params[idx:])
-            idx += self.atom_grid.setparams("interpolate", *params[idx:])
+            if self.same_grid:
+                idx += self.atom_grids[0].setparams("get_dvolume", *params[idx:])
+                idx += self.atom_grids[0].setparams("solve_poisson", *params[idx:])
+                idx += self.atom_grids[0].setparams("interpolate", *params[idx:])
+            else:
+                raise RuntimeError("Unimplemented")
             return idx
         elif methodname == "get_dvolume":
             self._dvolume, = params[:1]

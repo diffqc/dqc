@@ -241,9 +241,9 @@ class BaseRadialAngularGrid(Base3DGrid):
 
 class BaseMultiAtomsGrid(Base3DGrid):
     @abstractproperty
-    def atom_grid(self):
+    def atom_grids(self):
         """
-        Returns the grid for individual atom.
+        Returns the grids for individual atom.
         """
         pass
 
