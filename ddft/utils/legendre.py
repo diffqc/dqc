@@ -273,7 +273,32 @@ def assoclegval(cost, l, m):
         elif m == 8:
             return 2027025 * sint**8
     else:
-        raise RuntimeError("The associated legendre polynomial order %d has not been implemented" % l)
+        return assoclegval_iter(cost, l, m)
+
+def assoclegval_iter(cost, l, m):
+    # TODO: please check
+    pll = 1.0
+    for mi in range(m):
+        li = mi
+        pll = -(2*li + 1) * sint * pll
+    li = m
+    mi = m
+    pml_m1 = pll
+    if l == m:
+        return pll
+
+    pml = pll * cost * (2*m+1)
+    li = li + 1
+    if l == m + 1:
+        return pml
+
+    while li < l:
+        pml_p1 = ((2*li + 1) * cost * pml - (li + mi) * pml_m1) / (li - mi + 1.)
+        li += 1
+        pml_m1 = pml
+        pml = pml_p1
+
+    return pml_p1
 
 def deriv_assoclegval_azimuth(cost, l, m):
     sint = torch.sqrt(1-cost*cost)
