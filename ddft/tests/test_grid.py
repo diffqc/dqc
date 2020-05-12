@@ -3,11 +3,11 @@ import torch
 import numpy as np
 from scipy.special import gamma, gammaincc
 from ddft.grids.base_grid import BaseRadialAngularGrid
-from ddft.grids.radialgrid import LegendreRadialShiftExp
+from ddft.grids.radialgrid import LegendreRadialShiftExp, LegendreRadialDoubleExp2
 from ddft.grids.sphangulargrid import Lebedev
 from ddft.grids.multiatomsgrid import BeckeMultiGrid
 
-radial_gridnames = ["legradialshiftexp"]
+radial_gridnames = ["legradialshiftexp", "legradialdoubleexp2"]
 radial_fcnnames = ["gauss1", "exp1"]
 radial_fcnnames_deriv_friendly = ["gauss0"]
 sph_gridnames = ["lebedev"]
@@ -239,32 +239,41 @@ def get_rtol_atol(taskname, gridname1, gridname2=None):
         "integralbox": {
             # this is compared to 1, so rtol has the same effect as atol
             "legradialshiftexp": [1e-8, 0.0],
+            "legradialdoubleexp2": [1e-5, 0.0],
             "lebedev": {
                 "legradialshiftexp": [1e-8, 0.0],
+                "legradialdoubleexp2": [1e-5, 0.0],
             },
             "becke": [5e-4, 0.0],
         },
         "poisson": {
             "legradialshiftexp": [0.0, 8e-4],
+            "legradialdoubleexp2": [0.0, 6e-4],
             "lebedev": {
                 "legradialshiftexp": [0.0, 2e-3],
+                "legradialdoubleexp2": [0.0, 2e-3],
             },
             "becke": [2e-3, 8e-3],
         },
         "interpolate": {
             "legradialshiftexp": [0.0, 8e-4],
+            "legradialdoubleexp2": [0.0, 7e-4],
             "lebedev": {
                 "legradialshiftexp": [0.0, 8e-4],
+                "legradialdoubleexp2": [0.0, 8e-4],
             }
         },
         "grad": {
             "legradialshiftexp": [1e-6, 8e-5],
+            "legradialdoubleexp2": [1e-6, 2e-5],
             "lebedev": {
                 "legradialshiftexp": [1e-6, 8e-5],
+                "legradialdoubleexp2": [1e-6, 2e-5],
             }
         },
         "laplace": {
             "legradialshiftexp": [0.0, 4e-4],
+            "legradialdoubleexp2": [0.0, 6e-4],
             "lebedev": {
                 "legradialshiftexp": [0.0, 4e-4],
             }
@@ -280,6 +289,8 @@ def get_radial_grid(gridname, dtype, device):
         # the max radius is chosen to be quite small ~50 to test the tail of
         # poisson with the extrapolation function for multiatomsgrid
         grid = LegendreRadialShiftExp(1e-6, 5e1, 400, dtype=dtype, device=device)
+    elif gridname == "legradialdoubleexp2":
+        grid = LegendreRadialDoubleExp2(2.0, 1e-6, 5e1, 400, dtype=dtype, device=device)
     else:
         raise RuntimeError("Unknown radial grid name: %s" % gridname)
     return grid

@@ -45,14 +45,20 @@ class DoubleExp2(BaseTransformed1DGrid):
         if not isinstance(alpha, torch.Tensor):
             alpha = torch.tensor(alpha, dtype=dtype, device=device)
         self.alpha = alpha
-        self.xmin = self.invtransform(torch.tensor(rmin, dtype=dtype, device=device))
-        self.xmax = self.invtransform(torch.tensor(rmax, dtype=dtype, device=device))
+        self.xmin = self.rtox(torch.tensor([rmin], dtype=dtype, device=device))
+        self.xmax = self.rtox(torch.tensor([rmax], dtype=dtype, device=device))
 
     def transform(self, xlg):
         x = (xlg+1)*0.5 * (self.xmax - self.xmin) + self.xmin
-        return torch.exp(self.alpha*x - torch.exp(-x))
+        rs = torch.exp(self.alpha*x - torch.exp(-x))
+        return rs
 
     def invtransform(self, rs):
+        x = self.rtox(rs)
+        xlg = (x - self.xmin) / (self.xmax - self.xmin) * 2 - 1
+        return xlg
+
+    def rtox(self, rs):
         logrs = torch.log(rs)
         def iter_fcn(x, logrs, inv_alpha):
             return inv_alpha * (logrs + torch.exp(-x))
@@ -60,12 +66,13 @@ class DoubleExp2(BaseTransformed1DGrid):
 
         # lt.equilibrium works with batching, so append the first dimension
         x = lt.equilibrium(iter_fcn, x0.unsqueeze(0),
-            params=[logrs.unsqueeze(0), 1./self.alpha.unsqueeze(0)]).squeeze(0)
+            params=[logrs.unsqueeze(0), 1./self.alpha.unsqueeze(0)],
+            fwd_options={"method": "np_broyden1"}).squeeze(0)
         return x
 
     def get_scaling(self, rs):
-        x = self.invtransform(rs)
-        return rs * (self.alpha - torch.exp(-x))
+        x = self.rtox(rs)
+        return rs * (self.alpha + torch.exp(-x)) * 0.5 * (self.xmax - self.xmin)
 
     #################### editable module parts ####################
     def getparams(self, methodname):
