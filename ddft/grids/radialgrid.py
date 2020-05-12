@@ -9,9 +9,6 @@ from ddft.grids.radialtransform import ShiftExp, DoubleExp2
 
 class LegendreRadialTransform(BaseTransformed1DGrid):
     def __init__(self, nx, transformobj, dtype=torch.float, device=torch.device('cpu')):
-        # cache variables
-        self._spline_mat_inv_ = None
-
         xleggauss, wleggauss = leggauss(nx)
         self.xleggauss = torch.tensor(xleggauss, dtype=dtype, device=device)
         self.wleggauss = torch.tensor(wleggauss, dtype=dtype, device=device)
@@ -71,10 +68,6 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
     @property
     def boxshape(self):
         return self._boxshape
-
-    @property
-    def rgrid(self):
-        return self._rgrid
 
     def interpolate(self, f, rq, extrap=None):
         # f: (nbatch, nr)
