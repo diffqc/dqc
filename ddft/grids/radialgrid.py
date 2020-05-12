@@ -5,9 +5,10 @@ from numpy.polynomial.legendre import leggauss
 from ddft.grids.base_grid import BaseGrid, BaseTransformed1DGrid
 from ddft.utils.legendre import legint, legvander, legder, deriv_legval
 from ddft.utils.interp import CubicSpline
+from ddft.grids.radialtransform import ShiftExp
 
 class LegendreRadialTransform(BaseTransformed1DGrid):
-    def __init__(self, nx, dtype=torch.float, device=torch.device('cpu')):
+    def __init__(self, nx, transformobj, dtype=torch.float, device=torch.device('cpu')):
         # cache variables
         self._spline_mat_inv_ = None
 
@@ -17,11 +18,12 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
         self._boxshape = (nx,)
         self.interpolator = CubicSpline(self.xleggauss)
 
-        self.rs = self.transform(self.xleggauss)
+        self.transformobj = transformobj
+        self.rs = self.transformobj.transform(self.xleggauss)
         self._rgrid = self.rs.unsqueeze(-1) # (nx, 1)
 
         # integration elements
-        self._scaling = self.get_scaling(self.rs) # dr/dg
+        self._scaling = self.transformobj.get_scaling(self.rs) # dr/dg
         self._dr = self._scaling * self.wleggauss
         self._dvolume = (4*np.pi*self.rs*self.rs) * self._dr
 
@@ -92,7 +94,7 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
 
         # doing the interpolation
         # cubic interpolation is slower, but more robust on backward gradient
-        xq = self.invtransform(rqinterp) # (nrq,)
+        xq = self.transformobj.invtransform(rqinterp) # (nrq,)
         frqinterp = self.interpolator.interp(f, xq)
         # coeff = torch.matmul(f, self.inv_basis) # (nbatch, nr)
         # basis = legvander(xq, nr-1, orderfirst=True)
@@ -125,7 +127,7 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
         # dpdq = torch.matmul(p, self.diff_matrix)
 
         # get the derivative w.r.t. r
-        dpdr = dpdq / self.get_scaling(self.rgrid[:,0])
+        dpdr = dpdq / self.transformobj.get_scaling(self.rgrid[:,0])
         if dim != -1:
             dpdr = dpdr.transpose(dim, -1)
         return dpdr
@@ -144,7 +146,7 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
 
     def getparams(self, methodname):
         if methodname == "interpolate":
-            return self.getparams("invtransform") + \
+            return self.transformobj.getparams("invtransform") + \
                    self.interpolator.getparams("interp")
         elif methodname == "solve_poisson":
             return [self.rs, self._dvolume]
@@ -156,7 +158,7 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
     def setparams(self, methodname, *params):
         if methodname == "interpolate":
             idx = 0
-            idx += self.setparams("invtransform", *params[idx:])
+            idx += self.transformobj.setparams("invtransform", *params[idx:])
             idx += self.interpolator.setparams("interp", *params[idx:])
             return idx
         elif methodname == "solve_poisson":
@@ -171,35 +173,8 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
 class LegendreRadialShiftExp(LegendreRadialTransform):
     def __init__(self, rmin, rmax, nr, dtype=torch.float, device=torch.device('cpu')):
         # setup the parameters needed for the transformation
-        self.rmin = rmin
-        self.logrmin = torch.tensor(np.log(rmin)).to(dtype).to(device)
-        self.logrmax = torch.tensor(np.log(rmax)).to(dtype).to(device)
-        self.logrmm = self.logrmax - self.logrmin
-
-        super(LegendreRadialShiftExp, self).__init__(nr, dtype, device)
-
-    def transform(self, xlg):
-        return torch.exp((xlg + 1)*0.5 * self.logrmm + self.logrmin) - self.rmin
-
-    def invtransform(self, rs):
-        return (torch.log(rs + self.rmin) - self.logrmin) / (0.5 * self.logrmm) - 1.0
-
-    def get_scaling(self, rs):
-        return (rs + self.rmin) * self.logrmm * 0.5
-
-    #################### editable module parts ####################
-    def getparams(self, methodname):
-        if methodname == "invtransform":
-            return [self.logrmin, self.logrmm]
-        else:
-            return super().getparams(methodname)
-
-    def setparams(self, methodname, *params):
-        if methodname == "invtransform":
-            self.logrmin, self.logrmm = params[:2]
-            return 2
-        else:
-            return super().setparams(methodname, *params)
+        transformobj = ShiftExp(rmin, rmax, nr, dtype=dtype, device=device)
+        super(LegendreRadialShiftExp, self).__init__(nr, transformobj, dtype=dtype, device=device)
 
 if __name__ == "__main__":
     import lintorch as lt
