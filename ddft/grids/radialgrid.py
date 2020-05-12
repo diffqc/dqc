@@ -5,7 +5,7 @@ from numpy.polynomial.legendre import leggauss
 from ddft.grids.base_grid import BaseGrid, BaseTransformed1DGrid
 from ddft.utils.legendre import legint, legvander, legder, deriv_legval
 from ddft.utils.interp import CubicSpline
-from ddft.grids.radialtransform import ShiftExp
+from ddft.grids.radialtransform import ShiftExp, DoubleExp2
 
 class LegendreRadialTransform(BaseTransformed1DGrid):
     def __init__(self, nx, transformobj, dtype=torch.float, device=torch.device('cpu')):
@@ -175,6 +175,12 @@ class LegendreRadialShiftExp(LegendreRadialTransform):
         # setup the parameters needed for the transformation
         transformobj = ShiftExp(rmin, rmax, nr, dtype=dtype, device=device)
         super(LegendreRadialShiftExp, self).__init__(nr, transformobj, dtype=dtype, device=device)
+
+class LegendreRadialDoubleExp2(LegendreRadialTransform):
+    def __init__(self, alpha, rmin, rmax, nr, dtype=torch.float, device=torch.device('cpu')):
+        # setup the parameters needed for the transformation
+        transformobj = DoubleExp2(alpha, rmin, rmax, nr, dtype=dtype, device=device)
+        super(LegendreRadialDoubleExp2, self).__init__(nr, transformobj, dtype=dtype, device=device)
 
 if __name__ == "__main__":
     import lintorch as lt

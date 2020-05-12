@@ -42,10 +42,11 @@ class ShiftExp(BaseTransformed1DGrid):
 class DoubleExp2(BaseTransformed1DGrid):
     def __init__(self, alpha, rmin, rmax, nr, dtype=torch.float, device=torch.device('cpu')):
         # setup the parameters needed for the transformation
+        if not isinstance(alpha, torch.Tensor):
+            alpha = torch.tensor(alpha, dtype=dtype, device=device)
         self.alpha = alpha
-        self.xmin = self.invtransform(rmin)
-        self.xmax = self.invtransform(rmax)
-        self.x = torch.linspace(self.xmin, self.xmax, nr, dtype=dtype, device=device)
+        self.xmin = self.invtransform(torch.tensor(rmin, dtype=dtype, device=device))
+        self.xmax = self.invtransform(torch.tensor(rmax, dtype=dtype, device=device))
 
     def transform(self, xlg):
         x = (xlg+1)*0.5 * (self.xmax - self.xmin) + self.xmin
@@ -56,7 +57,10 @@ class DoubleExp2(BaseTransformed1DGrid):
         def iter_fcn(x, logrs, inv_alpha):
             return inv_alpha * (logrs + torch.exp(-x))
         x0 = torch.zeros_like(rs).to(rs.device)
-        x = lt.equilibrium(iter_fcn, x0, params=[logrs, 1./self.alpha])
+
+        # lt.equilibrium works with batching, so append the first dimension
+        x = lt.equilibrium(iter_fcn, x0.unsqueeze(0),
+            params=[logrs.unsqueeze(0), 1./self.alpha.unsqueeze(0)]).squeeze(0)
         return x
 
     def get_scaling(self, rs):
