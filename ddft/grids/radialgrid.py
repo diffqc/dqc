@@ -4,7 +4,7 @@ import numpy as np
 from numpy.polynomial.legendre import leggauss
 from ddft.grids.base_grid import BaseGrid, BaseTransformed1DGrid
 from ddft.utils.legendre import legint, legvander, legder, deriv_legval
-from ddft.utils.interp import searchsorted
+from ddft.utils.interp import CubicSpline
 
 class LegendreRadialTransform(BaseTransformed1DGrid):
     def __init__(self, nx, dtype=torch.float, device=torch.device('cpu')):
@@ -15,6 +15,7 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
         self.xleggauss = torch.tensor(xleggauss, dtype=dtype, device=device)
         self.wleggauss = torch.tensor(wleggauss, dtype=dtype, device=device)
         self._boxshape = (nx,)
+        self.interpolator = CubicSpline(self.xleggauss)
 
         self.rs = self.transform(self.xleggauss)
         self._rgrid = self.rs.unsqueeze(-1) # (nx, 1)
@@ -92,7 +93,7 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
         # doing the interpolation
         # cubic interpolation is slower, but more robust on backward gradient
         xq = self.invtransform(rqinterp) # (nrq,)
-        frqinterp = self._cubic_spline(xq, self.xleggauss, f) # cubic spline
+        frqinterp = self.interpolator.interp(f, xq)
         # coeff = torch.matmul(f, self.inv_basis) # (nbatch, nr)
         # basis = legvander(xq, nr-1, orderfirst=True)
         # frqinterp = torch.matmul(coeff, basis)
@@ -141,101 +142,31 @@ class LegendreRadialTransform(BaseTransformed1DGrid):
             res = res.transpose(dim, -1)
         return res
 
-    def _get_spline_mat_inverse(self):
-        if self._spline_mat_inv_ is None:
-            nx = self.xleggauss.shape[0]
-            device = self.xleggauss.device
-            dtype = self.xleggauss.dtype
-
-            # construct the matrix for the left hand side
-            dxinv0 = 1./(self.xleggauss[1:] - self.xleggauss[:-1]) # (nx-1,)
-            dxinv = torch.cat((dxinv0[:1]*0, dxinv0, dxinv0[-1:]*0), dim=0)
-            diag = (dxinv[:-1] + dxinv[1:]) * 2 # (nx,)
-            offdiag = dxinv0 # (nx-1,)
-            spline_mat = torch.zeros(nx, nx, dtype=dtype, device=device)
-            spdiag = spline_mat.diagonal()
-            spudiag = spline_mat.diagonal(offset=1)
-            spldiag = spline_mat.diagonal(offset=-1)
-            spdiag[:] = diag
-            spudiag[:] = offdiag
-            spldiag[:] = offdiag
-
-            # construct the matrix on the right hand side
-            dxinv2 = (dxinv * dxinv) * 3
-            diagr = (dxinv2[:-1] - dxinv2[1:])
-            udiagr = dxinv2[1:-1]
-            ldiagr = -udiagr
-            matr = torch.zeros(nx, nx, dtype=dtype, device=device)
-            matrdiag = matr.diagonal()
-            matrudiag = matr.diagonal(offset=1)
-            matrldiag = matr.diagonal(offset=-1)
-            matrdiag[:] = diagr
-            matrudiag[:] = udiagr
-            matrldiag[:] = ldiagr
-
-            # solve the matrix inverse
-            spline_mat_inv, _ = torch.solve(matr, spline_mat)
-            self._spline_mat_inv_ = spline_mat_inv
-        return self._spline_mat_inv_
-
-    def _cubic_spline(self, xq, x, y):
-        # https://en.wikipedia.org/wiki/Spline_interpolation#Algorithm_to_find_the_interpolating_cubic_spline
-        # xq: (nrq,)
-        # x: (nr,)
-        # y: (nbatch, nr)
-
-        # get the k-vector (i.e. the gradient at every points)
-        spline_mat_inv = self._get_spline_mat_inverse()
-        ks = torch.matmul(y, spline_mat_inv.transpose(-2,-1)) # (nbatch, nr)
-
-        # find the index location of xq
-        nr = x.shape[0]
-        idxr = searchsorted(x, xq)
-        idxr = torch.clamp(idxr, 1, nr-1)
-        idxl = idxr - 1 # (nrq,) from (0 to nr-2)
-
-        if len(xq) > len(x):
-            # get the variables needed
-            yl = y[:,:-1]
-            xl = x[:-1]
-            dy = y[:,1:] - yl # (nbatch, nr-1)
-            dx = x[1:] - xl # (nr-1)
-            a = ks[:,:-1] * dx - dy # (nbatch, nr-1)
-            b = -ks[:,1:] * dx + dy # (nbatch, nr-1)
-
-            # calculate the coefficients for the t-polynomial
-            p0 = yl # (nbatch, nr-1)
-            p1 = (dy + a) # (nbatch, nr-1)
-            p2 = (b - 2*a) # (nbatch, nr-1)
-            p3 = a - b # (nbatch, nr-1)
-
-            t = (xq - xl[idxl]) / (dx[idxl]) # (nrq,)
-            yq = p0[:,idxl] + t * (p1[:,idxl] + t * (p2[:,idxl] + t * p3[:,idxl])) # (nbatch, nrq)
-            return yq
-
+    def getparams(self, methodname):
+        if methodname == "interpolate":
+            return self.getparams("invtransform") + \
+                   self.interpolator.getparams("interp")
+        elif methodname == "solve_poisson":
+            return [self.rs, self._dvolume]
+        elif methodname == "get_dvolume":
+            return [self._dvolume]
         else:
-            xl = x[idxl].contiguous()
-            xr = x[idxr].contiguous()
-            yl = y[:,idxl].contiguous()
-            yr = y[:,idxr].contiguous()
-            kl = ks[:,idxl].contiguous()
-            kr = ks[:,idxr].contiguous()
+            raise RuntimeError("The method %s has not been specified for getparams" % methodname)
 
-            dxrl = xr - xl # (nrq,)
-            dyrl = yr - yl # (nbatch, nrq)
-
-            # calculate the coefficients of the large matrices
-            t = (xq - xl) / dxrl # (nrq,)
-            tinv = 1 - t # nrq
-            tta = t*tinv*tinv
-            ttb = t*tinv*t
-            tyl = tinv + tta - ttb
-            tyr = t - tta + ttb
-            tkl = tta * dxrl
-            tkr = -ttb * dxrl
-
-            yq = yl*tyl + yr*tyr + kl*tkl + kr*tkr
-            return yq
+    def setparams(self, methodname, *params):
+        if methodname == "interpolate":
+            idx = 0
+            idx += self.setparams("invtransform", *params[idx:])
+            idx += self.interpolator.setparams("interp", *params[idx:])
+            return idx
+        elif methodname == "solve_poisson":
+            self.rs, self._dvolume = params[:2]
+            return 2
+        elif methodname == "get_dvolume":
+            self._dvolume, = params[:1]
+            return 1
+        else:
+            raise RuntimeError("The method %s has not been specified for setparams" % methodname)
 
 class LegendreRadialShiftExp(LegendreRadialTransform):
     def __init__(self, rmin, rmax, nr, dtype=torch.float, device=torch.device('cpu')):
@@ -258,27 +189,17 @@ class LegendreRadialShiftExp(LegendreRadialTransform):
 
     #################### editable module parts ####################
     def getparams(self, methodname):
-        if methodname == "solve_poisson":
-            return [self.rs, self._dvolume]
-        elif methodname == "interpolate":
-            return [self.logrmin, self.logrmm, self.xleggauss, self._spline_mat_inv_]
-        elif methodname == "get_dvolume":
-            return [self._dvolume]
+        if methodname == "invtransform":
+            return [self.logrmin, self.logrmm]
         else:
-            raise RuntimeError("The method %s has not been specified for getparams" % methodname)
+            return super().getparams(methodname)
 
     def setparams(self, methodname, *params):
-        if methodname == "solve_poisson":
-            self.rs, self._dvolume = params[:2]
+        if methodname == "invtransform":
+            self.logrmin, self.logrmm = params[:2]
             return 2
-        elif methodname == "interpolate":
-            self.logrmin, self.logrmm, self.xleggauss, self._spline_mat_inv_ = params[:4]
-            return 4
-        elif methodname == "get_dvolume":
-            self._dvolume, = params[:1]
-            return 1
         else:
-            raise RuntimeError("The method %s has not been specified for setparams" % methodname)
+            return super().setparams(methodname, *params)
 
 if __name__ == "__main__":
     import lintorch as lt
