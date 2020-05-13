@@ -34,7 +34,7 @@ def get_molecule(molname, distance=None, with_energy=False):
         def_distance = 5.0
         atomz = 3.0
         basis = "6-311++G**"
-        energy = -14.0419 # only works for LDA and 6-311++G** basis
+        energy = -14.3768 # only works for LDA and 6-311++G** basis
     elif molname == "N2":
         def_distance = 2.0
         atomz = 7.0
@@ -69,6 +69,7 @@ def get_molecule(molname, distance=None, with_energy=False):
 def test_mol():
     molnames = ["H2", "Li2", "N2", "F2", "CO"]
     for molname in molnames:
+        print(molname)
         atomzs, atomposs, basis, energy_true = get_molecule(molname, with_energy=True)
         a = torch.tensor([-0.7385587663820223]).to(dtype).requires_grad_()
         p = torch.tensor([4./3]).to(dtype).requires_grad_()

@@ -59,30 +59,29 @@ class CGTOBasis(BaseBasisModule):
             line = lines.pop(0)
             if line.startswith("**"): break
             spdf, nelmt_str, _ = line.split()
-            spdfs.append(spdf)
+            spdf = spdf.lower()
             nelmt = int(nelmt_str)
 
-            alpha = []
-            coeff = []
-            angmom = []
+            all_elmts = []
             for i in range(nelmt):
                 line = lines.pop(0)
                 line = line.replace("D", "E")
                 elmts = [float(s) for s in line.split()]
-                if len(elmts) == 2:
+                all_elmts.append(elmts)
+
+            for i,spdf_letter in enumerate(spdf):
+                alpha = []
+                coeff = []
+                angmom = []
+                for j in range(nelmt):
+                    elmts = all_elmts[j]
                     alpha.append(elmts[0])
-                    coeff.append(elmts[1])
-                    angmom.append(to_angmom(spdf))
-                elif len(elmts) == 3:
-                    alpha.append(elmts[0])
-                    coeff.append(elmts[1])
-                    angmom.append(to_angmom(spdf[0]))
-                    alpha.append(elmts[0])
-                    coeff.append(elmts[2])
-                    angmom.append(to_angmom(spdf[1]))
-            alphas.append(alpha)
-            coeffs.append(coeff)
-            angmoms.append(angmom)
+                    coeff.append(elmts[1+i])
+                    angmom.append(to_angmom(spdf_letter))
+                alphas.append(alpha)
+                coeffs.append(coeff)
+                angmoms.append(angmom)
+                spdfs.append(spdf_letter)
 
         # save the results
         ijks, alphas, coeffs = expand_basis(spdfs, alphas, coeffs, cartesian=cartesian)
