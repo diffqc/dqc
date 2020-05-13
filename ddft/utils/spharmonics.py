@@ -2,9 +2,10 @@ import torch
 import numpy as np
 from ddft.utils.legendre import legval, deriv_assoclegval, deriv_assoclegval_azimuth
 
-def spharmonics(cost, phi, maxangmom):
+@torch.jit.script
+def spharmonics(cost:torch.Tensor, phi:torch.Tensor, maxangmom:int):
     # ref: https://www.overleaf.com/read/kwbhpjfdzyvt
-    nsh = (maxangmom+1)**2
+    nsh = (maxangmom+1)*(maxangmom+1)
     nphitheta = phi.shape[0]
     sint = torch.sqrt(1-cost*cost)
 
@@ -17,13 +18,15 @@ def spharmonics(cost, phi, maxangmom):
     row = 0
     for m in range(maxangmom+1):
         yml_orig = yml
-        nrm = np.sqrt(2.) if m != 0 else 1.0
+        nrm = 2.**.5 if m != 0 else 1.0
+        cosphi = torch.cos(m*phi) * nrm
+        sinphi = torch.sin(m*phi) * nrm
         for l in range(m, maxangmom+1):
-            angbasis[row] = yml * nrm * torch.cos(m*phi)
+            angbasis[row] = yml * cosphi
             angmoms[row] = l
             row += 1
             if m != 0:
-                angbasis[row] = yml * nrm * torch.sin(m*phi)
+                angbasis[row] = yml * sinphi
                 angmoms[row] = l
                 row += 1
             if l == maxangmom:
@@ -33,17 +36,17 @@ def spharmonics(cost, phi, maxangmom):
             yml_m2 = yml_m1
             yml_m1 = yml
             if l == m:
-                yml = cost * yml_m1 * np.sqrt(2*l+3.)
+                yml = cost * yml_m1 * (2*l+3.)**.5
             else:
-                a = np.sqrt((2*l+3.) / (l-m+1.) / (l+m+1.))
-                yml = (cost * yml_m1 * (np.sqrt(2*l+1.) * a) - yml_m2 * (a*np.sqrt((l*l-m*m) / (2*l-1.))) )
+                a = ((2*l+3.) / (l-m+1.) / (l+m+1.))**.5
+                yml = (cost * yml_m1 * ((2*l+1.)**.5 * a) - yml_m2 * (a * ((l*l-m*m) / (2*l-1.))**.5) )
 
         if m == maxangmom:
             continue
 
         # prepare for the next m-iteration
         yml_m1 = yml_orig
-        yml = np.sqrt((2*m+3.)/(2*m+2.)) * sint * yml_m1
+        yml = ((2*m+3.)/(2*m+2.))**.5 * sint * yml_m1
     return angbasis, angmoms
 
 def vspharmonics(iphitheta, costheta, phi, maxangmom):
