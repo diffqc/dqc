@@ -71,17 +71,17 @@ def test_radial_grad():
     for gridname, fcnname in product(radial_gridnames, radial_fcnnames+radial_fcnnames_deriv_friendly):
         runtest(gridname, fcnname)
 
-def test_spherical_grad():
-    def runtest(spgridname, radgridname, fcnname):
-        radgrid = get_radial_grid(radgridname, dtype, device)
-        sphgrid = get_spherical_grid(spgridname, radgrid, dtype, device)
-        prof1, deriv_fcns = get_fcn(fcnname, sphgrid.rgrid, with_grad=True)
-        rtol, atol = get_rtol_atol("grad", spgridname, radgridname)
-        print(spgridname, radgridname, fcnname)
-        runtest_grad(sphgrid, prof1, deriv_fcns, rtol=rtol, atol=atol)
-
-    for gridname, radgridname, fcnname in product(sph_gridnames, radial_gridnames, radial_fcnnames+radial_fcnnames_deriv_friendly+sph_fcnnames_deriv_friendly):
-        runtest(gridname, radgridname, fcnname)
+# def test_spherical_grad():
+#     def runtest(spgridname, radgridname, fcnname):
+#         radgrid = get_radial_grid(radgridname, dtype, device)
+#         sphgrid = get_spherical_grid(spgridname, radgrid, dtype, device)
+#         prof1, deriv_fcns = get_fcn(fcnname, sphgrid.rgrid, with_grad=True)
+#         rtol, atol = get_rtol_atol("grad", spgridname, radgridname)
+#         print(spgridname, radgridname, fcnname)
+#         runtest_grad(sphgrid, prof1, deriv_fcns, rtol=rtol, atol=atol)
+#
+#     for gridname, radgridname, fcnname in product(sph_gridnames, radial_gridnames, radial_fcnnames+radial_fcnnames_deriv_friendly+sph_fcnnames_deriv_friendly):
+#        runtest(gridname, radgridname, fcnname)
 
 def test_radial_laplace():
     def runtest(gridname, fcnname):
@@ -250,7 +250,7 @@ def get_rtol_atol(taskname, gridname1, gridname2=None):
             "legradialshiftexp": [0.0, 8e-4],
             "legradialdoubleexp2": [0.0, 6e-4],
             "lebedev": {
-                "legradialshiftexp": [0.0, 2e-3],
+                "legradialshiftexp": [0.0, 9e-4],
                 "legradialdoubleexp2": [0.0, 2e-3],
             },
             "becke": [2e-3, 8e-3],

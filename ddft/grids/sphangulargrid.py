@@ -155,6 +155,7 @@ class Lebedev(BaseRadialAngularGrid):
         return frq
 
     def grad(self, p, idim, dim=-1):
+        raise RuntimeError("Invalidated")
         if dim != -1:
             p = p.transpose(dim, -1) # (..., nr)
 
@@ -178,6 +179,7 @@ class Lebedev(BaseRadialAngularGrid):
         return pres
 
     def laplace(self, p, dim=-1):
+        raise RuntimeError("Invalidated")
         if dim != -1:
             p = p.transpose(dim, -1)
 
@@ -248,7 +250,7 @@ class Lebedev(BaseRadialAngularGrid):
             if self._basis_ is None:
                 phi = self.phithetargrid[:,0]
                 costheta = torch.cos(self.phithetargrid[:,1])
-                self._basis_ = spharmonics(costheta, phi, self.basis_maxangmom)
+                self._basis_, self._angmoms_ = spharmonics(costheta, phi, self.basis_maxangmom)
                 self._basis_integrate_ = self._basis_ * self.wphitheta
             if basis_integrate:
                 return self._basis_integrate_
@@ -257,7 +259,7 @@ class Lebedev(BaseRadialAngularGrid):
         else:
             phi = phitheta[:,0]
             costheta = torch.cos(phitheta[:,1])
-            basis = spharmonics(costheta, phi, self.basis_maxangmom)
+            basis, _ = spharmonics(costheta, phi, self.basis_maxangmom)
             if basis_integrate:
                 return basis * self.wphitheta
             else:
@@ -277,10 +279,7 @@ class Lebedev(BaseRadialAngularGrid):
 
     def _get_angmoms(self):
         if self._angmoms_ is None:
-            lhat = []
-            for angmom in range(self.basis_maxangmom+1):
-                lhat = lhat + [angmom]*(2*angmom+1)
-            self._angmoms_ = torch.tensor(lhat, dtype=self.dtype, device=self.device) # (nsh,)
+            self._get_basis() # to set angmoms
         return self._angmoms_
 
     #################### editable module parts ####################
