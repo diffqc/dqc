@@ -152,7 +152,7 @@ def test_vibration():
         "F2": {
             "dists": torch.tensor(
                 ([1.5, 2.0] if plot else []) +
-                [2.45, 2.475, 2.5, 2.525, 2.55, 2.575, 2.6] +
+                [2.603125, 2.61875, 2.634375, 2.65, 2.665625, 2.68125, 2.696875] +
                 ([3.0] if plot else []),
                 dtype=dtype),
             "scfmethod": "selfconsistent",
