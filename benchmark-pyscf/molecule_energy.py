@@ -2,21 +2,17 @@ import time
 from pyscf import gto, dft
 
 def get_molecule(molname):
+    basis = "6311++g**"
     if molname == "H2":
         atom_desc = "H -0.5 0 0; H 0.5 0 0"
-        basis = "6311++g**"
     elif molname == "Li2":
         atom_desc = "Li -2.5 0 0; Li 2.5 0 0"
-        basis = "6311++g**"
     elif molname == "N2":
         atom_desc = "N -1 0 0; N 1 0 0"
-        basis = "ccpvdz"
     elif molname == "CO":
         atom_desc = "C -1 0 0; O 1 0 0"
-        basis = "ccpvdz"
     elif molname == "F2":
         atom_desc = "F -1.25 0 0; F 1.25 0 0"
-        basis = "ccpvdz"
     else:
         raise RuntimeError("Unknown molecule %s" % molname)
 

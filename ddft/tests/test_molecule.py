@@ -38,18 +38,18 @@ def get_molecule(molname, distance=None, with_energy=False):
     elif molname == "N2":
         def_distance = 2.0
         atomz = 7.0
-        basis = "cc-pvdz"
-        energy = -107.5768 # only works for LDA and cc-pvdz
+        basis = "6-311++G**"
+        energy = -107.6212 # only works for LDA and 6-311++G** basis
     elif molname == "CO":
         def_distance = 2.0
         atomz = torch.tensor([6.0, 8.0], dtype=dtype)
-        basis = "cc-pvdz"
-        energy = -111.3264 # only works for LDA and cc-pvdz
+        basis = "6-311++G**"
+        energy = -111.3726 # only works for LDA and 6-311++G** basis
     elif molname == "F2":
         def_distance = 2.5
         atomz = 9.0
-        basis = "cc-pvdz"
-        energy = -196.7553 # only works for LDA and cc-pvdz
+        basis = "6-311++G**"
+        energy = -196.8034 # only works for LDA and 6-311++G** basis
     else:
         raise RuntimeError("Unknown molecule %s" % molname)
 
@@ -136,16 +136,16 @@ def test_vibration():
         "N2": {
             "dists": torch.tensor(
                 ([1.0, 1.5] if plot else []) +
-                [2.05625, 2.0625, 2.06875, 2.075, 2.08125, 2.0875, 2.09375] +
-                ([3.0, 4.0] if plot else []),
+                [2.0578125, 2.065625, 2.0734375, 2.08125, 2.0890625, 2.096875, 2.1046875] +
+                ([2.5, 3.0] if plot else []),
                 dtype=dtype),
             "scfmethod": "selfconsistent",
         },
         "CO": {
             "dists": torch.tensor(
                 ([1.0, 1.5, 2.0] if plot else []) +
-                [2.125, 2.15625, 2.1875, 2.21875, 2.25, 2.28125, 2.3125] +
-                ([2.5, 3.0, 4.0] if plot else []),
+                [2.109375, 2.125, 2.140625, 2.15625, 2.171875, 2.1875, 2.203125] +
+                ([2.5] if plot else []),
                 dtype=dtype),
             "scfmethod": "np_broyden1",
         },

@@ -18,7 +18,7 @@ __all__ = ["molecule"]
 def molecule(atomzs, atompos,
          spin=None,
          eks_model="lda",
-         basis="cc-pvdz",
+         basis="6-311++G**",
          # gwmin=1e-5, gwmax=1e2, ng=60,
          optimize_basis=False,
          rmin=1e-5, rmax=1e2, nr=100,
@@ -214,7 +214,8 @@ if __name__ == "__main__":
 
     # setup the molecule's atoms positions
     atomzs = torch.tensor([7.0, 7.0], dtype=dtype)
-    distance = torch.tensor([3.0], dtype=dtype).requires_grad_()
+    distance = torch.tensor([2.0], dtype=dtype).requires_grad_()
+    basis = "6-311++G**"
 
     # pseudo-lda eks model
     a = torch.tensor([-0.7385587663820223]).to(dtype).requires_grad_()
@@ -227,7 +228,7 @@ if __name__ == "__main__":
         atompos = torch.cat((atompos, torch.zeros((2,2), dtype=dtype)), dim=-1)
         if eks_model is None:
             eks_model = PseudoLDA(a, p)
-        energy, _ = molecule(atomzs, atompos, eks_model=eks_model)
+        energy, _ = molecule(atomzs, atompos, basis=basis, eks_model=eks_model)
         loss = energy.sum()
         return loss
 
@@ -235,6 +236,7 @@ if __name__ == "__main__":
         t0 = time.time()
         atompos = torch.tensor([[-distance[0]/2.0, 0.0, 0.0], [distance[0]/2.0, 0.0, 0.0]], dtype=dtype)
         energy, density = molecule(atomzs, atompos, eks_model=eks_model, optimize_basis=False,
+            basis=basis,
             scf_options={"verbose":True})
         ion_energy = ion_coulomb_energy(atomzs, atompos)
         print("Electron energy: %f" % (energy-ion_energy))
