@@ -210,9 +210,17 @@ if __name__ == "__main__":
         def forward(self, density):
             return self.a * safepow(density.abs(), self.p)
 
+        def getfwdparams(self):
+            return [self.a, self.p]
+
+        def setfwdparams(self, *params):
+            self.a = params[0]
+            self.p = params[1]
+            return 2
+
     # experimental data
     natoms = 1
-    atomzs = [21,2,4,10,12,18,20,30,36][:natoms]
+    atomzs = [16,2,4,10,12,18,20,30,36][:natoms]
     expdata = torch.tensor([-2.904601242647059, -14.674582216911766,
                             -129.10649963235295, -200.32232950000002,
                             -529.4431757977941, -680.2348059195,
@@ -224,7 +232,7 @@ if __name__ == "__main__":
     # a = torch.tensor([-0.9312]).to(dtype).requires_grad_()
     # p = torch.tensor([1.077]).to(dtype).requires_grad_()
     eks_model = PseudoLDA(a, p)
-    mode = "fwd"
+    mode = "grad"
 
     def getloss(a, p, eks_model=None):
         if eks_model is None:
