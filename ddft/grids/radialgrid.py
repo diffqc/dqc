@@ -5,7 +5,7 @@ from numpy.polynomial.legendre import leggauss
 from ddft.grids.base_grid import BaseGrid, BaseTransformed1DGrid
 from ddft.utils.legendre import legint, legvander, legder, deriv_legval
 from ddft.utils.interp import CubicSpline
-from ddft.grids.radialtransform import ShiftExp, DoubleExp2
+from ddft.grids.radialtransform import ShiftExp, DoubleExp2, LogM3
 
 class RadialGrid(BaseGrid):
     @abstractproperty
@@ -206,10 +206,11 @@ class GaussChebyshevRadialGrid(M1P1TransformRadialGrid):
     def __init__(self, n, transformobj, dtype=torch.float, device=torch.device('cpu')):
         # generate the x and w from chebyshev polynomial
         np1 = n+1.
-        ipn1 = np.arange(n,0,-1) * np.pi / np1
+        icount = np.arange(n,0,-1)
+        ipn1 = icount * np.pi / np1
         sin_ipn1 = np.sin(ipn1)
         sin_ipn1_2 = sin_ipn1 * sin_ipn1
-        xcheb = (np1-2*i) / np1 + 2/np.pi * (1 + 2./3 * sin_ipn1*sin_ipn1) * np.cos(ipn1) * sin_ipn1
+        xcheb = (np1-2*icount) / np1 + 2/np.pi * (1 + 2./3 * sin_ipn1*sin_ipn1) * np.cos(ipn1) * sin_ipn1
         wcheb = 16. / (3*np1) * sin_ipn1_2 * sin_ipn1_2
 
         xcheb = torch.tensor(xcheb, dtype=dtype, device=device)
@@ -257,6 +258,7 @@ class LegendreRadialGrid(M1P1TransformRadialGrid):
             dpdr = dpdr.transpose(dim, -1)
         return dpdr
 
+############## sets of predefined transformation and integration ##############
 class LegendreRadialShiftExp(LegendreRadialGrid):
     def __init__(self, rmin, rmax, nr, dtype=torch.float, device=torch.device('cpu')):
         # setup the parameters needed for the transformation
@@ -268,6 +270,12 @@ class LegendreRadialDoubleExp2(LegendreRadialGrid):
         # setup the parameters needed for the transformation
         transformobj = DoubleExp2(alpha, rmin, rmax, dtype=dtype, device=device)
         super(LegendreRadialDoubleExp2, self).__init__(nr, transformobj, dtype=dtype, device=device)
+
+class GaussChebyshevRadialLogM3(GaussChebyshevRadialGrid):
+    # used in https://aip.scitation.org/doi/pdf/10.1063/1.475719
+    def __init__(self, nr, ra=1.0, dtype=torch.float, device=torch.device('cpu')):
+        transformobj = LogM3(ra, dtype=dtype, device=device)
+        super(GaussChebyshevRadialLogM3, self).__init__(nr, transformobj, dtype=dtype, device=device)
 
 if __name__ == "__main__":
     import lintorch as lt

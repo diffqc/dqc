@@ -87,3 +87,35 @@ class DoubleExp2(BaseTransformed1DGrid):
             return 1
         else:
             raise RuntimeError("Unimplemented %s method for setparams" % methodname)
+
+class LogM3(BaseTransformed1DGrid):
+    # eq (12) in https://aip.scitation.org/doi/pdf/10.1063/1.475719
+    def __init__(self, ra=1.0, dtype=torch.float, device=torch.device('cpu')):
+        # setup the parameters needed for the transformation
+        if not isinstance(ra, torch.Tensor):
+            ra = torch.tensor(ra, dtype=dtype, device=device)
+        self.ra = ra
+        self.ln2 = np.log(2.0)
+
+    def transform(self, xlg):
+        return self.ra * (1 - torch.log1p(-xlg) / self.ln2)
+
+    def invtransform(self, rs):
+        return -torch.expm1(self.ln2 * (1. - rs/self.ra))
+
+    def get_scaling(self, rs):
+        return self.ra / self.ln2 * torch.exp(-self.ln2 * (1. - rs / self.ra))
+
+    #################### editable module parts ####################
+    def getparams(self, methodname):
+        if methodname == "invtransform" or methodname == "transform" or methodname == "get_scaling":
+            return [self.ra]
+        else:
+            raise RuntimeError("Unimplemented %s method for getparams" % methodname)
+
+    def setparams(self, methodname, *params):
+        if methodname == "invtransform" or methodname == "transform" or methodname == "get_scaling":
+            self.ra, = params[:1]
+            return 1
+        else:
+            raise RuntimeError("Unimplemented %s method for setparams" % methodname)
