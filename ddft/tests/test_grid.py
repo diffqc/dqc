@@ -3,11 +3,11 @@ import torch
 import numpy as np
 from scipy.special import gamma, gammaincc
 from ddft.grids.base_grid import BaseRadialAngularGrid
-from ddft.grids.radialgrid import LegendreRadialShiftExp, LegendreRadialDoubleExp2
+from ddft.grids.radialgrid import LegendreRadialShiftExp, LegendreRadialDoubleExp2, GaussChebyshevRadialLogM3
 from ddft.grids.sphangulargrid import Lebedev
 from ddft.grids.multiatomsgrid import BeckeMultiGrid
 
-radial_gridnames = ["legradialshiftexp", "legradialdoubleexp2"]
+radial_gridnames = ["legradialshiftexp", "legradialdoubleexp2", "chebradiallogm3"]
 radial_fcnnames = ["gauss1", "exp1"]
 radial_fcnnames_deriv_friendly = ["gauss0"]
 sph_gridnames = ["lebedev"]
@@ -27,6 +27,7 @@ def test_radial_integralbox():
     # test if the integral (basis^2) dVolume in the given grid should be
     # equal to 1 where the basis is a pre-computed normalized basis function
     def runtest(gridname, fcnname):
+        print(gridname, fcnname)
         grid = get_radial_grid(gridname, dtype, device)
         prof1 = get_fcn(fcnname, grid.rgrid) # (nr, nbasis)
         rtol, atol = get_rtol_atol("integralbox", gridname)
@@ -108,6 +109,7 @@ def test_multiatoms_integralbox():
 
 def test_radial_poisson():
     def runtest(gridname, fcnname):
+        print("test_radial_poisson", gridname, fcnname)
         grid = get_radial_grid(gridname, dtype, device)
         prof1 = get_fcn(fcnname, grid.rgrid)
         poisson1 = get_poisson(fcnname, grid.rgrid)
@@ -147,6 +149,7 @@ def test_multiatoms_poisson():
 
 def test_radial_interpolate():
     def runtest(gridname, fcnname):
+        print("radial interpolate:", gridname, fcnname)
         grid = get_radial_grid(gridname, dtype, device)
         prof1 = get_fcn(fcnname, grid.rgrid).transpose(-2, -1)
         prof1 = prof1 / prof1.max(dim=-1, keepdim=True)[0]
@@ -158,6 +161,7 @@ def test_radial_interpolate():
 
 def test_spherical_interpolate():
     def runtest(spgridname, radgridname, fcnname):
+        print("spherical interpolate:", gridname, fcnname)
         radgrid = get_radial_grid(radgridname, dtype, device)
         sphgrid = get_spherical_grid(spgridname, radgrid, dtype, device)
         prof1 = get_fcn(fcnname, sphgrid.rgrid).transpose(-2,-1)
@@ -186,14 +190,20 @@ def runtest_poisson(grid, prof, poisson, rtol, atol):
     poisson = poisson - poisson[-1:,:]
     # check if shape and magnitude matches
     # import matplotlib.pyplot as plt
+    # # for radial+angular
     # plt.plot(grid.radial_grid.rgrid[:,0], pois[10::74,0].numpy())
     # plt.plot(grid.radial_grid.rgrid[:,0], poisson[10::74,0].numpy())
+    # for radial
+    # plt.plot(grid.rgrid[:,0], pois[:,0].numpy())
+    # plt.plot(grid.rgrid[:,0], poisson[:,0].numpy())
     # plt.gca().set_xscale("log")
     # plt.show()
+    print("abs diff with abs scale:", (pois-poisson).abs().max())
     assert torch.allclose(pois, poisson, rtol=rtol, atol=atol)
     # normalize the scale to match the shape with stricter constraint (typically .abs().max() < 1)
     pois = pois / pois.abs().max(dim=0)[0]
     poisson = poisson / poisson.abs().max(dim=0)[0]
+    print("abs diff with rel scale:", (pois-poisson).abs().max())
     assert torch.allclose(pois, poisson, rtol=rtol, atol=atol)
 
 def runtest_interpolate(grid, prof, rtol, atol):
@@ -206,6 +216,7 @@ def runtest_interpolate(grid, prof, rtol, atol):
     for alpha in alphas:
         grid2, prof2_estimate = _get_new_grid_pts(grid, grid.rgrid, prof, alpha)
         prof2 = grid.interpolate(prof, grid2)
+        print("abs err in runtest interpolate:", (prof2_estimate-prof2).abs().max())
         assert torch.allclose(prof2_estimate, prof2, rtol=rtol, atol=atol)
 
 def runtest_grad(grid, prof, deriv_profs, rtol, atol):
@@ -241,27 +252,33 @@ def get_rtol_atol(taskname, gridname1, gridname2=None):
             # this is compared to 1, so rtol has the same effect as atol
             "legradialshiftexp": [1e-8, 0.0],
             "legradialdoubleexp2": [1e-5, 0.0],
+            "chebradiallogm3": [1e-8, 0.0],
             "lebedev": {
                 "legradialshiftexp": [1e-8, 0.0],
                 "legradialdoubleexp2": [1e-5, 0.0],
+                "chebradiallogm3": [1e-8, 0.0],
             },
             "becke": [5e-4, 0.0],
         },
         "poisson": {
             "legradialshiftexp": [0.0, 8e-4],
             "legradialdoubleexp2": [0.0, 6e-4],
+            "chebradiallogm3": [0.0, 3e-3], # NOTE: it is quite high (investigate?)
             "lebedev": {
                 "legradialshiftexp": [0.0, 9e-4],
                 "legradialdoubleexp2": [0.0, 2e-3],
+                "chebradiallogm3": [0.0, 5e-3],
             },
             "becke": [2e-3, 8e-3],
         },
         "interpolate": {
             "legradialshiftexp": [0.0, 8e-4],
             "legradialdoubleexp2": [0.0, 7e-4],
+            "chebradiallogm3": [0.0, 3e-3], # NOTE: quite high (investigate?)
             "lebedev": {
                 "legradialshiftexp": [0.0, 8e-4],
                 "legradialdoubleexp2": [0.0, 8e-4],
+                "chebradiallogm3": [0.0, 3e-3], # NOTE: quite high (investigate?)
             }
         },
         "grad": {
@@ -292,6 +309,8 @@ def get_radial_grid(gridname, dtype, device):
         grid = LegendreRadialShiftExp(1e-6, 5e1, 400, dtype=dtype, device=device)
     elif gridname == "legradialdoubleexp2":
         grid = LegendreRadialDoubleExp2(2.0, 1e-6, 5e1, 400, dtype=dtype, device=device)
+    elif gridname == "chebradiallogm3":
+        grid = GaussChebyshevRadialLogM3(400, ra=1.0, dtype=dtype, device=device)
     else:
         raise RuntimeError("Unknown radial grid name: %s" % gridname)
     return grid
