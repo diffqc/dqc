@@ -260,13 +260,13 @@ class LegendreRadialGrid(M1P1TransformRadialGrid):
 class LegendreRadialShiftExp(LegendreRadialGrid):
     def __init__(self, rmin, rmax, nr, dtype=torch.float, device=torch.device('cpu')):
         # setup the parameters needed for the transformation
-        transformobj = ShiftExp(rmin, rmax, nr, dtype=dtype, device=device)
+        transformobj = ShiftExp(rmin, rmax, dtype=dtype, device=device)
         super(LegendreRadialShiftExp, self).__init__(nr, transformobj, dtype=dtype, device=device)
 
 class LegendreRadialDoubleExp2(LegendreRadialGrid):
     def __init__(self, alpha, rmin, rmax, nr, dtype=torch.float, device=torch.device('cpu')):
         # setup the parameters needed for the transformation
-        transformobj = DoubleExp2(alpha, rmin, rmax, nr, dtype=dtype, device=device)
+        transformobj = DoubleExp2(alpha, rmin, rmax, dtype=dtype, device=device)
         super(LegendreRadialDoubleExp2, self).__init__(nr, transformobj, dtype=dtype, device=device)
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ import lintorch as lt
 from ddft.grids.base_grid import BaseTransformed1DGrid
 
 class ShiftExp(BaseTransformed1DGrid):
-    def __init__(self, rmin, rmax, nr, dtype=torch.float, device=torch.device('cpu')):
+    def __init__(self, rmin, rmax, dtype=torch.float, device=torch.device('cpu')):
         # setup the parameters needed for the transformation
         self.rmin = rmin
         self.logrmin = torch.tensor(np.log(rmin)).to(dtype).to(device)
@@ -40,7 +40,7 @@ class ShiftExp(BaseTransformed1DGrid):
             raise RuntimeError("Unimplemented %s method for setparams" % methodname)
 
 class DoubleExp2(BaseTransformed1DGrid):
-    def __init__(self, alpha, rmin, rmax, nr, dtype=torch.float, device=torch.device('cpu')):
+    def __init__(self, alpha, rmin, rmax, dtype=torch.float, device=torch.device('cpu')):
         # setup the parameters needed for the transformation
         if not isinstance(alpha, torch.Tensor):
             alpha = torch.tensor(alpha, dtype=dtype, device=device)
