@@ -7,6 +7,10 @@ from ddft.api.molecule import molecule
 from ddft.eks import BaseEKS
 from ddft.utils.safeops import safepow
 
+"""
+Test various configurations using the molecule API.
+"""
+
 dtype = torch.float64
 class PseudoLDA(BaseEKS):
     def __init__(self, a, p):
@@ -23,6 +27,36 @@ class PseudoLDA(BaseEKS):
     def setfwdparams(self, *params):
         self.a, self.p = params[:2]
         return 2
+
+def get_atom(atomname):
+    basis = "6-311++G**"
+    if atomname == "He":
+        atomz = 2.0
+        energy = -2.90 # ???
+        # pyscf_energy = -2.72102435e # LDA, 6-311++G**, grid level 4
+    elif atomname == "Be":
+        atomz = 4.0
+        energy = -14.206452
+        # pyscf_energy = -14.2207456807576 # LDA, 6-311++G**, grid level 4
+    elif atomname == "Ne":
+        atomz = 10.0
+        energy = -127.331930
+        # pyscf_energy = -127.469035524253 # LDA, 6-311++G**, grid level 4
+    atomzs = torch.tensor([atomz], dtype=dtype)
+    energy = torch.tensor(energy, dtype=dtype)
+    atomposs = torch.tensor([[0.0, 0.0, 0.0]], dtype=dtype)
+    return atomzs, atomposs, basis, energy
+
+def test_atom():
+    atomnames = ["Be", "Ne"][1:]
+    for atomname in atomnames:
+        print(atomname)
+        atomzs, atomposs, basis, energy_true = get_atom(atomname)
+        a = torch.tensor([-0.7385587663820223]).to(dtype).requires_grad_()
+        p = torch.tensor([4./3]).to(dtype).requires_grad_()
+        eks_model = PseudoLDA(a, p)
+        energy, _ = molecule(atomzs, atomposs, eks_model=eks_model, basis=basis)
+        assert torch.allclose(energy, energy_true)
 
 def get_molecule(molname, distance=None, with_energy=False):
     if molname == "H2":
