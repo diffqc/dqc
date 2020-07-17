@@ -15,6 +15,12 @@ from ddft.eks import BaseEKS, Hartree, xLDA
 
 __all__ = ["molecule"]
 
+"""
+Accuracy problems:
+* There is a quite significant discrepancy between ddft and pyscf.
+  Likely due to the radial grid integration, because increasing nr makes the
+  results closer, while increasing angprec does not.
+"""
 def molecule(atomzs, atompos,
          spin=None,
          eks_model="lda",
