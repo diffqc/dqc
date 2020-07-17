@@ -61,15 +61,16 @@ def test_multiatoms_integralbox():
     for gridname, fcnname in product(multiatoms_gridnames, multiatoms_fcnnames):
         runtest(gridname, sph_gridnames[0], radial_gridnames[0], fcnname)
 
-def test_radial_grad():
-    def runtest(gridname, fcnname):
-        grid = get_radial_grid(gridname, dtype, device)
-        prof1, deriv_fcns = get_fcn(fcnname, grid.rgrid, with_grad=True) # (nr, nbasis)
-        rtol, atol = get_rtol_atol("grad", gridname)
-        runtest_grad(grid, prof1, deriv_fcns[:1], rtol=rtol, atol=atol)
-
-    for gridname, fcnname in product(radial_gridnames, radial_fcnnames+radial_fcnnames_deriv_friendly):
-        runtest(gridname, fcnname)
+# # NOTE: tests for grad and laplace are still inactive
+# def test_radial_grad():
+#     def runtest(gridname, fcnname):
+#         grid = get_radial_grid(gridname, dtype, device)
+#         prof1, deriv_fcns = get_fcn(fcnname, grid.rgrid, with_grad=True) # (nr, nbasis)
+#         rtol, atol = get_rtol_atol("grad", gridname)
+#         runtest_grad(grid, prof1, deriv_fcns[:1], rtol=rtol, atol=atol)
+#
+#     for gridname, fcnname in product(radial_gridnames, radial_fcnnames+radial_fcnnames_deriv_friendly):
+#         runtest(gridname, fcnname)
 
 # def test_spherical_grad():
 #     def runtest(spgridname, radgridname, fcnname):
@@ -82,17 +83,17 @@ def test_radial_grad():
 #
 #     for gridname, radgridname, fcnname in product(sph_gridnames, radial_gridnames, radial_fcnnames+radial_fcnnames_deriv_friendly+sph_fcnnames_deriv_friendly):
 #        runtest(gridname, radgridname, fcnname)
-
-def test_radial_laplace():
-    def runtest(gridname, fcnname):
-        grid = get_radial_grid(gridname, dtype, device)
-        prof1, laplace_prof = get_fcn(fcnname, grid.rgrid, with_laplace=True) # (nr, nbasis)
-        rtol, atol = get_rtol_atol("laplace", gridname)
-        runtest_laplace(grid, prof1, laplace_prof, rtol=rtol, atol=atol)
-
-    for gridname, fcnname in product(radial_gridnames, radial_fcnnames_deriv_friendly):
-        runtest(gridname, fcnname)
-
+#
+# def test_radial_laplace():
+#     def runtest(gridname, fcnname):
+#         grid = get_radial_grid(gridname, dtype, device)
+#         prof1, laplace_prof = get_fcn(fcnname, grid.rgrid, with_laplace=True) # (nr, nbasis)
+#         rtol, atol = get_rtol_atol("laplace", gridname)
+#         runtest_laplace(grid, prof1, laplace_prof, rtol=rtol, atol=atol)
+#
+#     for gridname, fcnname in product(radial_gridnames, radial_fcnnames_deriv_friendly):
+#         runtest(gridname, fcnname)
+#
 # def test_spherical_laplace():
 #     def runtest(spgridname, radgridname, fcnname):
 #         radgrid = get_radial_grid(radgridname, dtype, device)
