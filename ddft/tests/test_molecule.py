@@ -30,26 +30,31 @@ def get_molecule(molname, distance=None, with_energy=False):
         atomz = 1.0
         basis = "6-311++G**"
         energy = -0.976186 # only works for LDA and 6-311++G** basis
+        # pyscf_energy = -0.979143262 # LDA, 6-311++G**, grid level 4
     elif molname == "Li2":
         def_distance = 5.0
         atomz = 3.0
         basis = "6-311++G**"
         energy = -14.3768 # only works for LDA and 6-311++G** basis
+        # pyscf_energy = -14.3927863482007 # LDA, 6-311++G**, grid level 4
     elif molname == "N2":
         def_distance = 2.0
         atomz = 7.0
         basis = "6-311++G**"
         energy = -107.6212 # only works for LDA and 6-311++G** basis
+        # pyscf_energy = -107.726124017789 # LDA, 6-311++G**, grid level 4
     elif molname == "CO":
         def_distance = 2.0
         atomz = torch.tensor([6.0, 8.0], dtype=dtype)
         basis = "6-311++G**"
         energy = -111.3726 # only works for LDA and 6-311++G** basis
+        # pyscf_energy = -111.490687028797 # LDA, 6-311++G**, grid level 4
     elif molname == "F2":
         def_distance = 2.5
         atomz = 9.0
         basis = "6-311++G**"
         energy = -196.8034 # only works for LDA and 6-311++G** basis
+        # pyscf_energy = -197.005308558326 # LDA, 6-311++G**, grid level 4
     else:
         raise RuntimeError("Unknown molecule %s" % molname)
 
