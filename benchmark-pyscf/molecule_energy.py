@@ -19,6 +19,11 @@ def get_molecule(molname):
     mol = gto.M(atom=atom_desc, basis=basis, unit="Bohr")
     return mol
 
+def get_atom(atom):
+    basis = "6311++g**"
+    mol = gto.M(atom="%s 0 0 0"%atom, basis=basis, unit="Bohr")
+    return mol
+
 def get_molecules_energy():
     molnames = ["H2", "Li2", "N2", "CO", "F2"]
     for molname in molnames:
@@ -26,9 +31,23 @@ def get_molecules_energy():
         mol = get_molecule(molname)
         mf = dft.RKS(mol)
         mf.xc = "lda"
+        mf.grids.level = 4
         energy = mf.kernel()
         t1 = time.time()
         print("Molecule %s: %.8e (%.3e)" % (molname, energy, t1-t0))
 
+def get_atoms_energy():
+    atoms = ["He", "Be", "Ne"]
+    for atomname in atoms:
+        t0 = time.time()
+        atom = get_atom(atomname)
+        mf = dft.RKS(atom)
+        mf.xc = "lda"
+        mf.grids.level = 4
+        energy = mf.kernel()
+        t1 = time.time()
+        print("Atom %s: %.8e (%.3e)" % (atomname, energy, t1-t0))
+
 if __name__ == "__main__":
     get_molecules_energy()
+    get_atoms_energy()
