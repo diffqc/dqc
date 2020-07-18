@@ -271,7 +271,7 @@ class HamiltonAtomYGauss(BaseHamilton):
             return super().setparams(methodname, *params)
 
 if __name__ == "__main__":
-    from ddft.grids.radialgrid2 import LegendreShiftExpRadGrid
+    from ddft.grids.radialgrid import LegendreShiftExpRadGrid
     from ddft.grids.sphangulargrid import Lebedev
 
     dtype = torch.float64

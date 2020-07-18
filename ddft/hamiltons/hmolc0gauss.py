@@ -207,7 +207,7 @@ class HamiltonMoleculeC0Gauss(BaseHamilton):
         return cmat.view(*batch_size, self.nbasis, self.nbasis)
 
 if __name__ == "__main__":
-    from ddft.grids.radialgrid2 import LegendreShiftExpRadGrid
+    from ddft.grids.radialgrid import LegendreShiftExpRadGrid
     from ddft.grids.sphangulargrid import Lebedev
     from ddft.grids.multiatomsgrid import BeckeMultiGrid
 

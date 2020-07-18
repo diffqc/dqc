@@ -3,7 +3,7 @@ import torch
 import numpy as np
 from scipy.special import gamma, gammaincc
 from ddft.grids.base_grid import BaseRadialAngularGrid
-from ddft.grids.radialgrid2 import LegendreShiftExpRadGrid, LegendreDoubleExp2RadGrid, GaussChebyshevLogM3RadGrid
+from ddft.grids.radialgrid import LegendreShiftExpRadGrid, LegendreDoubleExp2RadGrid, GaussChebyshevLogM3RadGrid
 from ddft.grids.sphangulargrid import Lebedev
 from ddft.grids.multiatomsgrid import BeckeMultiGrid
 
@@ -310,7 +310,6 @@ def get_radial_grid(gridname, dtype, device):
     elif gridname == "legradialdoubleexp2":
         grid = LegendreDoubleExp2RadGrid(400, 2.0, 1e-6, 5e1, dtype=dtype, device=device)
     elif gridname == "chebradiallogm3":
-        # grid = GaussChebyshevRadialLogM3(400, ra=1.0, dtype=dtype, device=device)
         grid = GaussChebyshevLogM3RadGrid(400, ra=1.0, dtype=dtype, device=device)
     else:
         raise RuntimeError("Unknown radial grid name: %s" % gridname)

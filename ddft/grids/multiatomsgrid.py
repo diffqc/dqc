@@ -194,7 +194,7 @@ class BeckeMultiGrid(BaseMultiAtomsGrid):
 
 if __name__ == "__main__":
     import lintorch as lt
-    from ddft.grids.radialgrid2 import LegendreShiftExpRadGrid
+    from ddft.grids.radialgrid import LegendreShiftExpRadGrid
     from ddft.grids.sphangulargrid import Lebedev
     dtype = torch.float64
     atompos = torch.tensor([[0.0, 0.0, 0.0]], dtype=dtype)

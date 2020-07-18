@@ -40,7 +40,7 @@ if __name__ == "__main__":
             return self.a * safepow(x, self.p)
 
     import matplotlib.pyplot as plt
-    from ddft.grids.radialgrid2 import LegendreShiftExpRadGrid
+    from ddft.grids.radialgrid import LegendreShiftExpRadGrid
 
     dtype = torch.float64
     grid = LegendreShiftExpRadGrid(200, 1e-6, 1e4, dtype=dtype)

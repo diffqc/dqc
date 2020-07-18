@@ -74,7 +74,7 @@ def run_hartree_test(gridname, fcnname, rtol=1e-5, atol=1e-8):
     assert torch.allclose(vks_hartree, vks_poisson, rtol=rtol, atol=atol)
 
 def _setup_density(gridname, fcnname, dtype=torch.float64):
-    from ddft.grids.radialgrid2 import LegendreShiftExpRadGrid
+    from ddft.grids.radialgrid import LegendreShiftExpRadGrid
     from ddft.grids.sphangulargrid import Lebedev
     from ddft.grids.multiatomsgrid import BeckeMultiGrid
 

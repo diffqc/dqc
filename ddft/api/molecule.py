@@ -6,7 +6,7 @@ from ddft.basissets.base_basisset import BaseBasisModule
 from ddft.basissets.cgto_basis import CGTOBasis
 from ddft.hamiltons.hmolcgauss import HamiltonMoleculeCGauss
 from ddft.hamiltons.hmolc0gauss import HamiltonMoleculeC0Gauss
-from ddft.grids.radialgrid2 import LegendreShiftExpRadGrid
+from ddft.grids.radialgrid import LegendreShiftExpRadGrid
 from ddft.grids.sphangulargrid import Lebedev
 from ddft.grids.multiatomsgrid import BeckeMultiGrid
 from ddft.modules.equilibrium import EquilibriumModule

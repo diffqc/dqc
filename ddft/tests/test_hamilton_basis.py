@@ -6,7 +6,7 @@ from ddft.hamiltons.hmolc0gauss import HamiltonMoleculeC0Gauss
 from ddft.hamiltons.hmolcgauss import HamiltonMoleculeCGauss
 from ddft.hamiltons.hatomygauss import HamiltonAtomYGauss
 from ddft.hamiltons.hatomradial import HamiltonAtomRadial
-from ddft.grids.radialgrid2 import LegendreShiftExpRadGrid
+from ddft.grids.radialgrid import LegendreShiftExpRadGrid
 from ddft.grids.sphangulargrid import Lebedev
 from ddft.grids.multiatomsgrid import BeckeMultiGrid
 

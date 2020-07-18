@@ -4,7 +4,7 @@ from ddft.eks.base_eks import BaseEKS
 from ddft.eks.hartree import Hartree
 from ddft.dft.dft import DFT
 from ddft.basissets.cgto_basis import CGTOBasis
-from ddft.grids.radialgrid2 import LegendreShiftExpRadGrid
+from ddft.grids.radialgrid import LegendreShiftExpRadGrid
 from ddft.grids.sphangulargrid import Lebedev
 from ddft.grids.multiatomsgrid import BeckeMultiGrid
 from ddft.utils.safeops import safepow

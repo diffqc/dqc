@@ -4,7 +4,7 @@ import torch
 import numpy as np
 import ddft
 from ddft.grids.base_grid import BaseGrid, BaseRadialAngularGrid
-from ddft.grids.radialgrid2 import RadialGrid
+from ddft.grids.radialgrid import RadialGrid
 from ddft.utils.spharmonics import spharmonics, vspharmonics
 
 class Lebedev(BaseRadialAngularGrid):
@@ -309,7 +309,7 @@ class Lebedev(BaseRadialAngularGrid):
 
 if __name__ == "__main__":
     import lintorch as lt
-    from ddft.grids.radialgrid2 import LegendreShiftExpRadGrid
+    from ddft.grids.radialgrid import LegendreShiftExpRadGrid
     radgrid = LegendreShiftExpRadGrid(100, 1e-4, 1e2, dtype=torch.float64)
     grid = Lebedev(radgrid, prec=5, basis_maxangmom=4, dtype=torch.float64)
     rgrid = grid.rgrid.clone().detach()
