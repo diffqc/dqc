@@ -40,10 +40,10 @@ if __name__ == "__main__":
             return self.a * safepow(x, self.p)
 
     import matplotlib.pyplot as plt
-    from ddft.grids.radialgrid import LegendreRadialShiftExp
+    from ddft.grids.radialgrid2 import LegendreShiftExpRadGrid
 
     dtype = torch.float64
-    grid = LegendreRadialShiftExp(1e-6, 1e4, 200, dtype=dtype)
+    grid = LegendreShiftExpRadGrid(200, 1e-6, 1e4, dtype=dtype)
     rgrid = grid.rgrid
     density = torch.exp(-rgrid[:,0]).unsqueeze(0)
 

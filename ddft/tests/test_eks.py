@@ -74,18 +74,18 @@ def run_hartree_test(gridname, fcnname, rtol=1e-5, atol=1e-8):
     assert torch.allclose(vks_hartree, vks_poisson, rtol=rtol, atol=atol)
 
 def _setup_density(gridname, fcnname, dtype=torch.float64):
-    from ddft.grids.radialgrid import LegendreRadialShiftExp
+    from ddft.grids.radialgrid2 import LegendreShiftExpRadGrid
     from ddft.grids.sphangulargrid import Lebedev
     from ddft.grids.multiatomsgrid import BeckeMultiGrid
 
     if gridname == "legradialshiftexp":
-        grid = LegendreRadialShiftExp(1e-6, 1e4, 200, dtype=dtype)
+        grid = LegendreShiftExpRadGrid(200, 1e-6, 1e4, dtype=dtype)
     elif gridname == "lebedev":
-        radgrid = LegendreRadialShiftExp(1e-6, 1e4, 200, dtype=dtype)
+        radgrid = LegendreShiftExpRadGrid(200, 1e-6, 1e4, dtype=dtype)
         grid = Lebedev(radgrid, prec=13, basis_maxangmom=3, dtype=dtype)
     elif gridname == "becke":
         atompos = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) # (natom, ndim)
-        radgrid = LegendreRadialShiftExp(1e-6, 1e2, 200, dtype=dtype)
+        radgrid = LegendreShiftExpRadGrid(200, 1e-6, 1e2, dtype=dtype)
         sphgrid = Lebedev(radgrid, prec=13, basis_maxangmom=8, dtype=dtype)
         grid = BeckeMultiGrid(sphgrid, atompos, dtype=dtype)
     else:

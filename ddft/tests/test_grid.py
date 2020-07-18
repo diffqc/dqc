@@ -3,7 +3,7 @@ import torch
 import numpy as np
 from scipy.special import gamma, gammaincc
 from ddft.grids.base_grid import BaseRadialAngularGrid
-from ddft.grids.radialgrid import LegendreRadialShiftExp, LegendreRadialDoubleExp2, GaussChebyshevRadialLogM3
+from ddft.grids.radialgrid2 import LegendreShiftExpRadGrid, LegendreDoubleExp2RadGrid, GaussChebyshevLogM3RadGrid
 from ddft.grids.sphangulargrid import Lebedev
 from ddft.grids.multiatomsgrid import BeckeMultiGrid
 
@@ -306,11 +306,12 @@ def get_radial_grid(gridname, dtype, device):
     if gridname == "legradialshiftexp":
         # the max radius is chosen to be quite small ~50 to test the tail of
         # poisson with the extrapolation function for multiatomsgrid
-        grid = LegendreRadialShiftExp(1e-6, 5e1, 400, dtype=dtype, device=device)
+        grid = LegendreShiftExpRadGrid(400, 1e-6, 5e1, dtype=dtype, device=device)
     elif gridname == "legradialdoubleexp2":
-        grid = LegendreRadialDoubleExp2(2.0, 1e-6, 5e1, 400, dtype=dtype, device=device)
+        grid = LegendreDoubleExp2RadGrid(400, 2.0, 1e-6, 5e1, dtype=dtype, device=device)
     elif gridname == "chebradiallogm3":
-        grid = GaussChebyshevRadialLogM3(400, ra=1.0, dtype=dtype, device=device)
+        # grid = GaussChebyshevRadialLogM3(400, ra=1.0, dtype=dtype, device=device)
+        grid = GaussChebyshevLogM3RadGrid(400, ra=1.0, dtype=dtype, device=device)
     else:
         raise RuntimeError("Unknown radial grid name: %s" % gridname)
     return grid

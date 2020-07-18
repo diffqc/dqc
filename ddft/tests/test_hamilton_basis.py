@@ -6,7 +6,7 @@ from ddft.hamiltons.hmolc0gauss import HamiltonMoleculeC0Gauss
 from ddft.hamiltons.hmolcgauss import HamiltonMoleculeCGauss
 from ddft.hamiltons.hatomygauss import HamiltonAtomYGauss
 from ddft.hamiltons.hatomradial import HamiltonAtomRadial
-from ddft.grids.radialgrid import LegendreRadialShiftExp
+from ddft.grids.radialgrid2 import LegendreShiftExpRadGrid
 from ddft.grids.sphangulargrid import Lebedev
 from ddft.grids.multiatomsgrid import BeckeMultiGrid
 
@@ -19,7 +19,7 @@ def test_hamilton_molecule_c0_gauss():
         # setup grid
         atompos = torch.tensor([[0.0, 0.0, 0.0]], dtype=dtype) # (natoms, ndim)
         atomzs = torch.tensor([atomz], dtype=dtype)
-        radgrid = LegendreRadialShiftExp(1e-6, 1e3, 200, dtype=dtype)
+        radgrid = LegendreShiftExpRadGrid(200, 1e-6, 1e3, dtype=dtype)
         atomgrid = Lebedev(radgrid, prec=13, basis_maxangmom=4, dtype=dtype)
         grid = BeckeMultiGrid(atomgrid, atompos, dtype=dtype)
 
@@ -46,7 +46,7 @@ def test_hamilton_molecule_cartesian_gauss():
         # setup grid
         atompos = torch.tensor([[0.0, 0.0, 0.0]], dtype=dtype) # (natoms, ndim)
         atomzs = torch.tensor([atomz], dtype=dtype)
-        radgrid = LegendreRadialShiftExp(1e-6, 1e3, 200, dtype=dtype)
+        radgrid = LegendreShiftExpRadGrid(200, 1e-6, 1e3, dtype=dtype)
         atomgrid = Lebedev(radgrid, prec=13, basis_maxangmom=4, dtype=dtype)
         grid = BeckeMultiGrid(atomgrid, atompos, dtype=dtype)
 
@@ -78,7 +78,7 @@ def test_hamilton_molecule_cartesian_gauss1():
         # setup grid
         atompos = torch.tensor([[0.0, 0.0, 0.0]], dtype=dtype) # (natoms, ndim)
         atomzs = torch.tensor([atomz], dtype=dtype)
-        radgrid = LegendreRadialShiftExp(1e-6, 1e3, 200, dtype=dtype)
+        radgrid = LegendreShiftExpRadGrid(200, 1e-6, 1e3, dtype=dtype)
         atomgrid = Lebedev(radgrid, prec=13, basis_maxangmom=4, dtype=dtype)
         grid = BeckeMultiGrid(atomgrid, atompos, dtype=dtype)
 
@@ -111,7 +111,7 @@ def test_hamilton_molecule_cgto():
         # setup grid
         atompos = torch.tensor([[0.0, 0.0, 0.0]], dtype=dtype) # (natoms, ndim)
         atomzs = torch.tensor([atomz], dtype=dtype)
-        radgrid = LegendreRadialShiftExp(1e-6, 1e3, 200, dtype=dtype)
+        radgrid = LegendreShiftExpRadGrid(200, 1e-6, 1e3, dtype=dtype)
         atomgrid = Lebedev(radgrid, prec=13, basis_maxangmom=4, dtype=dtype)
         grid = BeckeMultiGrid(atomgrid, atompos, dtype=dtype)
 
@@ -134,7 +134,7 @@ def test_atom_gauss():
     def runtest(atomz, coulexp):
         # setup the grid and the basis
         gwidths = torch.logspace(np.log10(1e-6), np.log10(1e2), 60).to(dtype)
-        radgrid = LegendreRadialShiftExp(1e-6, 1e3, 200, dtype=dtype)
+        radgrid = LegendreShiftExpRadGrid(200, 1e-6, 1e3, dtype=dtype)
         grid = Lebedev(radgrid, prec=13, basis_maxangmom=4, dtype=dtype)
         h = HamiltonAtomYGauss(grid, gwidths, maxangmom=1).to(dtype)
 
@@ -157,7 +157,7 @@ def test_atom_radial_gauss():
     def runtest(atomz, coulexp):
         # setup the grid and the basis
         gwidths = torch.logspace(np.log10(1e-6), np.log10(1e3), 80).to(dtype)
-        grid = LegendreRadialShiftExp(1e-7, 1e3, 200, dtype=dtype)
+        grid = LegendreShiftExpRadGrid(200, 1e-7, 1e3, dtype=dtype)
         h = HamiltonAtomRadial(grid, gwidths, coulexp=False).to(dtype)
 
         # obtain the eigenvalues

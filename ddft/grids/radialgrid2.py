@@ -1,6 +1,7 @@
 from abc import abstractmethod, abstractproperty
 import torch
 import numpy as np
+import lintorch as lt
 from numpy.polynomial.legendre import leggauss
 from ddft.grids.base_grid import BaseGrid
 from ddft.utils.legendre import legint, legvander, legder, deriv_legval
@@ -153,7 +154,7 @@ class RadialGrid(BaseGrid):
 
     def getparams(self, methodname):
         if methodname == "solve_poisson" or methodname == "get_dvolume":
-            return self._dvolume
+            return [self._dvolume]
         elif methodname == "interpolate":
             return self.transformobj.getparams("invtransform") + \
                    self.interpolator.getparams("interp")
@@ -202,13 +203,13 @@ class LegendreShiftExpRadGrid(RadialGrid):
 class LegendreDoubleExp2RadGrid(RadialGrid):
     def __init__(self, nr, alpha, rmin, rmax, dtype=torch.float, device=torch.device('cpu')):
         grid = LegendreGrid(nr, dtype=dtype, device=device)
-        tfm = DoubleExp2(alpha, rmin, rmax, dtype=dtype, device=device)
+        tfm = DoubleExp2Transformation(alpha, rmin, rmax, dtype=dtype, device=device)
         super(LegendreDoubleExp2RadGrid, self).__init__(grid, tfm)
 
 class GaussChebyshevLogM3RadGrid(RadialGrid):
     def __init__(self, nr, ra=1.0, dtype=torch.float, device=torch.device('cpu')):
         grid = GaussChebyshevGrid(nr, dtype=dtype, device=device)
-        tfm = LogM3(ra, dtype=dtype, device=device)
+        tfm = LogM3Transformation(ra, dtype=dtype, device=device)
         super(GaussChebyshevLogM3RadGrid, self).__init__(grid, tfm)
 
 ############################# fixed interval grid #############################
@@ -388,7 +389,7 @@ class ShiftExpTransformation(BaseGridTransformation):
         else:
             raise RuntimeError("Unimplemented %s method for setparams" % methodname)
 
-class DoubleExp2(BaseGridTransformation):
+class DoubleExp2Transformation(BaseGridTransformation):
     def __init__(self, alpha, rmin, rmax, dtype=torch.float, device=torch.device('cpu')):
         # setup the parameters needed for the transformation
         if not isinstance(alpha, torch.Tensor):

@@ -6,7 +6,7 @@ from ddft.basissets.base_basisset import BaseBasisModule
 from ddft.basissets.cgto_basis import CGTOBasis
 from ddft.hamiltons.hmolcgauss import HamiltonMoleculeCGauss
 from ddft.hamiltons.hmolc0gauss import HamiltonMoleculeC0Gauss
-from ddft.grids.radialgrid import LegendreRadialShiftExp
+from ddft.grids.radialgrid2 import LegendreShiftExpRadGrid
 from ddft.grids.sphangulargrid import Lebedev
 from ddft.grids.multiatomsgrid import BeckeMultiGrid
 from ddft.modules.equilibrium import EquilibriumModule
@@ -102,7 +102,7 @@ def molecule(atomzs, atompos,
     eks_model = _normalize_eks(eks_model)
 
     # setup the grid
-    radgrid = LegendreRadialShiftExp(rmin, rmax, nr, dtype=dtype, device=device)
+    radgrid = LegendreShiftExpRadGrid(nr, rmin, rmax, dtype=dtype, device=device)
     sphgrid = Lebedev(radgrid, prec=angprec, basis_maxangmom=lmax_poisson, dtype=dtype, device=device)
     grid = BeckeMultiGrid(sphgrid, atompos, dtype=dtype, device=device)
 

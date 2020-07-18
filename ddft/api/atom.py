@@ -4,7 +4,7 @@ from ddft.dft.dft import DFT, DFTMulti
 from ddft.utils.misc import set_default_option
 from ddft.hamiltons.hatomradial import HamiltonAtomRadial
 from ddft.hamiltons.hatomygauss import HamiltonAtomYGauss
-from ddft.grids.radialgrid import LegendreRadialShiftExp
+from ddft.grids.radialgrid2 import LegendreShiftExpRadGrid
 from ddft.grids.sphangulargrid import Lebedev
 from ddft.modules.equilibrium import EquilibriumModule
 from ddft.eks import BaseEKS, Hartree, xLDA
@@ -48,7 +48,7 @@ def atom(atomz, charge=0,
 
     # set up the basis and the radial grid
     gwidths = torch.logspace(np.log10(gwmin), np.log10(gwmax), ng, dtype=dtype).to(device)
-    radgrid = LegendreRadialShiftExp(rmin, rmax, nr, dtype=dtype, device=device)
+    radgrid = LegendreShiftExpRadGrid(nr, rmin, rmax, dtype=dtype, device=device)
     angmoms = orbitals.get_angmoms()
 
     # setup the grids and the hamiltonians

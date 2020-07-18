@@ -205,10 +205,10 @@ class HamiltonAtomRadial(BaseHamilton):
             return super().setparams(methodname, *params)
 
 if __name__ == "__main__":
-    from ddft.grids.radialgrid import LegendreRadialShiftExp
+    from ddft.grids.radialgrid2 import LegendreShiftExpRadGrid
     dtype = torch.float64
     gwidths = torch.logspace(np.log10(1e-5), np.log10(1e2), 100).to(dtype)
-    grid = LegendreRadialShiftExp(1e-6, 1e4, 200, dtype=dtype)
+    grid = LegendreShiftExpRadGrid(200, 1e-6, 1e4, dtype=dtype)
     h = HamiltonAtomRadial(grid, gwidths, angmom=0).to(dtype)
 
     vext = torch.zeros(1, 2000).to(dtype)

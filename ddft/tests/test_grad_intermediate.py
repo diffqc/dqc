@@ -4,7 +4,7 @@ from ddft.eks.base_eks import BaseEKS
 from ddft.eks.hartree import Hartree
 from ddft.dft.dft import DFT
 from ddft.basissets.cgto_basis import CGTOBasis
-from ddft.grids.radialgrid import LegendreRadialShiftExp
+from ddft.grids.radialgrid2 import LegendreShiftExpRadGrid
 from ddft.grids.sphangulargrid import Lebedev
 from ddft.grids.multiatomsgrid import BeckeMultiGrid
 from ddft.utils.safeops import safepow
@@ -26,7 +26,7 @@ def test_grad_basis_cgto():
     nrgrid = 148 * nr
 
     def fcn(atomzs, atomposs, wf, vext):
-        radgrid = LegendreRadialShiftExp(rmin, rmax, nr, dtype=dtype)
+        radgrid = LegendreShiftExpRadGrid(nr, rmin, rmax, dtype=dtype)
         sphgrid = Lebedev(radgrid, prec=prec, basis_maxangmom=4, dtype=dtype)
         grid = BeckeMultiGrid(sphgrid, atomposs, dtype=dtype)
         basis = CGTOBasis(basisname, cartesian=True)
@@ -63,7 +63,7 @@ def test_grad_dft_cgto():
             return self.a * safepow(density.abs(), self.p)
 
     def fcn(atomzs, atomposs, a, p, output="energy"):
-        radgrid = LegendreRadialShiftExp(rmin, rmax, nr, dtype=dtype)
+        radgrid = LegendreShiftExpRadGrid(nr, rmin, rmax, dtype=dtype)
         sphgrid = Lebedev(radgrid, prec=prec, basis_maxangmom=4, dtype=dtype)
         grid = BeckeMultiGrid(sphgrid, atomposs, dtype=dtype)
         basis = CGTOBasis(basisname, cartesian=True, dtype=dtype)
