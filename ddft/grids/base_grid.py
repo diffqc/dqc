@@ -209,28 +209,6 @@ class Base3DGrid(BaseGrid):
         """
         pass
 
-class BaseTransformed1DGrid(BaseGrid):
-    @abstractmethod
-    def transform(self, xlg):
-        """
-        Transform the coordinate from [-1,1] to the intended coordinate.
-        """
-        pass
-
-    @abstractmethod
-    def invtransform(self, rs):
-        """
-        Transform back from the intended coordinate to the coordinate [-1,1].
-        """
-        pass
-
-    @abstractmethod
-    def get_scaling(self, rs):
-        """
-        Obtain the scaling dr/dx for the integration.
-        """
-        pass
-
 class BaseRadialAngularGrid(Base3DGrid):
     @abstractproperty
     def radial_grid(self):

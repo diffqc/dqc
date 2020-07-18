@@ -3,8 +3,7 @@ import warnings
 import torch
 import numpy as np
 import ddft
-from ddft.grids.base_grid import BaseGrid, BaseTransformed1DGrid, BaseRadialAngularGrid
-# from ddft.grids.radialgrid import RadialGrid
+from ddft.grids.base_grid import BaseGrid, BaseRadialAngularGrid
 from ddft.grids.radialgrid2 import RadialGrid
 from ddft.utils.spharmonics import spharmonics, vspharmonics
 
@@ -12,7 +11,7 @@ class Lebedev(BaseRadialAngularGrid):
     def __init__(self, radgrid, prec, basis_maxangmom=None, dtype=torch.float, device=torch.device('cpu')):
         super(Lebedev, self).__init__()
 
-        # radgrid must be a BaseTransformed1DGrid
+        # radgrid must be a RadialGrid
         if not isinstance(radgrid, RadialGrid):
             raise TypeError("Argument radgrid must be a RadialGrid")
 
