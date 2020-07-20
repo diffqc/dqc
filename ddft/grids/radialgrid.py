@@ -206,6 +206,12 @@ class LegendreDoubleExp2RadGrid(RadialGrid):
         tfm = DoubleExp2Transformation(alpha, rmin, rmax, dtype=dtype, device=device)
         super(LegendreDoubleExp2RadGrid, self).__init__(grid, tfm)
 
+class LegendreLogM3RadGrid(RadialGrid):
+    def __init__(self, nr, ra=1.0, dtype=torch.float, device=torch.device('cpu')):
+        grid = LegendreGrid(nr, dtype=dtype, device=device)
+        tfm = LogM3Transformation(ra, dtype=dtype, device=device)
+        super(LegendreLogM3RadGrid, self).__init__(grid, tfm)
+
 class GaussChebyshevLogM3RadGrid(RadialGrid):
     def __init__(self, nr, ra=1.0, dtype=torch.float, device=torch.device('cpu')):
         grid = GaussChebyshevGrid(nr, dtype=dtype, device=device)
