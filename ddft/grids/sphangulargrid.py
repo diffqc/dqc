@@ -99,7 +99,8 @@ class Lebedev(BaseRadialAngularGrid):
         # we only need to do integral[f(r) dr]. That's why it is divided by (4*np.pi)
         # and it is not multiplied with (self.radrgrid**2) in the lines below
         intgn = (frad_lm).unsqueeze(-2) * rratio # (nbatch, nsh, nrad, nrad)
-        vrad_lm = self.radgrid.integralbox(intgn, dim=-1) / ((2*angmoms+1) * (4*np.pi))
+        vrad_lm = self.radgrid.cumsum_integrate(intgn) / ((2*angmoms+1) * (4*np.pi))
+        # vrad_lm = self.radgrid.integralbox(intgn, dim=-1) / ((2*angmoms+1) * (4*np.pi))
 
         # convert back to the spatial basis
         v = torch.matmul(vrad_lm.transpose(-2,-1), basis) # (nbatch, nrad, nphitheta)

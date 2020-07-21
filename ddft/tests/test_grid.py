@@ -265,9 +265,9 @@ def get_rtol_atol(taskname, gridname1, gridname2=None):
             "legradialdoubleexp2": [0.0, 8e-5],
             "chebradiallogm3": [0.0, 9e-4], # NOTE: it is quite high (investigate?)
             "lebedev": {
-                "legradialshiftexp": [0.0, 9e-4],
-                "legradialdoubleexp2": [0.0, 2e-3],
-                "chebradiallogm3": [0.0, 5e-3],
+                "legradialshiftexp": [0.0, 3e-4],
+                "legradialdoubleexp2": [0.0, 2e-4],
+                "chebradiallogm3": [0.0, 4e-3],
             },
             "becke": [2e-3, 8e-3],
         },
