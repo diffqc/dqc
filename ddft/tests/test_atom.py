@@ -8,8 +8,8 @@ dtype = torch.float64
 
 def test_atom():
     energies = {
-        1: -0.4063,
-        2: -2.7221,
+        1: -0.4065,
+        2: -2.7236,
     }
 
     for atomz, ene in energies.items():
