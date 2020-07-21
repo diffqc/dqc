@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 from abc import abstractmethod
+from ddft.utils.interp import get_spline_mat_inv
 
 """
 This file contains the cumulative sum quadrature functions.
@@ -39,11 +40,47 @@ class CumSumQuad(BaseCumSumQuad):
             self.quad = TrapzCumSumQuad(x, side=side)
         elif method == "simpson":
             self.quad = SimpsonCumSumQuad(x, side=side)
+        elif method == "cspline":
+            self.quad = CubicSplineCumSumQuad(x, side=side)
         else:
             raise RuntimeError("Unknown method: %s" % method)
 
     def cumsum(self, y):
         return self.quad.cumsum(y)
+
+class CubicSplineCumSumQuad(BaseCumSumQuad):
+    def __init__(self, x, side="left"):
+        # x: (*, nx)
+        xshape = x.shape
+        nx = xshape[-1]
+        x = x.view(-1, nx) # (nb, nx)
+
+        nb, nx = x.shape
+        if side == "left" or side == "both":
+            spline_mat = torch.zeros((nb, nx, nx, nx), dtype=x.dtype, device=x.device)
+            for i in range(2,nx):
+                spline_mat[:,i,:i,:i] = get_spline_mat_inv(x[:,:i], transpose=False) # (nb, i, i)
+        if side == "right" or side == "both":
+            raise RuntimeError("right side is not available for cubic spline CumSumQuad")
+
+        self.spline_mat = spline_mat # (nb, nx, nx, nx)
+        self.xshape = xshape
+        self.wy = get_trapz_weights(x) # (nb, nx, nx)
+        self.wk = get_cspline_grad_weights(x) # (nb, nx, nx)
+
+    def cumsum(self, y):
+        # y: (*, nx)
+        # return: (*, nx)
+        yshape = y.shape
+        y1 = y.view(-1, 1, y.shape[-1], 1) # (nb, 1, nx, 1)
+        ks = torch.matmul(self.spline_mat, y1).squeeze(-1) # (nb, nx, nx)
+        kfactor = torch.einsum("abc,abc->ab", self.wk, ks) # (nb, nx)
+        yfactor = torch.matmul(self.wy, y1).squeeze(-1) # (nb, nx)
+        res = kfactor + yfactor # (nb, nx)
+
+        # return to the y shape
+        res = res.view(yshape)
+        return res
 
 ######################## weight-based cumsum quadrature ########################
 class WeightBasedCumSumQuad(BaseCumSumQuad):
@@ -132,11 +169,25 @@ def get_simpson_weights(x):
 
     return res
 
+@torch.jit.script
+def get_cspline_grad_weights(x):
+    # x: (nb, nx)
+    # returns: (nb, nx, nx)
+    dx = (x[:,1:] - x[:,:-1]) # (nb, nx-1)
+    dx_factor = dx * dx / 12. # (nb, nx-1)
+    sign = torch.tensor([1., -1.], dtype=x.dtype, device=x.device)
+    nx = x.shape[-1]
+    res = torch.zeros((x.shape[0], nx, nx), dtype=x.dtype, device=x.device)
+    for i in range(1,nx):
+        res[:,i:,i-1:i+1] += dx_factor[:,i-1:i].unsqueeze(-1) * sign
+    return res
+
 if __name__ == "__main__":
-    x = torch.logspace(-4, 1, 100)
-    # x = torch.linspace(0, 9, 100)
+    x = torch.logspace(-4, 2, 1000, dtype=torch.float64)
+    # x = torch.linspace(0, 9, 1000, dtype=torch.float64)
     y = torch.exp(-x*x/2.0)
-    side = "right"
+    side = "left"
+    # method = "cspline"
     method = "simpson"
     # method = "trapz"
 
@@ -144,10 +195,11 @@ if __name__ == "__main__":
         ycumsum = np.sqrt(np.pi*0.5) * torch.erf(x/np.sqrt(2))
     else:
         ycumsum = np.sqrt(np.pi*0.5) * torch.erfc(x/np.sqrt(2))
-    cumsum = CumSumQuad(x, side=side, method=method).cumsum(y)
+    cumsum = CumSumQuad(torch.log(x), side=side, method=method).cumsum(y)
     print((cumsum-ycumsum).abs().mean())
 
     import matplotlib.pyplot as plt
     plt.plot(x, ycumsum)
     plt.plot(x, cumsum)
+    plt.gca().set_xscale("log")
     plt.show()
