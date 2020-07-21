@@ -31,7 +31,7 @@ class CumSumQuad(BaseCumSumQuad):
     * side: ("left", "right", "both")
         If "left", then it performs cumulative sum from the left, i.e. int_0^x y(x) dx.
         If "right", it performs from the right, i.e. int_x^inf y(x) dx.
-        If "both", then it is right + left.
+        If "both", then it is right + left, i.e. int_0^x f(x) dx + int_x^inf g(x) dx
     * method: str
         Method of quadrature.
     """
@@ -46,9 +46,22 @@ class CumSumQuad(BaseCumSumQuad):
             raise RuntimeError("Unknown method: %s" % method)
 
     def cumsum(self, y):
+        """
+        Perform cumulative sum on `y` (*, nr) and returns the cumulative sum
+        with shape (*, nr).
+        It performs `int_0^x1 y(x) dx` or `int_x1^inf y(x) dx`
+        """
         return self.quad.cumsum(y)
 
     def integrate(self, y):
+        """
+        Perform the integration of `y` (*, nr, nr) which are already arranged
+        for cumulative sum in the last dimension and returns the cumulative
+        sum with shape (nb, nr).
+        It performs `int_0^x1 y(x1,x2) dx2` if side == "left",
+        `int_x1^inf y(x1,x2) dx2` if side == "right", and the sum of both of
+        them if side == "both".
+        """
         return self.quad.integrate(y)
 
 class CubicSplineCumSumQuad(BaseCumSumQuad):
