@@ -183,8 +183,8 @@ def get_cspline_grad_weights(x):
     return res
 
 if __name__ == "__main__":
-    x = torch.logspace(-4, 2, 1000, dtype=torch.float64)
-    # x = torch.linspace(0, 9, 1000, dtype=torch.float64)
+    # x = torch.logspace(-4, 2, 1000, dtype=torch.float64)
+    x = torch.linspace(0, 9, 1000, dtype=torch.float64)
     y = torch.exp(-x*x/2.0)
     side = "left"
     # method = "cspline"
@@ -195,7 +195,7 @@ if __name__ == "__main__":
         ycumsum = np.sqrt(np.pi*0.5) * torch.erf(x/np.sqrt(2))
     else:
         ycumsum = np.sqrt(np.pi*0.5) * torch.erfc(x/np.sqrt(2))
-    cumsum = CumSumQuad(torch.log(x), side=side, method=method).cumsum(y)
+    cumsum = CumSumQuad(x, side=side, method=method).cumsum(y)
     print((cumsum-ycumsum).abs().mean())
 
     import matplotlib.pyplot as plt
