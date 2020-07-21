@@ -48,6 +48,9 @@ class CumSumQuad(BaseCumSumQuad):
     def cumsum(self, y):
         return self.quad.cumsum(y)
 
+    def integrate(self, y):
+        return self.quad.integrate(y)
+
 class CubicSplineCumSumQuad(BaseCumSumQuad):
     def __init__(self, x, side="left"):
         # x: (*, nx)
@@ -109,6 +112,12 @@ class WeightBasedCumSumQuad(BaseCumSumQuad):
         # w: (*, nx, nx)
         # returns: (*, nx)
         return torch.sum(y.unsqueeze(-2) * self.w, dim=-1)
+
+    def integrate(self, y):
+        # y: (*, nx, nx)
+        # w: (*, nx, nx)
+        # returns: (*, nx)
+        return torch.sum(y * self.w, dim=-1)
 
 class TrapzCumSumQuad(WeightBasedCumSumQuad):
     def get_weights(self, x):

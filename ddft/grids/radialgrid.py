@@ -6,6 +6,7 @@ from numpy.polynomial.legendre import leggauss
 from ddft.grids.base_grid import BaseGrid
 from ddft.utils.legendre import legint, legvander, legder, deriv_legval
 from ddft.utils.interp import CubicSpline
+from ddft.utils.cumsum_quad import CumSumQuad
 
 __all__ = ["RadialGrid"]
 
@@ -55,6 +56,7 @@ class RadialGrid(BaseGrid):
         self.x, self.w = grid.get_xw()
         self._boxshape = (len(self.x),)
         self._interpolator = CubicSpline(self.x)
+        self._cumsumquad = CumSumQuad(self.x, side="both", method="simpson")
 
         self._transformobj = tfmobj
         self.rs = self.transformobj.transform(self.x)
@@ -62,8 +64,9 @@ class RadialGrid(BaseGrid):
 
         # integration elements
         self._scaling = self.transformobj.get_scaling(self.rs) # dr/dg
+        self._vol_elmt = 4*np.pi*self.rs*self.rs
         self._dr = self._scaling * self.w
-        self._dvolume = (4*np.pi*self.rs*self.rs) * self._dr
+        self._dvolume = self._vol_elmt * self._dr
 
     @property
     def interpolator(self):
@@ -90,6 +93,11 @@ class RadialGrid(BaseGrid):
     def laplace(self, p, dim=-1):
         pass # ???
 
+    def cumsum_integrate(self, f):
+        # f: (nbatch, nr, nr) in r-space
+        fx = f * self._scaling * self._vol_elmt # (nbatch, nr, nr)
+        return self._cumsumquad.integrate(fx) # (nbatch, nr)
+
     def solve_poisson(self, f):
         # f: (nbatch, nr)
         # the expression below is used to satisfy the following conditions:
@@ -109,7 +117,10 @@ class RadialGrid(BaseGrid):
         # we only need to do integral[f(r) dr]. That's why it is divided by (4*np.pi)
         # and it is not multiplied with (self.radrgrid**2) in the lines below
         intgn = (f).unsqueeze(-2) * rratio # (nbatch, nr, nr)
-        vrad_lm = self.integralbox(intgn / (4*np.pi), dim=-1)
+        print(intgn.shape)
+        vrad_lm = self.cumsum_integrate(intgn) / (4*np.pi)
+        print(vrad_lm.shape)
+        # vrad_lm = self.integralbox(intgn / (4*np.pi), dim=-1)
 
         return -vrad_lm
 
