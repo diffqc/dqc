@@ -117,9 +117,7 @@ class RadialGrid(BaseGrid):
         # we only need to do integral[f(r) dr]. That's why it is divided by (4*np.pi)
         # and it is not multiplied with (self.radrgrid**2) in the lines below
         intgn = (f).unsqueeze(-2) * rratio # (nbatch, nr, nr)
-        print(intgn.shape)
         vrad_lm = self.cumsum_integrate(intgn) / (4*np.pi)
-        print(vrad_lm.shape)
         # vrad_lm = self.integralbox(intgn / (4*np.pi), dim=-1)
 
         return -vrad_lm
