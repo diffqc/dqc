@@ -4,7 +4,7 @@ from ddft.eks.base_eks import BaseEKS
 from ddft.eks.hartree import Hartree
 from ddft.dft.dft import DFT
 from ddft.basissets.cgto_basis import CGTOBasis
-from ddft.grids.radialgrid import LegendreShiftExpRadGrid
+from ddft.grids.radialgrid import LegendreShiftExpRadGrid, LegendreLogM3RadGrid
 from ddft.grids.sphangulargrid import Lebedev
 from ddft.grids.multiatomsgrid import BeckeMultiGrid
 from ddft.utils.safeops import safepow
@@ -105,3 +105,46 @@ def atest_grad_dft_cgto():
     # choosing smaller eps make the numerical method produces nan, don't know why
     gradgradcheck(fcn, (atomzs, atomposs, a, p, "energy"), eps=1e-3)
     gradgradcheck(fcn, (atomzs, atomposs, a, p, "density"), eps=1e-3)
+
+def test_grad_poisson_radial():
+    radgrid = LegendreLogM3RadGrid(nr=100, ra=2.)
+    r = radgrid.rgrid.squeeze(-1) # (nr,)
+    w = torch.linspace(0.8, 1.2, 5, dtype=r.dtype, device=r.device).unsqueeze(-1) # (nw,1)
+    w = w.requires_grad_()
+    f = torch.exp(-r/w) # (nw, nr)
+
+    # analytically calculated gradients
+    fpois_true = w*w*f + 2*w*w*w/r*torch.expm1(-r/w) # (nw, nr)
+    gwidth_true = 4*w*f.mean(dim=-1, keepdim=True) + (f*r).mean(dim=-1, keepdim=True) +\
+        6*w*w*(torch.expm1(-r/w)/r).mean(dim=-1, keepdim=True) # (nw,1)
+
+    fpois = radgrid.solve_poisson(f) # (nw, nr)
+    loss = fpois.mean(dim=-1).sum()
+    gwidth, = torch.autograd.grad(loss, (w,), retain_graph=True)
+    assert torch.allclose(gwidth, gwidth_true)
+
+    print(gwidth.view(-1))
+    print(gwidth_true.view(-1))
+    print((gwidth_true-gwidth).view(-1))
+
+def test_grad_spherical_radial():
+    radgrid = LegendreLogM3RadGrid(nr=100, ra=2.)
+    grid = Lebedev(radgrid, prec=13, basis_maxangmom=4)
+    r = grid.rgrid[:,0] # (nr)
+    w = torch.linspace(0.8, 1.2, 5, dtype=r.dtype, device=r.device).unsqueeze(-1) # (nw,1)
+    w = w.requires_grad_()
+    f = torch.exp(-r/w) # (nw, nr)
+
+    # analytically calculated gradients
+    fpois_true = w*w*f + 2*w*w*w/r*torch.expm1(-r/w) # (nw, nr)
+    gwidth_true = 4*w*f.mean(dim=-1, keepdim=True) + (f*r).mean(dim=-1, keepdim=True) +\
+        6*w*w*(torch.expm1(-r/w)/r).mean(dim=-1, keepdim=True) # (nw,1)
+
+    fpois = grid.solve_poisson(f) # (nw, nr)
+    loss = fpois.mean(dim=-1).sum()
+    gwidth, = torch.autograd.grad(loss, (w,), retain_graph=True)
+    assert torch.allclose(gwidth, gwidth_true)
+
+    print(gwidth.view(-1))
+    print(gwidth_true.view(-1))
+    print((gwidth_true-gwidth).view(-1))
