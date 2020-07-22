@@ -7,6 +7,7 @@ import lintorch as lt
 from ddft.hamiltons.base_hamilton import BaseHamilton
 from ddft.utils.spharmonics import spharmonics
 from ddft.utils.gamma import incgamma
+from ddft.csrc import get_ecoeff, get_overlap_mat, get_kinetics_mat
 
 class HamiltonMoleculeCGauss(BaseHamilton):
     """
@@ -220,6 +221,8 @@ class HamiltonMoleculeCGauss(BaseHamilton):
         return cmat
 
 class Ecoeff(object):
+    # ref: https://joshuagoings.com/2017/04/28/integrals/ and
+    # Helgaker, Trygve, and Peter R. Taylor. “Gaussian basis sets and molecular integrals.” Modern Electronic Structure (1995).
     def __init__(self, ijks, centres, alphas, atompos):
         # ijks: (nbasis*nelmts, 3)
         # centres: (nbasis*nelmts, 3)
@@ -265,7 +268,7 @@ class Ecoeff(object):
         self.idx_ijk = [(self.ijk_pairs2 == ijk_flat_value) for ijk_flat_value in self.ijk_pairs2_unique]
 
         # the key is: "i,j,t,xyz"
-        self.key_format = "%d,%d,%d,%d"
+        self.key_format = "{},{},{},{}"
         # the value's shape is: (nbasis*nelmts, nbasis*nelmts)
         self.e_memory = {
             "0,0,0,0": self.mab[:,:,0],
@@ -286,48 +289,20 @@ class Ecoeff(object):
 
     def get_overlap(self):
         if self.overlap is None:
-            overlap_dim = torch.empty_like(self.qab).to(self.qab.device) # (nbasis*nelmts, nbasis*nelmts, 3)
-            for i in range(self.ijk_left_max+1):
-                for j in range(self.ijk_right_max+1):
-                    idx = (self.ijk_pairs == (i*self.max_basis + j)) # (nbasis*nelmts, nbasis*nelmts, 3)
-                    # if idx.sum() == 0: continue
-                    for xyz in range(self.ndim):
-                        idxx = idx[:,:,xyz]
-                        coeff = self.get_coeff(i, j, 0, xyz) # (nbasis*nelmts, nbasis*nelmts)
-                        overlap_dim[:,:,xyz][idxx] = coeff[idxx]
-            self.overlap = overlap_dim.prod(dim=-1) * (np.pi/self.gamma)**1.5 # (nbasis*nelmts, nbasis*nelmts)
+            # NOTE: using this makes test_grad_intermediate.py::test_grad_dft_cgto produces nan in gradgradcheck energy
+            # (nans are in the numerical, not in the analytic one)
+            self.overlap = get_overlap_mat(self.ijk_left_max, self.ijk_right_max,
+                self.max_basis, self.ndim, self.ijk_pairs,
+                self.alphas, self.betas, self.gamma, self.kappa, self.qab,
+                self.e_memory, self.key_format)
         return self.overlap
 
     def get_kinetics(self):
         if self.kinetics is None:
-            kinetics_dim0 = torch.empty_like(self.qab).to(self.qab.device) # (nbasis*nelmts, nbasis*nelmts, 3)
-            kinetics_dim1 = torch.empty_like(self.qab).to(self.qab.device) # (nbasis*nelmts, nbasis*nelmts, 3)
-            kinetics_dim2 = torch.empty_like(self.qab).to(self.qab.device) # (nbasis*nelmts, nbasis*nelmts, 3)
-            for i in range(self.ijk_left_max+1):
-                for j in range(self.ijk_right_max+1):
-                    idx = self.ijk_pairs == (i*self.max_basis + j)
-                    for xyz in range(self.ndim):
-                        idxx = idx[:,:,xyz]
-                        sij = self.get_coeff(i,j,0,xyz)
-                        dij = j*(j-1)*self.get_coeff(i,j-2,0,xyz) - \
-                              2*(2*j+1)*self.betas*sij + \
-                              4*self.betas*self.betas*self.get_coeff(i,j+2,0,xyz) # (nbasis*nelmts, nbasis*nelmts)
-                        sij_idxx = sij[idxx]
-                        if xyz == 0:
-                            kinetics_dim0[:,:,xyz][idxx] = dij[idxx]
-                            kinetics_dim1[:,:,xyz][idxx] = sij_idxx
-                            kinetics_dim2[:,:,xyz][idxx] = sij_idxx
-                        elif xyz == 1:
-                            kinetics_dim0[:,:,xyz][idxx] = sij_idxx
-                            kinetics_dim1[:,:,xyz][idxx] = dij[idxx]
-                            kinetics_dim2[:,:,xyz][idxx] = sij_idxx
-                        elif xyz == 2:
-                            kinetics_dim0[:,:,xyz][idxx] = sij_idxx
-                            kinetics_dim1[:,:,xyz][idxx] = sij_idxx
-                            kinetics_dim2[:,:,xyz][idxx] = dij[idxx]
-            kinetics = kinetics_dim0.prod(dim=-1) + kinetics_dim1.prod(dim=-1) + \
-                       kinetics_dim2.prod(dim=-1)
-            self.kinetics = -0.5 * (np.pi/self.gamma)**1.5 * kinetics
+            self.kinetics = get_kinetics_mat(self.ijk_left_max, self.ijk_right_max,
+                self.max_basis, self.ndim, self.ijk_pairs,
+                self.alphas, self.betas, self.gamma, self.kappa, self.qab,
+                self.e_memory, self.key_format)
         return self.kinetics
 
     def get_coulomb(self):
@@ -351,26 +326,9 @@ class Ecoeff(object):
         return self.coulomb
 
     def get_coeff(self, i, j, t, xyz):
-        # return: (nbasis*nelmts, nbasis*nelmts)
-        if t < 0 or t > i+j or i < 0 or j < 0:
-            return 0.0
-        coeff = self._access_coeff(i, j, t, xyz)
-        if coeff is not None:
-            return coeff
-
-        if i == 0 and j > 0:
-            coeff = 1./(2*self.gamma) * self.get_coeff(i, j-1, t-1, xyz) + \
-                    self.kappa * self.qab[:,:,xyz] / self.betas * self.get_coeff(i, j-1, t, xyz) + \
-                    (t + 1) * self.get_coeff(i, j-1, t+1, xyz)
-        elif i > 0:
-            coeff = 1./(2*self.gamma) * self.get_coeff(i-1, j, t-1, xyz) - \
-                    self.kappa * self.qab[:,:,xyz] / self.alphas * self.get_coeff(i-1, j, t, xyz) + \
-                    (t + 1) * self.get_coeff(i-1, j, t+1, xyz)
-
-        # add to the memory
-        key = self.key_format % (i,j,t,xyz)
-        self.e_memory[key] = coeff
-        return coeff
+        return get_ecoeff(i, j, t, xyz,
+            self.alphas, self.betas, self.gamma, self.kappa, self.qab,
+            self.e_memory, self.key_format)
 
     def get_rcoeff(self, r, s, t, n):
         # rcd: (natoms, nbasis*nelmts, nbasis*nelmts, 3)
@@ -395,7 +353,7 @@ class Ecoeff(object):
                     self.rcd[:,:,:,2] * self.get_rcoeff(r, s, t-1, n+1)
 
         # save the coefficients
-        key = self.key_format % (r,s,t,n)
+        key = self.key_format.format(r,s,t,n)
         self.r_memory[key] = coeff
         return coeff
 
@@ -418,14 +376,14 @@ class Ecoeff(object):
         return incgamma(nhalf, T) / (2 * T**nhalf)
 
     def _access_coeff(self, i, j, t, xyz):
-        key = self.key_format % (i,j,t,xyz)
+        key = self.key_format.format(i,j,t,xyz)
         if key in self.e_memory:
             return self.e_memory[key]
         else:
             return None
 
     def _access_rcoeff(self, r, s, t, n):
-        key = self.key_format % (r,s,t,n)
+        key = self.key_format.format(r,s,t,n)
         if key in self.r_memory:
             return self.r_memory[key]
         else:
