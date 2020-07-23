@@ -6,6 +6,8 @@ from torch.autograd import gradcheck, gradgradcheck
 from ddft.api.molecule import molecule
 from ddft.eks import BaseEKS
 from ddft.utils.safeops import safepow
+from ddft.systems import mol
+from ddft.qccalcs import dft
 
 """
 Test various configurations using the molecule API.
@@ -57,6 +59,34 @@ def test_atom():
         eks_model = PseudoLDA(a, p)
         energy, _ = molecule(atomzs, atomposs, eks_model=eks_model, basis=basis)
         assert torch.allclose(energy, energy_true)
+
+def test_atom2():
+    systems = {
+        "Be 0 0 0": -14.2219,
+        "Ne 0 0 0": -127.4718
+    }
+    basis = "6-311++G**"
+    runtest_molsystem_energy(systems, basis)
+
+def test_mol2():
+    systems = {
+        # "H -0.5 0 0; H 0.5 0 0"  : -0.9791401, # pyscf: -0.979143262 # LDA, 6-311++G**, grid level 4
+        # "Li -2.5 0 0; Li 2.5 0 0": -14.392576, # pyscf: -14.3927863482007 # LDA, 6-311++G**, grid level 4
+        # "N -1 0 0; N 1 0 0"      : -107.7327, # pyscf: -107.726124017789 # LDA, 6-311++G**, grid level 4
+        "F -1.25 0 0; F 1.25 0 0": -197.0230, # pyscf: -197.005308558326 # LDA, 6-311++G**, grid level 4
+        # "C -1 0 0; O 1 0 0"      : -111.49737, # pyscf: -111.490687028797 # LDA, 6-311++G**, grid level 4
+    }
+    basis = "6-311++G**"
+    runtest_molsystem_energy(systems, basis)
+
+def runtest_molsystem_energy(systems, basis):
+    for s in systems:
+        energy_true = systems[s]
+        m = mol(s, basis)
+        scf = dft(m, eks_model="lda")
+        energy = scf.energy()
+        print("%.7f" % energy)
+        assert torch.allclose(energy, torch.tensor(energy_true, dtype=energy.dtype))
 
 def get_molecule(molname, distance=None, with_energy=False):
     if molname == "H2":
