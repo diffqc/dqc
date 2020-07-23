@@ -19,6 +19,11 @@ def unpack(arr, nums):
             iarr = iarr + ns
     return res
 
+def to_tensor(arr):
+    if not isinstance(arr, torch.Tensor):
+        return torch.tensor(arr)
+    return arr
+
 @torch.jit.script
 def cumsum_zero(x:torch.Tensor, dim:int=-1):
     if dim != -1:

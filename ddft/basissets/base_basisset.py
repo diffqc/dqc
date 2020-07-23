@@ -1,4 +1,5 @@
 import torch
+import lintorch as lt
 from abc import abstractmethod, abstractproperty
 
 class BaseBasisModule(torch.nn.Module):
@@ -31,4 +32,18 @@ class BaseBasisModule(torch.nn.Module):
         Returns the hamiltonian using the basis parameters set up earlier with
         construct_basis.
         """
+        pass
+
+class BaseAtomicBasis(object):
+    @abstractproperty
+    def dtype(self):
+        pass
+
+    @abstractproperty
+    def device(self):
+        pass
+
+    @staticmethod
+    @abstractmethod
+    def construct_hamiltonian(grid, bases_list, atomposs):
         pass

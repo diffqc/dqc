@@ -3,6 +3,8 @@ import torch
 from ddft.basissets.base_basisset import BaseBasisModule
 from ddft.hamiltons.hmolcgauss import HamiltonMoleculeCGauss
 
+# DEPRECATED!
+
 class CGTOBasis(BaseBasisModule):
     def __init__(self, basisname, cartesian=True, requires_grad=False,
                  fnameformat=None, dtype=torch.float32, device=torch.device('cpu')):
