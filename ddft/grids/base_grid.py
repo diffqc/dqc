@@ -192,6 +192,19 @@ class BaseGrid(lt.EditableModule):
         raise RuntimeError("Laplace for grid %s has not been implemented" % \
               self.__class__.__name__)
 
+    ################### editable module ###################
+    def getparams(self, methodname):
+        if methodname == "integralbox" or methodname == "mmintegralbox":
+            return self.getparams("get_dvolume")
+        else:
+            raise RuntimeError("getparams has not been implemented for method %s" % methodname)
+
+    def setparams(self, methodname, *params):
+        if methodname == "integralbox" or methodname == "mmintegralbox":
+            return self.setparams("get_dvolume", *params)
+        else:
+            raise RuntimeError("setparams has not been implemented for method %s" % methodname)
+
 class Base3DGrid(BaseGrid):
     @abstractproperty
     def rgrid_in_xyz(self):

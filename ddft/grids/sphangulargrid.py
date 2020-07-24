@@ -293,7 +293,7 @@ class Lebedev(BaseRadialAngularGrid):
         elif methodname == "get_dvolume":
             return [self._dvolume]
         else:
-            raise RuntimeError("The method %s has not been specified for getparams" % methodname)
+            return super().getparams(methodname)
 
     def setparams(self, methodname, *params):
         if methodname == "solve_poisson":
@@ -306,7 +306,7 @@ class Lebedev(BaseRadialAngularGrid):
             self._dvolume, = params[:1]
             return 1
         else:
-            raise RuntimeError("The method %s has not been specified for setparams" % methodname)
+            return super().setparams(methodname, *params)
 
 if __name__ == "__main__":
     import lintorch as lt

@@ -58,11 +58,11 @@ def test_atom2():
 
 def test_mol2():
     systems = {
-        # "H -0.5 0 0; H 0.5 0 0"  : -0.9791401, # pyscf: -0.979143262 # LDA, 6-311++G**, grid level 4
-        "Li -2.5 0 0; Li 2.5 0 0": -14.392576, # pyscf: -14.3927863482007 # LDA, 6-311++G**, grid level 4
-        # "N -1 0 0; N 1 0 0"      : -107.7327, # pyscf: -107.726124017789 # LDA, 6-311++G**, grid level 4
-        # "F -1.25 0 0; F 1.25 0 0": -197.0101, # pyscf: -197.005308558326 # LDA, 6-311++G**, grid level 4
-        # "C -1 0 0; O 1 0 0"      : -111.49737, # pyscf: -111.490687028797 # LDA, 6-311++G**, grid level 4
+        "H -0.5 0 0; H 0.5 0 0"  : -0.9791401, # pyscf: -0.979143262 # LDA, 6-311++G**, grid level 4
+        # "Li -2.5 0 0; Li 2.5 0 0": -14.392576, # pyscf: -14.3927863482007 # LDA, 6-311++G**, grid level 4
+        "N -1 0 0; N 1 0 0"      : -107.7327, # pyscf: -107.726124017789 # LDA, 6-311++G**, grid level 4
+        "F -1.25 0 0; F 1.25 0 0": -197.0101, # pyscf: -197.005308558326 # LDA, 6-311++G**, grid level 4
+        "C -1 0 0; O 1 0 0"      : -111.49737, # pyscf: -111.490687028797 # LDA, 6-311++G**, grid level 4
     }
     basis = "6-311++G**"
     runtest_molsystem_energy(systems, basis)
@@ -75,3 +75,6 @@ def runtest_molsystem_energy(systems, basis):
         energy = scf.energy()
         print("%.7f" % energy)
         assert torch.allclose(energy, torch.tensor(energy_true, dtype=energy.dtype))
+
+if __name__ == "__main__":
+    test_mol2()

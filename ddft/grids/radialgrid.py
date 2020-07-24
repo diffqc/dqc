@@ -168,7 +168,7 @@ class RadialGrid(BaseGrid):
             return self.transformobj.getparams("invtransform") + \
                    self.interpolator.getparams("interp")
         else:
-            raise RuntimeError("Unimplemented %s for getparams" % methodname)
+            return super().getparams(methodname)
 
     def setparams(self, methodname, *params):
         if methodname == "solve_poisson" or methodname == "get_dvolume":
@@ -180,7 +180,7 @@ class RadialGrid(BaseGrid):
             idx += self.interpolator.setparams("interp", *params[idx:])
             return idx
         else:
-            raise RuntimeError("Unimplemented %s for setparams" % methodname)
+            return super().setparams(methodname, *params)
 
 def get_fixed_interval_grid(gridstr):
     s = gridstr.lower().replace("-", "")

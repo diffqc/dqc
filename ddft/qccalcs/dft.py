@@ -144,9 +144,11 @@ class dft(BaseQCCalc):
     ############################# editable module #############################
     def getparams(self, methodname):
         if methodname == "__forward_pass":
-            return self.hmodel.getparams("dm2dens") + self.getparams("__diagonalize")
+            return self.hmodel.getparams("dm2dens") + self.getparams("__diagonalize") + self.getparams("__normalize_dm")
         elif methodname == "__diagonalize":
             return [self.vext] + self.eigen_model.getparams("__call__") + self.vks_model.getparams("__call__")
+        elif methodname == "__normalize_dm":
+            return self.grid.getparams("integralbox")
         else:
             raise RuntimeError("The method %s is not defined for getparams"%methodname)
 
@@ -155,6 +157,7 @@ class dft(BaseQCCalc):
             idx = 0
             idx += self.hmodel.setparams("dm2dens", *params[idx:])
             idx += self.setparams("__diagonalize", *params[idx:])
+            idx += self.setparams("__normalize_dm", *params[idx:])
             return idx
         elif methodname == "__diagonalize":
             self.vext, = params[:1]
@@ -162,6 +165,8 @@ class dft(BaseQCCalc):
             idx += self.eigen_model.setparams("__call__", *params[idx:])
             idx += self.vks_model.setparams("__call__", *params[idx:])
             return idx
+        elif methodname == "__normalize_dm":
+            return self.grid.setparams("integralbox", *params)
         else:
             raise RuntimeError("The method %s is not defined for setparams"%methodname)
 
