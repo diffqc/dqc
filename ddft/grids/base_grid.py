@@ -54,7 +54,7 @@ class BaseGrid(lt.EditableModule):
         pass
 
     ###################### integrals ######################
-    def integralbox(self, p, dim=-1):
+    def integralbox(self, p, dim=-1, keepdim=False):
         """
         Performing the integral over the spatial grid of the signal `p` where
         the signal in spatial grid is located at the dimension `dim`.
@@ -65,12 +65,17 @@ class BaseGrid(lt.EditableModule):
             The tensor to be integrated over the spatial grid.
         * dim: int
             The dimension where it should be integrated.
+        * keepdim: bool
+            If True, then make the dimension into 1. Otherwise, omit the
+            integration dimension.
         """
         if dim != -1:
             p = p.transpose(dim,-1)
-        res = torch.matmul(p, self.get_dvolume())
+        res = torch.matmul(p, self.get_dvolume().unsqueeze(-1))
         if dim != -1:
             res = res.transpose(dim,-1)
+        if not keepdim:
+            res = res.squeeze(dim)
         return res
 
     def mmintegralbox(self, p1, p2):
