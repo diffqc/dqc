@@ -170,12 +170,6 @@ class HamiltonMoleculeCGauss(BaseHamilton):
         dens = torch.einsum("bjk,jr,kr->br", dm, self.basis, self.basis) # (nbatch, nr)
         return dens.view(*batchshape, -1) # (..., nr)
 
-    def torgrid(self, wfs, dim=-2):
-        # wfs: (..., nbasis, ...)
-        wfs = wfs.transpose(dim, -1) # (..., nbasis)
-        wfr = torch.matmul(wfs, self.basis) # (..., nr)
-        return wfr.transpose(dim, -1)
-
     ############################# grid part #############################
     @property
     def grid(self):
@@ -188,7 +182,7 @@ class HamiltonMoleculeCGauss(BaseHamilton):
             return [self.kin_coul_mat, self.basis_dvolume, self.basis]
         elif methodname == "_overlap":
             return [self.olp_mat]
-        elif methodname == "torgrid":
+        elif methodname == "dm2dens":
             return [self.basis]
         else:
             return super().getparams(methodname)
@@ -201,7 +195,7 @@ class HamiltonMoleculeCGauss(BaseHamilton):
         elif methodname == "_overlap":
             self.olp_mat, = params[:1]
             return 1
-        elif methodname == "torgrid":
+        elif methodname == "dm2dens":
             self.basis, = params[:1]
             return 1
         else:

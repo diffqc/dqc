@@ -144,7 +144,7 @@ class dft(BaseQCCalc):
     ############################# editable module #############################
     def getparams(self, methodname):
         if methodname == "__forward_pass":
-            return self.hmodel.getparams("getdens") + self.getparams("__diagonalize")
+            return self.hmodel.getparams("dm2dens") + self.getparams("__diagonalize")
         elif methodname == "__diagonalize":
             return [self.vext] + self.eigen_model.getparams("__call__") + self.vks_model.getparams("__call__")
         else:
@@ -153,7 +153,7 @@ class dft(BaseQCCalc):
     def setparams(self, methodname, *params):
         if methodname == "__forward_pass":
             idx = 0
-            idx += self.hmodel.setparams("getdens", *params[idx:])
+            idx += self.hmodel.setparams("dm2dens", *params[idx:])
             idx += self.setparams("__diagonalize", *params[idx:])
             return idx
         elif methodname == "__diagonalize":

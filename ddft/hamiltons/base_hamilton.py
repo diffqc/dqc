@@ -132,24 +132,6 @@ class BaseHamilton(lt.Module):
         """
         pass
 
-    @abstractmethod
-    def torgrid(self, wfs, dim=-2):
-        """
-        Obtain the signal in spatial domain from the coefficients of the basis
-        in the given dimension.
-
-        Arguments
-        ---------
-        * wfs: torch.tensor (..., ns, ...)
-            The coefficients of the basis of the signal.
-
-        Returns
-        -------
-        * wfr: torch.tensor (..., nr, ...)
-            The signal in spatial domain.
-        """
-        pass
-
     ################################ Grid part ################################
     @abstractproperty
     def grid(self):
@@ -158,39 +140,9 @@ class BaseHamilton(lt.Module):
         """
         pass
 
-    def getdens(self, eigvec):
-        """
-        Calculate the density given the eigenvectors.
-        The density returned should fulfill integral{density * dr} = 1.
-
-        Arguments
-        ---------
-        * eigvec: torch.tensor (nbatch, ns, neig)
-            The eigenvectors arranged in dimension 1 (i.e. ns). It is assumed
-            that eigvec.sum(dim=1) == 1.
-
-        Returns
-        -------
-        * density: torch.tensor (nbatch, nr, neig)
-            The density where the integral over the space should be equal to 1.
-            The density is in the spatial domain.
-        """
-        eigvec_r = self.torgrid(eigvec, dim=-2)
-        dens = (eigvec_r * eigvec_r)
-        sumdens = self.grid.integralbox(dens, dim=1).unsqueeze(1)
-        return dens / sumdens
-
     ########################### editable module part ###########################
     def getparams(self, methodname):
-        if methodname == "getdens":
-            return self.getparams("torgrid") + self.grid.getparams("get_dvolume")
-        else:
-            raise RuntimeError("The method %s has not been defined in getparams" % methodname)
+        return []
 
     def setparams(self, methodname, *params):
-        if methodname == "getdens":
-            idx = self.setparams("torgrid", *params)
-            idx += self.grid.setparams("get_dvolume", *params[idx:])
-            return idx
-        else:
-            raise RuntimeError("The method %s has not been defined in setparams" % methodname)
+        return 0
