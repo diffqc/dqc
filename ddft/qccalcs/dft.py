@@ -19,7 +19,7 @@ class dft(BaseQCCalc):
         self.focc = self.system.get_occupation().unsqueeze(0) # (nbatch=1,norb)
         self.grid = self.system._get_grid()
         self.hmodel = self.system._get_hamiltonian()
-        nlowest = self.focc.shape[-1]
+        self.norb = self.focc.shape[-1] # number of orbitals
         self.dtype = self.system.dtype
         self.device = self.system.device
 
@@ -33,7 +33,7 @@ class dft(BaseQCCalc):
 
         # set up the eigen module for the forward pass and scf module
         eigen_options = self.__setup_eigen_options(eigen_options)
-        self.eigen_model = EigenModule(self.hmodel, nlowest,
+        self.eigen_model = EigenModule(self.hmodel, self.norb,
             rlinmodule=self.hmodel.overlap, **eigen_options)
         self.scf_model = EquilibriumModule(self.__forward_pass,
             forward_options=fwd_options, backward_options=bck_options)
@@ -77,8 +77,8 @@ class dft(BaseQCCalc):
         eigvals, eigvecs, vks = self.__diagonalize(density)
 
         # normalize the norm of density
-        eigvec_dens = self.hmodel.getdens(eigvecs) # (nbatch, nr, nlowest)
-        dens = eigvec_dens * self.focc.unsqueeze(1) # (nbatch, nr, nlowest)
+        eigvec_dens = self.hmodel.getdens(eigvecs) # (nbatch, nr, norb)
+        dens = eigvec_dens * self.focc.unsqueeze(1) # (nbatch, nr, norb)
         new_density = dens.sum(dim=-1) # (nbatch, nr)
 
         return new_density
