@@ -151,7 +151,7 @@ class HamiltonMoleculeCGauss(BaseHamilton):
         extpot = torch.matmul(vext.unsqueeze(1) * self.basis_dvolume, self.basis.transpose(-2,-1))
         return self.kin_coul_mat + extpot
 
-    def precond(self, y, vext, atomz, biases=None, M=None, mparams=None):
+    def precond(self, y, vext, biases=None, M=None, mparams=None):
         # y: (nbatch, nbasis, ncols)
         # biases: (nbatch, ncols)
         return y
