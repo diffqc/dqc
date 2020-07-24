@@ -71,9 +71,6 @@ class mol(BaseSystem):
             raise ValueError("Spin %d cannot be used with systems with %d electrons" % (spin, self.numel))
         self.n_dn = (self.numel - spin) * 0.5
         self.n_up = self.n_dn + spin
-        nmax, nmin = (self.n_up, self.n_dn) if self.n_up > self.n_dn else (self.n_dn, self.n_up)
-        self.focc = torch.ones(int(nmax), dtype=dtype, device=device)
-        self.focc[:int(nmin)] += 1
 
         # cache
         self.pp_energy = None
@@ -107,8 +104,11 @@ class mol(BaseSystem):
             self.pp_energy = (z12 / r12).sum() * 0.5
         return self.pp_energy
 
-    def get_occupation(self):
-        return self.focc # (norb,)
+    def get_numel(self, split=False):
+        if split:
+            return (self.n_up, self.n_dn)
+        else:
+            return self.n_up + self.n_dn
 
     def get_grid_pts(self, with_weights=False):
         if with_weights:

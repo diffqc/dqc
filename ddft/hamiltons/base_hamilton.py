@@ -116,6 +116,23 @@ class BaseHamilton(lt.Module):
         return None
 
     @abstractmethod
+    def dm2dens(self, dm):
+        """
+        Convert the density matrix into density as a function of grid points.
+
+        Arguments
+        ---------
+        * dm: torch.tensor (..., ns, ns)
+            The density matrix of the system.
+
+        Returns
+        -------
+        * dens: torch.tensor (..., nr)
+            The density in the spatial domain.
+        """
+        pass
+
+    @abstractmethod
     def torgrid(self, wfs, dim=-2):
         """
         Obtain the signal in spatial domain from the coefficients of the basis

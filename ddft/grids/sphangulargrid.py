@@ -57,7 +57,7 @@ class Lebedev(BaseRadialAngularGrid):
         self._dvolume = dvolume.view(-1) # (nrad*nphitheta)
 
         # # check the basis orthonormality
-        # basis = self._get_basis() # (nsh, nphitheta)
+        basis = self._get_basis() # (nsh, nphitheta)
         # basis_olp = torch.matmul(basis*self.wphitheta, basis.transpose(-2,-1))
         # assert torch.allclose(basis_olp, torch.eye(basis_olp.shape[0], dtype=basis_olp.dtype, device=basis_olp.device))
         # raise RuntimeError

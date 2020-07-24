@@ -34,9 +34,10 @@ class BaseSystem(object):
         pass
 
     @abstractmethod
-    def get_occupation(self):
+    def get_numel(self, split=False):
         """
-        Returns the occupation number of the molecular orbitals.
+        Return the number of electrons. If split, returns 2-elements tuple:
+        (n_up, n_dn). Otherwise, just return n_up+n_dn
         """
         pass
 

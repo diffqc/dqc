@@ -161,6 +161,15 @@ class HamiltonMoleculeCGauss(BaseHamilton):
         res = torch.matmul(self.olp_mat, wf)  # (nbatch, nbasis, ncols)
         return res
 
+    def dm2dens(self, dm):
+        # dm: (..., nbasis, nbasis)
+        # self.basis: (nbasis, nr)
+        # return: (..., nr)
+        batchshape = dm.shape[:-2]
+        dm = dm.view(-1, *dm.shape[-2:]) # (nbatch, nbasis, nbasis)
+        dens = torch.einsum("bjk,jr,kr->br", dm, self.basis, self.basis) # (nbatch, nr)
+        return dens.view(*batchshape, -1) # (..., nr)
+
     def torgrid(self, wfs, dim=-2):
         # wfs: (..., nbasis, ...)
         wfs = wfs.transpose(dim, -1) # (..., nbasis)

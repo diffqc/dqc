@@ -8,18 +8,18 @@ __all__ = ["dft"]
 
 class dft(BaseQCCalc):
     """
-    Perform the Kohn-Sham DFT.
+    Perform the restricted Kohn-Sham DFT.
     """
     def __init__(self, system, eks_model="lda", vext_fcn=None,
             # arguments for scf run
-            density0=None, eigen_options={}, fwd_options={}, bck_options={}):
+            dm0=None, eigen_options={}, fwd_options={}, bck_options={}):
 
         # extract properties of the system
         self.system = system
-        self.focc = self.system.get_occupation().unsqueeze(0) # (nbatch=1,norb)
+        self.numel = self.system.get_numel(split=False)
+        self.norb = int(self.numel / 2.)
         self.grid = self.system._get_grid()
         self.hmodel = self.system._get_hamiltonian()
-        self.norb = self.focc.shape[-1] # number of orbitals
         self.dtype = self.system.dtype
         self.device = self.system.device
 
@@ -39,10 +39,14 @@ class dft(BaseQCCalc):
             forward_options=fwd_options, backward_options=bck_options)
 
         # set up the initial density before running scf module
-        density0 = self.__get_init_density(density0)
+        dm0 = self.__get_init_dm(dm0) # (nbatch, nbasis_tot, nbasis_tot)
+        nbatch, nbasis_tot, _ = dm0.shape
 
         # run the self-consistent iterations
-        self.scf_density = self.scf_model(density0)
+        dm0 = dm0.view(nbatch, -1)
+        self.scf_dm = self.scf_model(dm0) # (nbatch, nbasis_tot*nbasis_tot)
+        self.scf_dm = self.scf_dm.view(nbatch, nbasis_tot, nbasis_tot) # (nbatch, nbasis_tot, nbasis_tot)
+        self.scf_density = self.hmodel.dm2dens(self.scf_dm)
 
         # postprocess properties
         self.scf_energy = None
@@ -60,7 +64,7 @@ class dft(BaseQCCalc):
             Eks = self.grid.integralbox(eks_density, dim=-1) # (nbatch,)
 
             # calculate the individual non-interacting particles energy
-            sum_eigvals = (eigvals * self.focc).sum(dim=-1) # (nbatch,)
+            sum_eigvals = 2 * eigvals.sum(dim=-1) # (nbatch,)
             vks_integral = self.grid.integralbox(vks*density, dim=-1)
 
             # compute the interacting particles energy
@@ -72,16 +76,27 @@ class dft(BaseQCCalc):
         if gridpts is None:
             return self.scf_density
 
-    def __forward_pass(self, density):
-        # density: (nbatch, nr)
+    def __forward_pass(self, dm):
+        # dm: (nbatch, nbasis_tot*nbasis_tot)
+        nbatch = dm.shape[0]
+        dm = dm.view(nbatch, *self.hmodel.shape) # (nbatch, nbasis_tot, nbasis_tot)
+        dm = (dm + dm.transpose(-2,-1)) * 0.5
+        density = self.hmodel.dm2dens(dm) # (nbatch, nr)
+        # eigvecs: (nbatch, nbasis_tot, norb)
         eigvals, eigvecs, vks = self.__diagonalize(density)
 
-        # normalize the norm of density
-        eigvec_dens = self.hmodel.getdens(eigvecs) # (nbatch, nr, norb)
-        dens = eigvec_dens * self.focc.unsqueeze(1) # (nbatch, nr, norb)
-        new_density = dens.sum(dim=-1) # (nbatch, nr)
+        # obtain the new density matrix
+        new_dm = torch.einsum("bpo,bqo->bpq", eigvecs, eigvecs) # (nbatch, nbasis_tot, nbasis_tot)
+        new_dm = self.__normalize_dm(new_dm)
 
-        return new_density
+        return new_dm.view(nbatch, -1)
+
+    def __normalize_dm(self, dm):
+        # normalize the new density matrix
+        dens_tot = self.grid.integralbox(self.hmodel.dm2dens(dm), dim=-1, keepdim=True) # (nbatch, 1)
+        normfactor = self.numel / dens_tot
+        dm = dm * normfactor.unsqueeze(-1) # (nbatch, nbasis_tot, nbasis_tot)
+        return dm
 
     def __diagonalize(self, density):
         # calculate the total potential experienced by Kohn-Sham particles
@@ -103,18 +118,15 @@ class dft(BaseQCCalc):
         else:
             raise RuntimeError("Unknown eks model: %s" % eks_model)
 
-    def __get_init_density(self, density0):
-        # if there is no specified density0, then use one-time forward pass as the initial guess
-        if density0 is None:
-            density0 = torch.zeros_like(self.grid.rgrid[:,0]).unsqueeze(0).to(self.device) # (nbatch, nr)
-            with torch.no_grad():
-                density0 = self.__forward_pass(density0)
+    def __get_init_dm(self, dm0):
+        if dm0 is None:
+            dm0 = torch.zeros(self.hmodel.shape, dtype=self.dtype, device=self.device).unsqueeze(0)
+            dens0 = self.hmodel.dm2dens(dm0)
+            _, eigvecs, _ = self.__diagonalize(dens0)
+            dm0 = torch.einsum("bpo,bqo->bpq", eigvecs, eigvecs) # (nbatch, nbasis_tot, nbasis_tot)
+            dm0 = self.__normalize_dm(dm0)
 
-        if isinstance(density0, torch.Tensor) and len(density0.shape) == 1:
-            density0 = density0.unsqueeze(0) # (nbatch, nr)
-
-        density0 = density0.detach()
-        return density0
+        return dm0
 
     def __get_vext(self, vext_fcn):
         if vext_fcn is not None:
@@ -132,7 +144,7 @@ class dft(BaseQCCalc):
     ############################# editable module #############################
     def getparams(self, methodname):
         if methodname == "__forward_pass":
-            return [self.focc] + self.hmodel.getparams("getdens") + self.getparams("__diagonalize")
+            return self.hmodel.getparams("getdens") + self.getparams("__diagonalize")
         elif methodname == "__diagonalize":
             return [self.vext] + self.eigen_model.getparams("__call__") + self.vks_model.getparams("__call__")
         else:
@@ -140,8 +152,7 @@ class dft(BaseQCCalc):
 
     def setparams(self, methodname, *params):
         if methodname == "__forward_pass":
-            self.focc, = params[:1]
-            idx = 1
+            idx = 0
             idx += self.hmodel.setparams("getdens", *params[idx:])
             idx += self.setparams("__diagonalize", *params[idx:])
             return idx
