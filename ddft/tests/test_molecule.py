@@ -57,8 +57,6 @@ def test_atom2():
     runtest_molsystem_energy(systems, basis)
 
 def test_mol2():
-    # NOTE: The effect of increasing nr in radial grid has significant effect on
-    # Li2. Investigate!
     systems = {
         "H -0.5 0 0; H 0.5 0 0"  : -0.9791401, # pyscf: -0.979143262 # LDA, 6-311++G**, grid level 4
         "Li -2.5 0 0; Li 2.5 0 0": -14.393459, # pyscf: -14.3927863482007 # LDA, 6-311++G**, grid level 4
