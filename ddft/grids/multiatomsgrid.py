@@ -116,6 +116,7 @@ class BeckeMultiGrid(BaseMultiAtomsGrid):
             Vatoms_list.append(agr.solve_poisson(fa)) # (nbatch, ngrid)
 
         def get_extrap_fcn(iatom):
+            # NOTE: This extrapolation function is only valid if molecule's charge == 0
             natom = natoms_list[iatom] # (nbatch,)
             # rgrid: (nrextrap, ndim)
             extrapfcn = lambda rgrid: natom.unsqueeze(-1) / (rgrid[:,0] + 1e-12)
