@@ -47,6 +47,7 @@ class mol(BaseSystem):
                  dtype=torch.float64, device=torch.device('cpu')):
         self._dtype = dtype
         self._device = device
+        self.requires_grad = requires_grad
 
         # initial check of the parameters
         self._atomzs, self._atomposs = self.__eval_moldesc(moldesc) # tensors: (natoms,) and (natoms, ndim)
@@ -137,9 +138,10 @@ class mol(BaseSystem):
             atomzs, atomposs = moldesc
             atomzs = to_tensor(atomzs).to(self.dtype).to(self.device)
             atomposs = to_tensor(atomposs).to(self.dtype).to(self.device)
+            assert atomzs.shape[0] == atomposs.shape[0], "atomzs and atomposs must have the same length"
             return atomzs, atomposs
         else:
-            raise TypeError("The molecule descriptor must be a 2-elements-tuple")
+            raise TypeError("The molecule descriptor must be a 2-elements-tuple or a string")
 
     def __setup_grid(self, grid):
         assert type(grid) == int, "The grid must be an integer"
@@ -162,7 +164,8 @@ class mol(BaseSystem):
         for atomz in self._atomzs:
             z = int(atomz)
             if z not in basis_mem:
-                basisobj = CartCGTOBasis(z, basis, dtype=self.dtype, device=self.device)
+                basisobj = CartCGTOBasis(z, basis, dtype=self.dtype, device=self.device,
+                    requires_grad=self.requires_grad)
                 basis_mem[z] = basisobj
             bases_list.append(basis_mem[z])
 
