@@ -54,9 +54,10 @@ class RadialGrid(BaseGrid):
             raise TypeError("Argument transformobj must be BaseGridTransformation or a string")
 
         self.x, self.w = grid.get_xw()
+        self.z, self.dxdz = grid.get_z_dxdz()
         self._boxshape = (len(self.x),)
         self._interpolator = CubicSpline(self.x)
-        self._cumsumquad = CumSumQuad(self.x, side="both", method="simpson")
+        self._cumsumquad = CumSumQuad(self.z, side="both", method="simpson")
 
         self._transformobj = tfmobj
         self.rs = self.transformobj.transform(self.x)
@@ -95,7 +96,7 @@ class RadialGrid(BaseGrid):
 
     def cumsum_integrate(self, f):
         # f: (nbatch, nr, nr) in r-space
-        fx = f * self._scaling * self._vol_elmt # (nbatch, nr, nr)
+        fx = f * self._scaling * self._vol_elmt * self.dxdz # (nbatch, nr, nr)
         return self._cumsumquad.integrate(fx) # (nbatch, nr)
 
     def solve_poisson(self, f):
@@ -231,7 +232,36 @@ class GaussChebyshevLogM3RadGrid(RadialGrid):
 class BaseFixedIntervalGrid(object):
     @abstractmethod
     def get_xw(self):
+        """
+        Get the x and weights, w, for the integration. x is the points from -1
+        to 1 of the integration points and w is the integration weights.
+
+        Returns
+        -------
+        * x: torch.tensor (nx,)
+            The integration points.
+        * w: torch.tensor (nx,)
+            The integration weights.
+        """
         pass
+
+    def get_z_dxdz(self):
+        """
+        Returns the almost-uniformly spaced points, z, and the scaling dx/dz.
+        The almost-uniformly spaced points are useful in cumulative integral
+        using Simpson's rule or other quadrature rules.
+
+        Returns
+        -------
+        * z: torch.tensor (nx,)
+            The almost-uniformly spaced points.
+        * dxdz: torch.tensor (nx,)
+            The scaling dx/dz.
+        """
+        # the default is z=x and dxdz = 1
+        z, _ = self.get_xw()
+        dxdz = torch.ones_like(z)
+        return z, dxdz
 
     @abstractmethod
     def grad(self, p, dim=-1, idim=0):
@@ -254,9 +284,14 @@ class GaussChebyshevGrid(BaseFixedIntervalGrid):
 
         self.xcheb = torch.tensor(xcheb, dtype=dtype, device=device)
         self.wcheb = torch.tensor(wcheb, dtype=dtype, device=device)
+        self.z = torch.tensor(icount, dtype=dtype, device=device)
+        self.dxdz = -self.wcheb
 
     def get_xw(self):
         return self.xcheb, self.wcheb
+
+    def get_z_dxdz(self):
+        return self.z, self.dxdz
 
     def grad(self, p, dim=-1, idim=0):
         pass # ???

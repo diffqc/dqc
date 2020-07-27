@@ -1,7 +1,7 @@
 import torch
 from ddft.systems.base_systems import BaseSystem
 from ddft.basissets.cartesian_cgto import CartCGTOBasis
-from ddft.grids.radialgrid import LegendreLogM3RadGrid
+from ddft.grids.radialgrid import LegendreLogM3RadGrid, GaussChebyshevLogM3RadGrid
 from ddft.grids.sphangulargrid import Lebedev
 from ddft.grids.multiatomsgrid import BeckeMultiGrid
 from ddft.utils.misc import to_tensor
@@ -150,7 +150,8 @@ class mol(BaseSystem):
         lmax = [ 2,  3,  4,  6,  7,  8][grid]
 
         # TODO: adjust the best ra and atomradius for BeckeMultiGrid
-        radgrid = LegendreLogM3RadGrid(nr, ra=1., dtype=self.dtype, device=self.device)
+        # radgrid = LegendreLogM3RadGrid(nr, ra=1., dtype=self.dtype, device=self.device)
+        radgrid = GaussChebyshevLogM3RadGrid(nr, ra=1., dtype=self.dtype, device=self.device)
         atomgrid = Lebedev(radgrid, prec, basis_maxangmom=lmax, dtype=self.dtype, device=self.device)
         grid = BeckeMultiGrid(atomgrid, self._atomposs, dtype=self.dtype, device=self.device)
         return grid
