@@ -1,4 +1,5 @@
 import torch
+import lintorch as lt
 import numpy as np
 from abc import abstractmethod
 from ddft.utils.interp import get_spline_mat_inv
@@ -8,9 +9,17 @@ This file contains the cumulative sum quadrature functions.
 The functions are usually used in solve_poisson method in grid objects.
 """
 
-class BaseCumSumQuad(object):
+class BaseCumSumQuad(lt.EditableModule):
     @abstractmethod
     def cumsum(y):
+        pass
+
+    @abstractmethod
+    def getparams(self, methodname):
+        pass
+
+    @abstractmethod
+    def setparams(self, methodname, *params):
         pass
 
 class CumSumQuad(BaseCumSumQuad):
@@ -63,6 +72,12 @@ class CumSumQuad(BaseCumSumQuad):
         them if side == "both".
         """
         return self.quad.integrate(y)
+
+    def getparams(self, methodname):
+        return self.quad.getparams(methodname)
+
+    def setparams(self, methodname, *params):
+        return self.quad.setparams(methodname, *params)
 
 class CubicSplineCumSumQuad(BaseCumSumQuad):
     def __init__(self, x, side="left"):
@@ -131,6 +146,19 @@ class WeightBasedCumSumQuad(BaseCumSumQuad):
         # w: (*, nx, nx)
         # returns: (*, nx)
         return torch.sum(y * self.w, dim=-1)
+
+    def getparams(self, methodname):
+        if methodname == "cumsum" or methodname == "integrate":
+            return [self.w]
+        else:
+            raise RuntimeError("Undefined method %s in getparams" % methodname)
+
+    def setparams(self, methodname, *params):
+        if methodname == "cumsum" or methodname == "integrate":
+            self.w, = params[:1]
+            return 1
+        else:
+            raise RuntimeError("Undefined method %s in setparams" % methodname)
 
 class TrapzCumSumQuad(WeightBasedCumSumQuad):
     def get_weights(self, x):

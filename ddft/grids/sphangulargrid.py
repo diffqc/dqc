@@ -287,7 +287,7 @@ class Lebedev(BaseRadialAngularGrid):
     def getparams(self, methodname):
         if methodname == "solve_poisson":
             return [self._basis_, self._basis_integrate_, self.radrgrid] + \
-                    self.radgrid.getparams("get_dvolume")
+                    self.radgrid.getparams("cumsum_integrate")
         elif methodname == "interpolate":
             return [self._basis_integrate_] + self.radgrid.getparams("interpolate")
         elif methodname == "get_dvolume":
@@ -298,7 +298,7 @@ class Lebedev(BaseRadialAngularGrid):
     def setparams(self, methodname, *params):
         if methodname == "solve_poisson":
             self._basis_, self._basis_integrate_, self.radrgrid = params[:3]
-            return 3 + self.radgrid.setparams("get_dvolume", *params[3:])
+            return 3 + self.radgrid.setparams("cumsum_integrate", *params[3:])
         elif methodname == "interpolate":
             self._basis_integrate_ = params[0]
             return 1 + self.radgrid.setparams("interpolate", *params[1:])

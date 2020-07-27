@@ -163,8 +163,12 @@ class RadialGrid(BaseGrid):
         return frq
 
     def getparams(self, methodname):
-        if methodname == "solve_poisson" or methodname == "get_dvolume":
+        if methodname == "get_dvolume":
             return [self._dvolume]
+        elif methodname == "solve_poisson":
+            return [self.rgrid] + self.getparams("cumsum_integrate")
+        elif methodname == "cumsum_integrate":
+            return [self._scaling, self._vol_elmt, self.dxdz] + self._cumsumquad.getparams("integrate")
         elif methodname == "interpolate":
             return self.transformobj.getparams("invtransform") + \
                    self.interpolator.getparams("interp")
@@ -172,9 +176,19 @@ class RadialGrid(BaseGrid):
             return super().getparams(methodname)
 
     def setparams(self, methodname, *params):
-        if methodname == "solve_poisson" or methodname == "get_dvolume":
+        if methodname == "get_dvolume":
             self._dvolume, = params[:1]
             return 1
+        elif methodname == "solve_poisson":
+            self.rgrid, = params[:1]
+            idx = 1
+            idx += self.setparams("cumsum_integrate", *params[idx:])
+            return idx
+        elif methodname == "cumsum_integrate":
+            self._scaling, self._vol_elmt, self.dxdz = params[:3]
+            idx = 3
+            idx += self._cumsumquad.setparams("integrate", *params[idx:])
+            return idx
         elif methodname == "interpolate":
             idx = 0
             idx += self.transformobj.setparams("invtransform", *params)
