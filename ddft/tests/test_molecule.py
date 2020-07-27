@@ -2,6 +2,7 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
+import lintorch as lt
 from torch.autograd import gradcheck, gradgradcheck
 from ddft.eks import BaseEKS
 from ddft.utils.safeops import safepow
@@ -67,6 +68,26 @@ def test_mol2():
     basis = "6-311++G**"
     runtest_molsystem_energy(systems, basis)
 
+def test_mol_grad():
+    dtype = torch.float64
+    device = torch.device("cpu")
+
+    atomposs = torch.tensor([[-0.5, 0, 0], [0.5, 0., 0.]], dtype=dtype, device=device).requires_grad_()
+    a = torch.tensor(-0.7385587663820223, dtype=dtype, device=device).requires_grad_()
+    p = torch.tensor(4./3, dtype=dtype, device=device).requires_grad_()
+
+    def get_energy(atomposs, a, p):
+        atomzs = [1, 1]
+        basis = "6-311++G**"
+        system = (atomzs, atomposs)
+        eks_model = PseudoLDA(a, p)
+        m = mol(system, basis, requires_grad=True)
+        scf = dft(m, eks_model=eks_model)
+        energy = scf.energy()
+        return energy
+
+    gradcheck(get_energy, (atomposs, a, p))
+
 def runtest_molsystem_energy(systems, basis):
     for s in systems:
         energy_true = systems[s]
@@ -77,4 +98,4 @@ def runtest_molsystem_energy(systems, basis):
         assert torch.allclose(energy, torch.tensor(energy_true, dtype=energy.dtype))
 
 if __name__ == "__main__":
-    test_mol2()
+    test_mol_grad()

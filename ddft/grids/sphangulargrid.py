@@ -236,10 +236,11 @@ class Lebedev(BaseRadialAngularGrid):
         x = xyz[:,0]
         y = xyz[:,1]
         z = xyz[:,2]
-        xy = torch.sqrt(x*x + y*y)
-        r = torch.sqrt(x*x + y*y + z*z).unsqueeze(-1)
-        theta = torch.atan2(xy, z).unsqueeze(-1)
-        phi = torch.atan2(y, x).unsqueeze(-1)
+        eps = 1e-20
+        xy = torch.sqrt(x*x + y*y + eps)
+        r = torch.sqrt(x*x + y*y + z*z + eps).unsqueeze(-1)
+        theta = torch.atan2(xy + eps, z + eps).unsqueeze(-1)
+        phi = torch.atan2(y + eps, x + eps).unsqueeze(-1)
         return torch.cat((r, phi, theta), dim=-1)
 
     @property

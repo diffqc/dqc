@@ -5,9 +5,10 @@ from ddft.utils.legendre import legval, deriv_assoclegval, deriv_assoclegval_azi
 @torch.jit.script
 def spharmonics(cost:torch.Tensor, phi:torch.Tensor, maxangmom:int):
     # ref: https://www.overleaf.com/read/kwbhpjfdzyvt
+    eps = 1e-20
     nsh = (maxangmom+1)*(maxangmom+1)
     nphitheta = phi.shape[0]
-    sint = torch.sqrt(1-cost*cost)
+    sint = torch.sqrt(1-cost*cost+eps)
 
     dtype = cost.dtype
     device = cost.device
