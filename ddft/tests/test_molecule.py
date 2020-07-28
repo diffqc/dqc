@@ -72,13 +72,22 @@ def test_mol_grad():
     dtype = torch.float64
     device = torch.device("cpu")
 
-    atomposs = torch.tensor([[-0.5, 0, 0], [0.5, 0., 0.]], dtype=dtype, device=device).requires_grad_()
+    basis = "6-311++G**"
+    isystem = 0
+    systems = [ # (atomzs, atomposs)
+        ([1,1], [[-0.5, 0, 0], [0.5, 0., 0.]]),
+        ([3,3], [[-2.5, 0, 0], [2.5, 0., 0.]]),
+        ([7,7], [[-1.0, 0, 0], [1.0, 0., 0.]]),
+        ([9,9], [[-1.25, 0, 0], [1.25, 0., 0.]]),
+        ([6,8], [[-1.0, 0, 0], [1.0, 0., 0.]]),
+    ]
+
+    atomposs = torch.tensor(systems[isystem][1], dtype=dtype, device=device).requires_grad_()
     a = torch.tensor(-0.7385587663820223, dtype=dtype, device=device).requires_grad_()
     p = torch.tensor(4./3, dtype=dtype, device=device).requires_grad_()
 
     def get_energy(atomposs, a, p):
-        atomzs = [1, 1]
-        basis = "6-311++G**"
+        atomzs = systems[isystem][0]
         system = (atomzs, atomposs)
         eks_model = PseudoLDA(a, p)
         m = mol(system, basis, requires_grad=True)
