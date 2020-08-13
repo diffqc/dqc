@@ -11,8 +11,8 @@ class BaseHamilton(lt.Module):
             shape=shape,
             is_symmetric=is_symmetric,
             is_real=is_real,
-            dtype=None,
-            device=None)
+            dtype=dtype,
+            device=device)
 
         if hasattr(self._overlap, "__call__"):
             self.overlap = lt.module(shape,
@@ -29,20 +29,6 @@ class BaseHamilton(lt.Module):
         return self
 
     ################################ Basis part ################################
-    @abstractproperty
-    def nhparams(self):
-        """
-        Returns the number of parameters in the .forward method
-        """
-        pass
-
-    @property
-    def nolp_params(self):
-        """
-        Returns the number of additional parameters in the ._overlap method
-        """
-        return 0
-
     @abstractmethod
     def forward(self, wf, vext, *params):
         """
