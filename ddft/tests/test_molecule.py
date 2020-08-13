@@ -23,12 +23,8 @@ class PseudoLDA(BaseEKS):
     def forward(self, density):
         return self.a * safepow(density.abs(), self.p)
 
-    def getfwdparams(self):
-        return [self.a, self.p]
-
-    def setfwdparams(self, *params):
-        self.a, self.p = params[:2]
-        return 2
+    def getfwdparamnames(self, prefix=""):
+        return [prefix+"a", prefix+"p"]
 
 def get_atom(atomname):
     basis = "6-311++G**"

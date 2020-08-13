@@ -8,8 +8,6 @@ class xLDA(BaseEKS):
     def forward(self, density):
         return -0.7385587663820223 * safepow(density.abs(), 4./3)
 
-    def getfwdparams(self):
+    def getfwdparamnames(self, prefix=""):
         return []
 
-    def setfwdparams(self, *params):
-        return 0

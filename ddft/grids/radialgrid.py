@@ -162,40 +162,20 @@ class RadialGrid(BaseGrid):
 
         return frq
 
-    def getparams(self, methodname):
+    def getparamnames(self, methodname, prefix=""):
         if methodname == "get_dvolume":
-            return [self._dvolume]
+            return [prefix+"_dvolume"]
         elif methodname == "solve_poisson":
-            return [self.rgrid] + self.getparams("cumsum_integrate")
+            return [prefix+"rgrid"] + self.getparams("cumsum_integrate", prefix=prefix)
         elif methodname == "cumsum_integrate":
-            return [self._scaling, self._vol_elmt, self.dxdz] + self._cumsumquad.getparams("integrate")
+            return [prefix+"_scaling", prefix+"_vol_elmt", prefix+"dxdz"] + \
+                   self._cumsumquad.getparamnames("integrate", prefix=prefix+"_cumsumquad.")
         elif methodname == "interpolate":
-            return self.transformobj.getparams("invtransform") + \
-                   self.interpolator.getparams("interp")
+            return self.transformobj.getparamnames("invtransform", prefix=prefix+"transformobj.") + \
+                   self.interpolator.getparamnames("interp", prefix=prefix+"interpolator.")
         else:
-            return super().getparams(methodname)
+            return super().getparamnames(methodname, prefix=prefix)
 
-    def setparams(self, methodname, *params):
-        if methodname == "get_dvolume":
-            self._dvolume, = params[:1]
-            return 1
-        elif methodname == "solve_poisson":
-            self.rgrid, = params[:1]
-            idx = 1
-            idx += self.setparams("cumsum_integrate", *params[idx:])
-            return idx
-        elif methodname == "cumsum_integrate":
-            self._scaling, self._vol_elmt, self.dxdz = params[:3]
-            idx = 3
-            idx += self._cumsumquad.setparams("integrate", *params[idx:])
-            return idx
-        elif methodname == "interpolate":
-            idx = 0
-            idx += self.transformobj.setparams("invtransform", *params)
-            idx += self.interpolator.setparams("interp", *params[idx:])
-            return idx
-        else:
-            return super().setparams(methodname, *params)
 
 def get_fixed_interval_grid(gridstr):
     s = gridstr.lower().replace("-", "")
@@ -379,11 +359,9 @@ class IdentityTransformation(BaseGridTransformation):
     def get_scaling(self, rs):
         return torch.ones_like(rs).to(rs.device)
 
-    def getparams(self, methodname):
+    def getparamnames(self, methodname, prefix=""):
         return []
 
-    def setparams(self, methodname, *params):
-        return 0
 
 class LogM3Transformation(BaseGridTransformation):
     # eq (12) in https://aip.scitation.org/doi/pdf/10.1063/1.475719
@@ -404,18 +382,12 @@ class LogM3Transformation(BaseGridTransformation):
         return self.ra / self.ln2 * torch.exp(-self.ln2 * (1. - rs / self.ra))
 
     #################### editable module parts ####################
-    def getparams(self, methodname):
+    def getparamnames(self, methodname, prefix=""):
         if methodname == "invtransform" or methodname == "transform" or methodname == "get_scaling":
-            return [self.ra]
+            return [prefix+"ra"]
         else:
-            raise RuntimeError("Unimplemented %s method for getparams" % methodname)
+            return super().getparamnames(methodname, prefix=prefix)
 
-    def setparams(self, methodname, *params):
-        if methodname == "invtransform" or methodname == "transform" or methodname == "get_scaling":
-            self.ra, = params[:1]
-            return 1
-        else:
-            raise RuntimeError("Unimplemented %s method for setparams" % methodname)
 
 class ShiftExpTransformation(BaseGridTransformation):
     def __init__(self, rmin, rmax, dtype=torch.float, device=torch.device('cpu')):
@@ -435,23 +407,31 @@ class ShiftExpTransformation(BaseGridTransformation):
         return (rs + self.rmin) * self.logrmm * 0.5
 
     #################### editable module parts ####################
-    def getparams(self, methodname):
+    def getparamnames(self, methodname, prefix=""):
         if methodname == "invtransform" or methodname == "transform":
-            return [self.logrmin, self.logrmm]
+            return [prefix+"logrmin", prefix+"logrmm"]
         elif methodname == "get_scaling":
-            return [self.logrmm]
+            return [prefix+"logrmm"]
         else:
-            raise RuntimeError("Unimplemented %s method for getparams" % methodname)
+            return super().getparamnames(methodname, prefix=prefix)
 
-    def setparams(self, methodname, *params):
-        if methodname == "invtransform" or methodname == "transform":
-            self.logrmin, self.logrmm = params[:2]
-            return 2
-        elif methodname == "get_scaling":
-            self.logrmm, = params[:1]
-            return 1
-        else:
-            raise RuntimeError("Unimplemented %s method for setparams" % methodname)
+    # def getparams(self, methodname):
+    #     if methodname == "invtransform" or methodname == "transform":
+    #         return [self.logrmin, self.logrmm]
+    #     elif methodname == "get_scaling":
+    #         return [self.logrmm]
+    #     else:
+    #         raise RuntimeError("Unimplemented %s method for getparams" % methodname)
+    #
+    # def setparams(self, methodname, *params):
+    #     if methodname == "invtransform" or methodname == "transform":
+    #         self.logrmin, self.logrmm = params[:2]
+    #         return 2
+    #     elif methodname == "get_scaling":
+    #         self.logrmm, = params[:1]
+    #         return 1
+    #     else:
+    #         raise RuntimeError("Unimplemented %s method for setparams" % methodname)
 
 class DoubleExp2Transformation(BaseGridTransformation):
     def __init__(self, alpha, rmin, rmax, dtype=torch.float, device=torch.device('cpu')):
@@ -489,19 +469,24 @@ class DoubleExp2Transformation(BaseGridTransformation):
         return rs * (self.alpha + torch.exp(-x)) * 0.5 * (self.xmax - self.xmin)
 
     #################### editable module parts ####################
-    def getparams(self, methodname):
+    def getparamnames(self, methodname, prefix=""):
         if methodname == "invtransform" or methodname == "transform" or methodname == "get_scaling":
-            return [self.alpha]
+            return [prefix+"alpha"]
         else:
-            raise RuntimeError("Unimplemented %s method for getparams" % methodname)
+            return super().getparamnames(methodname, prefix=prefix)
 
-    def setparams(self, methodname, *params):
-        if methodname == "invtransform" or methodname == "transform" or methodname == "get_scaling":
-            self.alpha, = params[:1]
-            return 1
-        else:
-            raise RuntimeError("Unimplemented %s method for setparams" % methodname)
-
+    # def getparams(self, methodname):
+    #     if methodname == "invtransform" or methodname == "transform" or methodname == "get_scaling":
+    #         return [self.alpha]
+    #     else:
+    #         raise RuntimeError("Unimplemented %s method for getparams" % methodname)
+    #
+    # def setparams(self, methodname, *params):
+    #     if methodname == "invtransform" or methodname == "transform" or methodname == "get_scaling":
+    #         self.alpha, = params[:1]
+    #         return 1
+    #     else:
+    #         raise RuntimeError("Unimplemented %s method for setparams" % methodname)
 
 if __name__ == "__main__":
     import lintorch as lt

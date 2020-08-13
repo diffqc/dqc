@@ -15,12 +15,9 @@ class BaseCumSumQuad(lt.EditableModule):
         pass
 
     @abstractmethod
-    def getparams(self, methodname):
+    def getparamnames(self, methodname, prefix=""):
         pass
 
-    @abstractmethod
-    def setparams(self, methodname, *params):
-        pass
 
 class CumSumQuad(BaseCumSumQuad):
     """
@@ -73,11 +70,9 @@ class CumSumQuad(BaseCumSumQuad):
         """
         return self.quad.integrate(y)
 
-    def getparams(self, methodname):
-        return self.quad.getparams(methodname)
+    def getparamnames(self, methodname, prefix=""):
+        return self.quad.getparamnames(methodname, prefix=prefix+"quad.")
 
-    def setparams(self, methodname, *params):
-        return self.quad.setparams(methodname, *params)
 
 class CubicSplineCumSumQuad(BaseCumSumQuad):
     def __init__(self, x, side="left"):
@@ -147,18 +142,24 @@ class WeightBasedCumSumQuad(BaseCumSumQuad):
         # returns: (*, nx)
         return torch.sum(y * self.w, dim=-1)
 
-    def getparams(self, methodname):
+    def getparamnames(self, methodname, prefix=""):
         if methodname == "cumsum" or methodname == "integrate":
-            return [self.w]
+            return [prefix+"w"]
         else:
-            raise RuntimeError("Undefined method %s in getparams" % methodname)
+            raise KeyError("getparamnames has no %s method" % methodname)
 
-    def setparams(self, methodname, *params):
-        if methodname == "cumsum" or methodname == "integrate":
-            self.w, = params[:1]
-            return 1
-        else:
-            raise RuntimeError("Undefined method %s in setparams" % methodname)
+    # def getparams(self, methodname):
+    #     if methodname == "cumsum" or methodname == "integrate":
+    #         return [self.w]
+    #     else:
+    #         raise RuntimeError("Undefined method %s in getparams" % methodname)
+    #
+    # def setparams(self, methodname, *params):
+    #     if methodname == "cumsum" or methodname == "integrate":
+    #         self.w, = params[:1]
+    #         return 1
+    #     else:
+    #         raise RuntimeError("Undefined method %s in setparams" % methodname)
 
 class TrapzCumSumQuad(WeightBasedCumSumQuad):
     def get_weights(self, x):

@@ -79,30 +79,18 @@ class BaseEKS(lt.EditableModule):
 
     ############### editable module part ###############
     @abstractmethod
-    def getfwdparams(self):
+    def getfwdparamnames(self, prefix=""):
         pass
 
-    @abstractmethod
-    def setfwdparams(self, *params):
-        pass
 
-    def getparams(self, methodname):
+    def getparamnames(self, methodname, prefix=""):
         if methodname == "forward" or methodname == "__call__":
-            return self.getfwdparams()
+            return self.getfwdparamnames(prefix=prefix)
         elif methodname == "potential":
-            return self.getfwdparams() + self.grid.getparams("get_dvolume")
+            return self.getfwdparamnames(prefix=prefix) + self.grid.getparamnames("get_dvolume", prefix=prefix+"grid.")
         else:
-            raise RuntimeError("The method %s has not been specified for getparams" % methodname)
+            raise KeyError("Getparamnames has no %s method" % methodname)
 
-    def setparams(self, methodname, *params):
-        if methodname == "forward" or methodname == "__call__":
-            return self.setfwdparams(*params)
-        elif methodname == "potential":
-            idx = self.setfwdparams(*params)
-            idx += self.grid.setparams("get_dvolume", *params[idx:])
-            return idx
-        else:
-            raise RuntimeError("The method %s has not been specified for setparams" % methodname)
 
 class TensorEKS(BaseEKS):
     def __init__(self, tensor):
@@ -112,12 +100,9 @@ class TensorEKS(BaseEKS):
     def forward(self, density):
         return density * 0 + self.tensor
 
-    def getfwdparams(self):
-        return [self.tensor]
+    def getfwdparamnames(self, prefix=""):
+        return [prefix+"tensor"]
 
-    def setfwdparams(self, *params):
-        self.tensor, = params[:1]
-        return 1
 
 class ConstEKS(BaseEKS):
     def __init__(self, c):
@@ -127,12 +112,9 @@ class ConstEKS(BaseEKS):
     def forward(self, density):
         return density * 0 + self.c
 
-    def getfwdparams(self):
-        return [self.c]
+    def getfwdparamnames(self, prefix=""):
+        return [prefix+"c"]
 
-    def setfwdparams(self, *params):
-        self.c, = params[:1]
-        return 1
 
 ######################## arithmetics ########################
 class NegEKS(BaseEKS):
@@ -149,11 +131,14 @@ class NegEKS(BaseEKS):
     def potential(self, density):
         return -self.eks.potential(density)
 
-    def getfwdparams(self):
-        return self.eks.getfwdparams()
+    def getfwdparamnames(self, prefix=""):
+        return self.eks.getfwdparamnames(prefix=prefix+"eks.")
 
-    def setfwdparams(self, *params):
-        return self.eks.setfwdparams(*params)
+    # def getfwdparams(self):
+    #     return self.eks.getfwdparams()
+    #
+    # def setfwdparams(self, *params):
+    #     return self.eks.setfwdparams(*params)
 
 class AddEKS(BaseEKS):
     def __init__(self, a, b):
@@ -172,13 +157,18 @@ class AddEKS(BaseEKS):
     def potential(self, density):
         return self.a.potential(density) + self.b.potential(density)
 
-    def getfwdparams(self):
-        return self.a.getfwdparams() + self.b.getfwdparams()
+    def getfwdparamnames(self, prefix=""):
+        print(self.a, self.b)
+        return self.a.getfwdparamnames(prefix=prefix+"a.") + \
+               self.b.getfwdparamnames(prefix=prefix+"b.")
 
-    def setfwdparams(self, *params):
-        idx = self.a.setfwdparams(*params)
-        idx += self.b.setfwdparams(*params[idx:])
-        return idx
+    # def getfwdparams(self):
+    #     return self.a.getfwdparams() + self.b.getfwdparams()
+    #
+    # def setfwdparams(self, *params):
+    #     idx = self.a.setfwdparams(*params)
+    #     idx += self.b.setfwdparams(*params[idx:])
+    #     return idx
 
 class MultEKS(BaseEKS):
     def __init__(self, a, b):
@@ -193,13 +183,17 @@ class MultEKS(BaseEKS):
     def forward(self, density):
         return self.a(density) * self.b(density)
 
-    def getfwdparams(self):
-        return self.a.getfwdparams() + self.b.getfwdparams()
+    def getfwdparamnames(self, prefix=""):
+        return self.a.getfwdparamnames(prefix=prefix+"a.") + \
+               self.b.getfwdparamnames(prefix=prefix+"b.")
 
-    def setfwdparams(self, *params):
-        idx = self.a.setfwdparams(*params)
-        idx += self.b.setfwdparams(*params[idx:])
-        return idx
+    # def getfwdparams(self):
+    #     return self.a.getfwdparams() + self.b.getfwdparams()
+    #
+    # def setfwdparams(self, *params):
+    #     idx = self.a.setfwdparams(*params)
+    #     idx += self.b.setfwdparams(*params[idx:])
+    #     return idx
 
 class DivEKS(BaseEKS):
     def __init__(self, a, b):
@@ -214,13 +208,17 @@ class DivEKS(BaseEKS):
     def forward(self, density):
         return self.a(density) / self.b(density)
 
-    def getfwdparams(self):
-        return self.a.getfwdparams() + self.b.getfwdparams()
+    def getfwdparamnames(self, prefix=""):
+        return self.a.getfwdparamnames(prefix=prefix+"a.") + \
+               self.b.getfwdparamnames(prefix=prefix+"b.")
 
-    def setfwdparams(self, *params):
-        idx = self.a.setfwdparams(*params)
-        idx += self.b.setfwdparams(*params[idx:])
-        return idx
+    # def getfwdparams(self):
+    #     return self.a.getfwdparams() + self.b.getfwdparams()
+    #
+    # def setfwdparams(self, *params):
+    #     idx = self.a.setfwdparams(*params)
+    #     idx += self.b.setfwdparams(*params[idx:])
+    #     return idx
 
 def _normalize(a):
     if isinstance(a, BaseEKS):

@@ -285,29 +285,18 @@ class Lebedev(BaseRadialAngularGrid):
         return self._angmoms_
 
     #################### editable module parts ####################
-    def getparams(self, methodname):
+    def getparamnames(self, methodname, prefix=""):
         if methodname == "solve_poisson":
-            return [self._basis_, self._basis_integrate_, self.radrgrid] + \
-                    self.radgrid.getparams("cumsum_integrate")
+            return [prefix+"_basis_", prefix+"_basis_integrate_", prefix+"radrgrid"] + \
+                    self.radgrid.getparamnames("cumsum_integrate", prefix=prefix+"radgrid.")
         elif methodname == "interpolate":
-            return [self._basis_integrate_] + self.radgrid.getparams("interpolate")
+            return [prefix+"_basis_integrate_"] + \
+                    self.radgrid.getparamnames("interpolate", prefix=prefix+"radgrid.")
         elif methodname == "get_dvolume":
-            return [self._dvolume]
+            return [prefix+"_dvolume"]
         else:
-            return super().getparams(methodname)
+            return super().getparamnames(methodname, prefix=prefix)
 
-    def setparams(self, methodname, *params):
-        if methodname == "solve_poisson":
-            self._basis_, self._basis_integrate_, self.radrgrid = params[:3]
-            return 3 + self.radgrid.setparams("cumsum_integrate", *params[3:])
-        elif methodname == "interpolate":
-            self._basis_integrate_ = params[0]
-            return 1 + self.radgrid.setparams("interpolate", *params[1:])
-        elif methodname == "get_dvolume":
-            self._dvolume, = params[:1]
-            return 1
-        else:
-            return super().setparams(methodname, *params)
 
 if __name__ == "__main__":
     import lintorch as lt

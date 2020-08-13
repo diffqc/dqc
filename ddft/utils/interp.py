@@ -75,12 +75,9 @@ class CubicSpline(EditableModule):
             yq = yl*tyl + yr*tyr + kl*tkl + kr*tkr
             return yq
 
-    def getparams(self, methodname):
-        return [self.spline_mat_inv, self.x]
+    def getparamnames(self, methodname, prefix=""):
+        return [prefix+"spline_mat_inv", prefix+"x"]
 
-    def setparams(self, methodname, *params):
-        self.spline_mat_inv, self.x = params[:2]
-        return 2
 
 @torch.jit.script
 def get_spline_mat_inv(x:torch.Tensor, transpose:bool=True):

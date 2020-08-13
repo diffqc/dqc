@@ -159,39 +159,20 @@ class BeckeMultiGrid(BaseMultiAtomsGrid):
         warnings.warn("Boxshape is obsolete. Please refrain in using it.")
 
     #################### editable module parts ####################
-    def getparams(self, methodname):
+    def getparamnames(self, methodname, prefix=""):
         if methodname == "solve_poisson":
-            # return [self.atompos, self._atomgrid.phithetargrid,
-            #         self._atomgrid.wphitheta, self._atomgrid.radgrid._dvolume,
-            #         self._atomgrid.radrgrid, self._rgrid]
             if self.same_grid:
-                return [self.atompos, self._rgrid] + \
-                        self.atom_grids[0].getparams("get_dvolume") + \
-                        self.atom_grids[0].getparams("solve_poisson") + \
-                        self.atom_grids[0].getparams("interpolate")
+                return [prefix+"atompos", prefix+"_rgrid"] + \
+                       self.atom_grids[0].getparamnames("get_dvolume", prefix=prefix+"atom_grids[0].") + \
+                       self.atom_grids[0].getparamnames("solve_poisson", prefix=prefix+"atom_grids[0].") + \
+                       self.atom_grids[0].getparamnames("interpolate", prefix=prefix+"atom_grids[0].")
             else:
                 raise RuntimeError("Unimplemented")
         elif methodname == "get_dvolume":
-            return [self._dvolume]
+            return [prefix+"_dvolume"]
         else:
-            return super().getparams(methodname)
+            return super().getparamnames(methodname, prefix=prefix)
 
-    def setparams(self, methodname, *params):
-        if methodname == "solve_poisson":
-            idx = 2
-            self.atompos, self._rgrid = params[:idx]
-            if self.same_grid:
-                idx += self.atom_grids[0].setparams("get_dvolume", *params[idx:])
-                idx += self.atom_grids[0].setparams("solve_poisson", *params[idx:])
-                idx += self.atom_grids[0].setparams("interpolate", *params[idx:])
-            else:
-                raise RuntimeError("Unimplemented")
-            return idx
-        elif methodname == "get_dvolume":
-            self._dvolume, = params[:1]
-            return 1
-        else:
-            return super().setparams(methodname, *params)
 
 if __name__ == "__main__":
     import lintorch as lt

@@ -17,17 +17,12 @@ class Hartree(BaseEKS):
         vks = self.grid.solve_poisson(-4.0*np.pi*density)
         return vks
 
-    def getfwdparams(self):
-        return self.grid.getparams("solve_poisson")
+    def getfwdparamnames(self, prefix=""):
+        return self.grid.getparamnames("solve_poisson", prefix=prefix+"grid.")
 
-    def setfwdparams(self, *params):
-        return self.grid.setparams("solve_poisson", *params)
+    def getparamnames(self, methodname, prefix=""):
+        return self.getfwdparamnames(prefix=prefix)
 
-    def getparams(self, methodname):
-        return self.getfwdparams()
-
-    def setparams(self, methodname, *params):
-        return self.setfwdparams(*params)
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt

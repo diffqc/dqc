@@ -193,17 +193,12 @@ class BaseGrid(lt.EditableModule):
               self.__class__.__name__)
 
     ################### editable module ###################
-    def getparams(self, methodname):
+    def getparamnames(self, methodname, prefix=""):
         if methodname == "integralbox" or methodname == "mmintegralbox":
-            return self.getparams("get_dvolume")
+            return self.getparamnames("get_dvolume", prefix=prefix)
         else:
-            raise RuntimeError("getparams has not been implemented for method %s" % methodname)
+            raise KeyError("getparamnames has no %s method" % methodname)
 
-    def setparams(self, methodname, *params):
-        if methodname == "integralbox" or methodname == "mmintegralbox":
-            return self.setparams("get_dvolume", *params)
-        else:
-            raise RuntimeError("setparams has not been implemented for method %s" % methodname)
 
 class Base3DGrid(BaseGrid):
     @abstractproperty

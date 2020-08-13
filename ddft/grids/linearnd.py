@@ -45,15 +45,9 @@ class LinearNDGrid(BaseGrid):
         return self._boxshape
 
     #################### editable module parts ####################
-    def getparams(self, methodname):
+    def getparamnames(self, methodname, prefix=""):
         if methodname == "get_dvolume":
-            return [self.dr3]
+            return [prefix+"dr3"]
         else:
-            raise RuntimeError("The method %s has not been specified for getparams" % methodname)
+            return super().getparamnames(methodname, prefix=prefix)
 
-    def setparams(self, methodname, *params):
-        if methodname == "get_dvolume":
-            self.dr3 = params[0]
-            return 1
-        else:
-            raise RuntimeError("The method %s has not been specified for setparams" % methodname)

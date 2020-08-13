@@ -14,17 +14,12 @@ class VKS(torch.nn.Module, lt.EditableModule):
         assert x.ndim == 2, "The input to VKS module must be 2-dimensional tensor (nbatch, nrgrid)"
         return self.eks_model.potential(x)
 
-    def getparams(self, methodname):
+    def getparamnames(self, methodname, prefix=""):
         if methodname == "forward" or methodname == "__call__":
-            return self.eks_model.getparams("potential")
+            return self.eks_model.getparamnames("potential", prefix=prefix+"eks_model.")
         else:
-            raise RuntimeError("The method %s has not been specified for getparams" % methodname)
+            raise KeyError("Getparamnames has no %s method" % methodname)
 
-    def setparams(self, methodname, *params):
-        if methodname == "forward" or methodname == "__call__":
-            return self.eks_model.setparams("potential", *params)
-        else:
-            raise RuntimeError("The method %s has not been specified for setparams" % methodname)
 
 if __name__ == "__main__":
     from ddft.eks.base_eks import BaseEKS
