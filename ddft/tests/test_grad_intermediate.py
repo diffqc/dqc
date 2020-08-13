@@ -2,7 +2,7 @@ import torch
 from torch.autograd import gradcheck, gradgradcheck
 from ddft.eks.base_eks import BaseEKS
 from ddft.eks.hartree import Hartree
-from ddft.basissets.cgto_basis import CGTOBasis
+from ddft.basissets.cartesian_cgto import CartCGTOBasis
 from ddft.grids.radialgrid import LegendreShiftExpRadGrid, LegendreLogM3RadGrid
 from ddft.grids.sphangulargrid import Lebedev
 from ddft.grids.multiatomsgrid import BeckeMultiGrid
@@ -28,12 +28,10 @@ def test_grad_basis_cgto():
         radgrid = LegendreShiftExpRadGrid(nr, rmin, rmax, dtype=dtype)
         sphgrid = Lebedev(radgrid, prec=prec, basis_maxangmom=4, dtype=dtype)
         grid = BeckeMultiGrid(sphgrid, atomposs, dtype=dtype)
-        basis = CGTOBasis(basisname, cartesian=True)
-        basis.construct_basis(atomzs, atomposs, requires_grad=False)
-        H_model = basis.get_hamiltonian(grid)
-        # print(H_model.rgrid.shape)
-        # print(H_model.shape)
-        y = H_model(wf, vext)
+        bases_list = [CartCGTOBasis(atomz, basisname, dtype=dtype) for atomz in atomzs]
+        h = bases_list[0].construct_hamiltonian(grid, bases_list, atomposs)
+        H_model = h.get_hamiltonian(vext)
+        y = H_model.mm(wf)
         return (y**2).sum()
 
     atomzs = torch.tensor([1.0, 1.0], dtype=dtype)

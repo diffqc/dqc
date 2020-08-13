@@ -1,7 +1,7 @@
 import os
 import torch
 from ddft.basissets.base_basisset import BaseAtomicBasis
-from ddft.hamiltons.hmolcgauss import HamiltonMoleculeCGauss
+from ddft.hamiltons.hmolcgauss_gen import HamiltonMoleculeCGaussGenerator
 
 class CartCGTOBasis(BaseAtomicBasis):
     def __init__(self, atomz, basisname, requires_grad=True,
@@ -120,9 +120,9 @@ class CartCGTOBasis(BaseAtomicBasis):
         dtype = bases_list[0].dtype
         device = bases_list[0].device
         atomzs = torch.tensor([basis.atomz for basis in bases_list], dtype=dtype, device=device)
-        H_model = HamiltonMoleculeCGauss(grid, all_ijks, all_alphas,
+        H_model = HamiltonMoleculeCGaussGenerator(grid, all_ijks, all_alphas,
             all_poss, all_coeffs, all_nelmts, atomposs,
-            atomzs).to(dtype).to(device)
+            atomzs)
         return H_model
 
 def normalize_basisname(basisname):

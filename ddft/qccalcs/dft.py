@@ -1,7 +1,6 @@
 import torch
+import lintorch as lt
 from ddft.qccalcs.base_qccalc import BaseQCCalc
-from ddft.modules.eigen import EigenModule
-from ddft.modules.equilibrium import EquilibriumModule
 from ddft.eks import BaseEKS, VKS, Hartree, xLDA
 
 __all__ = ["dft"]
@@ -33,10 +32,8 @@ class dft(BaseQCCalc):
 
         # set up the eigen module for the forward pass and scf module
         eigen_options = self.__setup_eigen_options(eigen_options)
-        self.eigen_model = EigenModule(self.hmodel, self.norb,
-            rlinmodule=self.hmodel.overlap, **eigen_options)
-        self.scf_model = EquilibriumModule(self.__forward_pass,
-            forward_options=fwd_options, backward_options=bck_options)
+        bck_options = self.__setup_solve_options(bck_options)
+        self.eigen_options = eigen_options
 
         # set up the initial density before running scf module
         dm0 = self.__get_init_dm(dm0) # (nbatch, nbasis_tot, nbasis_tot)
@@ -44,7 +41,11 @@ class dft(BaseQCCalc):
 
         # run the self-consistent iterations
         dm0 = dm0.view(nbatch, -1)
-        self.scf_dm = self.scf_model(dm0) # (nbatch, nbasis_tot*nbasis_tot)
+        self.scf_dm = lt.equilibrium2(
+            fcn = self.__forward_pass,
+            y0 = dm0,
+            fwd_options = fwd_options,
+            bck_options = bck_options) # (nbatch, nbasis_tot*nbasis_tot)
         self.scf_dm = self.scf_dm.view(nbatch, nbasis_tot, nbasis_tot) # (nbatch, nbasis_tot, nbasis_tot)
         self.scf_density = self.hmodel.dm2dens(self.scf_dm)
 
@@ -107,7 +108,12 @@ class dft(BaseQCCalc):
         # evals: (nbatch, norb), evecs: (nbatch, nr, norb)
         hparams = (vext_tot,)
         rparams = []
-        eigvals, eigvecs = self.eigen_model(hparams, rparams=rparams)
+        eigvals, eigvecs = lt.lsymeig(
+            A = self.hmodel.get_hamiltonian(*hparams),
+            neig = self.norb,
+            M = self.hmodel.get_overlap(*rparams),
+            fwd_options = self.eigen_options)
+        # eigvals, eigvecs = self.eigen_model(hparams, rparams=rparams)
 
         return eigvals, eigvecs, vks
 
@@ -146,34 +152,54 @@ class dft(BaseQCCalc):
             options["method"] = "exacteig"
         return options
 
-    ############################# editable module #############################
-    def getparams(self, methodname):
-        if methodname == "__forward_pass":
-            return self.hmodel.getparams("dm2dens") + self.getparams("__diagonalize") + self.getparams("__normalize_dm")
-        elif methodname == "__diagonalize":
-            return [self.vext] + self.eigen_model.getparams("__call__") + self.vks_model.getparams("__call__")
-        elif methodname == "__normalize_dm":
-            return self.grid.getparams("integralbox")
-        else:
-            raise RuntimeError("The method %s is not defined for getparams"%methodname)
+    def __setup_solve_options(self, options):
+        nsize = self.hmodel.shape[0]
+        if nsize < 100:
+            options["method"] = "exactsolve"
+        return options
 
-    def setparams(self, methodname, *params):
+    ############################# editable module #############################
+    def getparamnames(self, methodname, prefix=""):
         if methodname == "__forward_pass":
-            idx = 0
-            idx += self.hmodel.setparams("dm2dens", *params[idx:])
-            idx += self.setparams("__diagonalize", *params[idx:])
-            idx += self.setparams("__normalize_dm", *params[idx:])
-            return idx
+            return self.getparamnames("__diagonalize", prefix=prefix) + \
+                   self.getparamnames("__normalize_dm", prefix=prefix) + \
+                   self.hmodel.getparamnames("dm2dens", prefix=prefix+"hmodel.")
         elif methodname == "__diagonalize":
-            self.vext, = params[:1]
-            idx = 1
-            idx += self.eigen_model.setparams("__call__", *params[idx:])
-            idx += self.vks_model.setparams("__call__", *params[idx:])
-            return idx
+            return [prefix+"vext"] + \
+                   self.hmodel.getparamnames("get_hamiltonian", prefix=prefix+"hmodel.") + \
+                   self.vks_model.getparamnames("__call__", prefix=prefix+"vks_model.")
         elif methodname == "__normalize_dm":
-            return self.grid.setparams("integralbox", *params)
+            return self.grid.getparamnames("integralbox", prefix=prefix+"grid.")
         else:
-            raise RuntimeError("The method %s is not defined for setparams"%methodname)
+            raise KeyError("getparamnames has no %s method" % methodname)
+
+    # def getparams(self, methodname):
+    #     if methodname == "__forward_pass":
+    #         return self.hmodel.getparams("dm2dens") + self.getparams("__diagonalize") + self.getparams("__normalize_dm")
+    #     elif methodname == "__diagonalize":
+    #         return [self.vext] + self.eigen_model.getparams("__call__") + self.vks_model.getparams("__call__")
+    #     elif methodname == "__normalize_dm":
+    #         return self.grid.getparams("integralbox")
+    #     else:
+    #         raise RuntimeError("The method %s is not defined for getparams"%methodname)
+    #
+    # def setparams(self, methodname, *params):
+    #     if methodname == "__forward_pass":
+    #         idx = 0
+    #         idx += self.hmodel.setparams("dm2dens", *params[idx:])
+    #         idx += self.setparams("__diagonalize", *params[idx:])
+    #         idx += self.setparams("__normalize_dm", *params[idx:])
+    #         return idx
+    #     elif methodname == "__diagonalize":
+    #         self.vext, = params[:1]
+    #         idx = 1
+    #         idx += self.eigen_model.setparams("__call__", *params[idx:])
+    #         idx += self.vks_model.setparams("__call__", *params[idx:])
+    #         return idx
+    #     elif methodname == "__normalize_dm":
+    #         return self.grid.setparams("integralbox", *params)
+    #     else:
+    #         raise RuntimeError("The method %s is not defined for setparams"%methodname)
 
 if __name__ == "__main__":
     from ddft.systems.mol import mol

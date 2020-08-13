@@ -1,8 +1,8 @@
 from itertools import product
 import torch
 import numpy as np
-from ddft.basissets.cgto_basis import CGTOBasis
-from ddft.hamiltons.hmolcgauss import HamiltonMoleculeCGauss
+from ddft.basissets.cartesian_cgto import CartCGTOBasis
+from ddft.hamiltons.hmolcgauss_gen import HamiltonMoleculeCGaussGenerator
 from ddft.grids.radialgrid import LegendreShiftExpRadGrid
 from ddft.grids.sphangulargrid import Lebedev
 from ddft.grids.multiatomsgrid import BeckeMultiGrid
@@ -31,7 +31,7 @@ def test_hamilton_molecule_cartesian_gauss():
         centres = atompos.repeat(nbasis*nelmts_val, 1)
         coeffs = torch.ones((nbasis*nelmts_val,))
         ijks = torch.zeros((nbasis*nelmts_val, 3), dtype=torch.int32)
-        h = HamiltonMoleculeCGauss(grid, ijks, alphas, centres, coeffs, nelmts, atompos, atomzs).to(dtype)
+        h = HamiltonMoleculeCGaussGenerator(grid, ijks, alphas, centres, coeffs, nelmts, atompos, atomzs)
 
         # compare the eigenvalues (no degeneracy because the basis is all radial)
         nevals = 5
@@ -64,7 +64,7 @@ def test_hamilton_molecule_cartesian_gauss1():
         ijks[2,:,1] = 1
         ijks[3,:,2] = 1
         ijks = ijks.view(4*nbasis, 3)
-        h = HamiltonMoleculeCGauss(grid, ijks, alphas, centres, coeffs, nelmts, atompos, atomzs).to(dtype)
+        h = HamiltonMoleculeCGaussGenerator(grid, ijks, alphas, centres, coeffs, nelmts, atompos, atomzs)
 
         # compare the eigenvalues (there is degeneracy in p-orbitals)
         nevals = 6
@@ -86,9 +86,9 @@ def test_hamilton_molecule_cgto():
         grid = BeckeMultiGrid(atomgrid, atompos, dtype=dtype)
 
         # setup basis
-        basis = CGTOBasis(basisname, cartesian=True, dtype=dtype)
-        basis.construct_basis(atomzs, atompos)
-        h = basis.get_hamiltonian(grid)
+        bases_list = [CartCGTOBasis(atomz, basisname, dtype=dtype) for atomz in atomzs]
+        # basis.construct_basis(atomzs, atompos)
+        h = bases_list[0].construct_hamiltonian(grid, bases_list, atompos)
 
         # compare the eigenvalues (there is degeneracy in p-orbitals)
         nevals = 1
@@ -102,15 +102,16 @@ def test_hamilton_molecule_cgto():
 
 def get_evals(grid, h, *hparams):
     nr = grid.rgrid.shape[0]
-    vext = torch.zeros(1, nr).to(dtype)
-    H = h.fullmatrix(vext, *hparams)
-    olp = h.overlap.fullmatrix()
+    vext = torch.zeros(nr).to(dtype)
+    H = h.get_hamiltonian(vext, *hparams).fullmatrix()
+    olp = h.get_overlap().fullmatrix()
 
     # check symmetricity of those matrices
     assert torch.allclose(olp-olp.transpose(-2,-1), torch.zeros_like(olp))
     assert torch.allclose(H-H.transpose(-2,-1), torch.zeros_like(H))
 
-    mat = torch.solve(H[0], olp[0])[0]
+    mat = torch.solve(H, olp)[0]
+    print(mat.shape)
     evals, evecs = torch.eig(mat)
     evals = torch.sort(evals.view(-1))[0]
     return evals

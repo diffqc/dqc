@@ -71,7 +71,7 @@ class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
         self._grid = grid
         dtype = alphas.dtype
         device = alphas.device
-        super(HamiltonMoleculeCGauss, self).__init__(
+        super(HamiltonMoleculeCGaussGenerator, self).__init__(
             shape = (self.nbasis, self.nbasis),
             dtype = dtype,
             device = device)
@@ -84,7 +84,7 @@ class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
 
         # normalize each gaussian elements
         if normalize_elmts:
-            norm_elmt = 1./torch.sqrt(torch.diagonal(self.olp_elmts[0])) # (nelmtstot,)
+            norm_elmt = 1./torch.sqrt(torch.diagonal(self.olp_elmts)) # (nelmtstot,)
             coeffs = coeffs * norm_elmt
 
         # combine the kinetics and coulomb elements
@@ -107,6 +107,10 @@ class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
         self.kin_coul_mat = self.kin_coul_mat * norm_mat
         self.olp_mat = self.olp_mat * norm_mat
 
+        # make sure the matrix is symmetric
+        self.kin_coul_mat = (self.kin_coul_mat + self.kin_coul_mat.transpose(-2,-1)) * 0.5
+        self.olp_mat = (self.olp_mat + self.olp_mat.transpose(-2,-1)) * 0.5
+
         # get the basis
         self.rgrid = self._grid.rgrid_in_xyz # (nr, 3)
         rab = self.rgrid - centres.unsqueeze(1) # (nbasis*nelmts, nr, 3)
@@ -126,14 +130,33 @@ class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
 
     def get_hamiltonian(self, vext):
         # kin_coul_mat: (nbasis, nbasis)
-        # vext: (nbatch, nr)
+        # vext: (..., nr)
         extpot_mat = torch.einsum("...r,br,cr->...bc", vext, self.basis_dvolume, self.basis)
-        extpot_mat = torch.matmul(vext.unsqueeze(-2) * self.basis_dvolume, self.basis.transpose(-2,-1)) # (nbatch, nbasis, nbasis)
-        mat = extpot + self.kin_coul_mat
-        return LinearOperator.m(mat)
+        mat = extpot_mat + self.kin_coul_mat
+        mat = (mat + mat.transpose(-2,-1)) * 0.5 # ensure the symmetricity
+        return lt.LinearOperator.m(mat, is_hermitian=True)
 
     def get_overlap(self):
-        return LinearOperator.m(self.olp_mat)
+        return lt.LinearOperator.m(self.olp_mat, is_hermitian=True)
+
+    def dm2dens(self, dm):
+        # dm: (..., nbasis, nbasis)
+        # self.basis: (nbasis, nr)
+        # return: (..., nr)
+        batchshape = dm.shape[:-2]
+        # dm = dm.view(-1, *dm.shape[-2:]) # (nbatch, nbasis, nbasis)
+        dens = torch.einsum("...jk,jr,kr->...r", dm, self.basis, self.basis) # (nbatch, nr)
+        return dens#.view(*batchshape, -1) # (..., nr)
+
+    def getparamnames(self, methodname, prefix=""):
+        if methodname == "get_hamiltonian":
+            return [prefix+"basis_dvolume", prefix+"basis", prefix+"kin_coul_mat"]
+        elif methodname == "get_overlap":
+            return [prefix+"olp_mat"]
+        elif methodname == "dm2dens":
+            return [prefix+"basis"]
+        else:
+            raise KeyError("getparamnames has no %s method" % methodname)
 
     ############################# helper functions #############################
     def _contract(self, mat):

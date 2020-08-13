@@ -415,24 +415,6 @@ class ShiftExpTransformation(BaseGridTransformation):
         else:
             return super().getparamnames(methodname, prefix=prefix)
 
-    # def getparams(self, methodname):
-    #     if methodname == "invtransform" or methodname == "transform":
-    #         return [self.logrmin, self.logrmm]
-    #     elif methodname == "get_scaling":
-    #         return [self.logrmm]
-    #     else:
-    #         raise RuntimeError("Unimplemented %s method for getparams" % methodname)
-    #
-    # def setparams(self, methodname, *params):
-    #     if methodname == "invtransform" or methodname == "transform":
-    #         self.logrmin, self.logrmm = params[:2]
-    #         return 2
-    #     elif methodname == "get_scaling":
-    #         self.logrmm, = params[:1]
-    #         return 1
-    #     else:
-    #         raise RuntimeError("Unimplemented %s method for setparams" % methodname)
-
 class DoubleExp2Transformation(BaseGridTransformation):
     def __init__(self, alpha, rmin, rmax, dtype=torch.float, device=torch.device('cpu')):
         # setup the parameters needed for the transformation
@@ -459,7 +441,7 @@ class DoubleExp2Transformation(BaseGridTransformation):
         x0 = torch.zeros_like(rs).to(rs.device)
 
         # lt.equilibrium works with batching, so append the first dimension
-        x = lt.equilibrium(iter_fcn, x0.unsqueeze(0),
+        x = lt.equilibrium2(iter_fcn, x0.unsqueeze(0),
             params=[logrs.unsqueeze(0), 1./self.alpha.unsqueeze(0)],
             fwd_options={"method": "np_broyden1"}).squeeze(0)
         return x

@@ -20,9 +20,5 @@ class BaseQCCalc(lt.EditableModule):
 
     #################### editable module functions ####################
     @abstractmethod
-    def getparams(self, methodname):
-        pass
-
-    @abstractmethod
-    def setparams(self, methodname, *params):
+    def getparamnames(self, methodname, prefix=""):
         pass
