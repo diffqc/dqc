@@ -287,7 +287,7 @@ class Lebedev(BaseRadialAngularGrid):
     #################### editable module parts ####################
     def getparamnames(self, methodname, prefix=""):
         if methodname == "solve_poisson":
-            return [prefix+"_basis_", prefix+"_basis_integrate_", prefix+"radrgrid"] + \
+            return [prefix+"_basis_", prefix+"_angmoms_", prefix+"_basis_integrate_", prefix+"radrgrid"] + \
                     self.radgrid.getparamnames("cumsum_integrate", prefix=prefix+"radgrid.")
         elif methodname == "interpolate":
             return [prefix+"_basis_integrate_"] + \
