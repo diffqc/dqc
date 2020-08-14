@@ -169,7 +169,8 @@ class dft(BaseQCCalc):
                    self.hmodel.getparamnames("get_hamiltonian", prefix=prefix+"hmodel.") + \
                    self.vks_model.getparamnames("__call__", prefix=prefix+"vks_model.")
         elif methodname == "__normalize_dm":
-            return self.grid.getparamnames("integralbox", prefix=prefix+"grid.")
+            return [prefix+"numel"] + \
+                   self.grid.getparamnames("integralbox", prefix=prefix+"grid.")
         else:
             raise KeyError("getparamnames has no %s method" % methodname)
 
