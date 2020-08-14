@@ -167,6 +167,7 @@ class dft(BaseQCCalc):
         elif methodname == "__diagonalize":
             return [prefix+"vext"] + \
                    self.hmodel.getparamnames("get_hamiltonian", prefix=prefix+"hmodel.") + \
+                   self.hmodel.getparamnames("get_overlap", prefix=prefix+"hmodel.") + \
                    self.vks_model.getparamnames("__call__", prefix=prefix+"vks_model.")
         elif methodname == "__normalize_dm":
             return [prefix+"numel"] + \
