@@ -139,14 +139,12 @@ class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
     def get_overlap(self):
         return lt.LinearOperator.m(self.olp_mat, is_hermitian=True)
 
-    def dm2dens(self, dm):
-        # dm: (..., nbasis, nbasis)
-        # self.basis: (nbasis, nr)
-        # return: (..., nr)
-        batchshape = dm.shape[:-2]
-        # dm = dm.view(-1, *dm.shape[-2:]) # (nbatch, nbasis, nbasis)
-        dens = torch.einsum("...jk,jr,kr->...r", dm, self.basis, self.basis) # (nbatch, nr)
-        return dens#.view(*batchshape, -1) # (..., nr)
+    def dm2dens(self, dm): # batchified
+        # dm: (*BD, nbasis, nbasis)
+        # self.basis: (*BB, nbasis, nr)
+        # return: (*BDM, nr)
+        dens = (torch.matmul(dm, self.basis) * self.basis).sum(dim=-2) # (*BDM, nr)
+        return dens
 
     def getparamnames(self, methodname, prefix=""):
         if methodname == "get_hamiltonian":
