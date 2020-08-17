@@ -92,12 +92,14 @@ class dft(BaseQCCalc):
 
         return new_dm.view(nbatch, -1)
 
-    def __normalize_dm(self, dm):
+    def __normalize_dm(self, dm): # batchified
         # normalize the new density matrix
-        dens_tot = self.grid.integralbox(self.hmodel.dm2dens(dm), dim=-1, keepdim=True) # (nbatch, 1)
-        normfactor = self.numel / dens_tot
-        dm = dm * normfactor.unsqueeze(-1) # (nbatch, nbasis_tot, nbasis_tot)
-        return dm
+        # dm: (*BM, nbasis_tot, nbasis_tot)
+        dens = self.hmodel.dm2dens(dm) # (*BD, nr)
+        dens_tot = self.grid.integralbox(dens, dim=-1, keepdim=True) # (*BD, 1)
+        normfactor = self.numel / dens_tot # (*BD, 1)
+        dm = dm * normfactor.unsqueeze(-1) # (*BMD, nbasis_tot, nbasis_tot)
+        return dm # (*BMD, nbasis_tot, nbasis_tot)
 
     def __diagonalize(self, density):
         # calculate the total potential experienced by Kohn-Sham particles

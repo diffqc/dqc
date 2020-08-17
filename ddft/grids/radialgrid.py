@@ -54,18 +54,18 @@ class RadialGrid(BaseGrid):
             raise TypeError("Argument transformobj must be BaseGridTransformation or a string")
 
         self.x, self.w = grid.get_xw()
-        self.z, self.dxdz = grid.get_z_dxdz()
+        self.z, self.dxdz = grid.get_z_dxdz() # (nx,)
         self._boxshape = (len(self.x),)
         self._interpolator = CubicSpline(self.x)
         self._cumsumquad = CumSumQuad(self.z, side="both", method="simpson")
 
         self._transformobj = tfmobj
-        self.rs = self.transformobj.transform(self.x)
+        self.rs = self.transformobj.transform(self.x) # (nx,)
         self._rgrid = self.rs.unsqueeze(-1) # (nx, 1)
 
         # integration elements
-        self._scaling = self.transformobj.get_scaling(self.rs) # dr/dg
-        self._vol_elmt = 4*np.pi*self.rs*self.rs
+        self._scaling = self.transformobj.get_scaling(self.rs) # dr/dg # (nx,)
+        self._vol_elmt = 4*np.pi*self.rs*self.rs # (nx,)
         self._dr = self._scaling * self.w
         self._dvolume = self._vol_elmt * self._dr
 
@@ -94,13 +94,14 @@ class RadialGrid(BaseGrid):
     def laplace(self, p, dim=-1):
         pass # ???
 
-    def cumsum_integrate(self, f):
-        # f: (nbatch, nr, nr) in r-space
-        fx = f * self._scaling * self._vol_elmt * self.dxdz # (nbatch, nr, nr)
+    def cumsum_integrate(self, f): # batchified
+        # f: (*BF, nr, nr) in r-space
+        dvol = (self._scaling * self._vol_elmt * self.dxdz).unsqueeze(-2) # (1, nr)
+        fx = f * dvol # (*BF, nr, nr)
         return self._cumsumquad.integrate(fx) # (nbatch, nr)
 
-    def solve_poisson(self, f):
-        # f: (nbatch, nr)
+    def solve_poisson(self, f): # batchified
+        # f: (*BF, nr)
         # the expression below is used to satisfy the following conditions:
         # * symmetric operator (by doing the integral 1/|r-r1|)
         # * 0 at r=\infinity, but not 0 at the bound (again, by doing the integral 1/|r-r1|)
@@ -109,17 +110,16 @@ class RadialGrid(BaseGrid):
         # where rless = min(r,r1) and rgreat = max(r,r1)
 
         # calculate the matrix rless / rgreat
-        rs = self.rgrid[:,0]
-        rless = torch.min(rs.unsqueeze(-1), rs) # (nr, nr)
-        rgreat = torch.max(rs.unsqueeze(-1), rs)
+        rs = self.rgrid[:,0] # (nr,)
+        rless  = torch.min(rs.unsqueeze(-1), rs.unsqueeze(-2)) # (nr, nr)
+        rgreat = torch.max(rs.unsqueeze(-1), rs.unsqueeze(-2))
         rratio = 1. / rgreat
 
         # the integralbox for radial grid is integral[4*pi*r^2 f(r) dr] while here
         # we only need to do integral[f(r) dr]. That's why it is divided by (4*np.pi)
         # and it is not multiplied with (self.radrgrid**2) in the lines below
-        intgn = (f).unsqueeze(-2) * rratio # (nbatch, nr, nr)
-        vrad_lm = self.cumsum_integrate(intgn) / (4*np.pi)
-        # vrad_lm = self.integralbox(intgn / (4*np.pi), dim=-1)
+        intgn = (f).unsqueeze(-2) * rratio # (*BF, nr, nr)
+        vrad_lm = self.cumsum_integrate(intgn) / (4*np.pi) # (*BF, nr)
 
         return -vrad_lm
 
