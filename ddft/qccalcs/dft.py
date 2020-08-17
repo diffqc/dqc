@@ -41,7 +41,7 @@ class dft(BaseQCCalc):
 
         # run the self-consistent iterations
         dm0 = dm0.view(nbatch, -1)
-        self.scf_dm = lt.equilibrium2(
+        self.scf_dm = lt.equilibrium(
             fcn = self.__forward_pass,
             y0 = dm0,
             fwd_options = fwd_options,

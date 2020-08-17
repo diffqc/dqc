@@ -441,7 +441,7 @@ class DoubleExp2Transformation(BaseGridTransformation):
         x0 = torch.zeros_like(rs).to(rs.device)
 
         # lt.equilibrium works with batching, so append the first dimension
-        x = lt.equilibrium2(iter_fcn, x0.unsqueeze(0),
+        x = lt.equilibrium(iter_fcn, x0.unsqueeze(0),
             params=[logrs.unsqueeze(0), 1./self.alpha.unsqueeze(0)],
             fwd_options={"method": "np_broyden1"}).squeeze(0)
         return x
