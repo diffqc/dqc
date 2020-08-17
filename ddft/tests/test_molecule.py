@@ -70,20 +70,21 @@ def test_mol_grad():
 
     basis = "6-311++G**"
     isystem = 0
-    systems = [ # (atomzs, atomposs)
-        ([1,1], [[-0.5, 0, 0], [0.5, 0., 0.]]),
-        ([3,3], [[-2.5, 0, 0], [2.5, 0., 0.]]),
-        ([7,7], [[-1.0, 0, 0], [1.0, 0., 0.]]),
-        ([9,9], [[-1.25, 0, 0], [1.25, 0., 0.]]),
-        ([6,8], [[-1.0, 0, 0], [1.0, 0., 0.]]),
+    systems = [ # (atomzs, dist)
+        ([1,1], 1.0),
+        ([3,3], 5.0),
+        ([7,7], 2.0),
+        ([9,9], 2.5),
+        ([6,8], 2.0),
     ]
 
-    atomposs = torch.tensor(systems[isystem][1], dtype=dtype, device=device).requires_grad_()
+    dist = torch.tensor(systems[isystem][1], dtype=dtype, device=device).requires_grad_()
     a = torch.tensor(-0.7385587663820223, dtype=dtype, device=device).requires_grad_()
     p = torch.tensor(4./3, dtype=dtype, device=device).requires_grad_()
 
-    def get_energy(atomposs, a, p):
+    def get_energy(dist, a, p):
         atomzs = systems[isystem][0]
+        atomposs = torch.tensor([[0.5, 0, 0], [-0.5, 0, 0]], dtype=dtype, device=device) * dist
         system = (atomzs, atomposs)
         eks_model = PseudoLDA(a, p)
         m = mol(system, basis, requires_grad=True)
@@ -91,7 +92,7 @@ def test_mol_grad():
         energy = scf.energy()
         return energy
 
-    gradcheck(get_energy, (atomposs, a, p))
+    gradcheck(get_energy, (dist, a, p))
 
 def runtest_molsystem_energy(systems, basis):
     for s in systems:
