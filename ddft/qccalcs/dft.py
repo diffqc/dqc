@@ -2,6 +2,7 @@ import torch
 import lintorch as lt
 from ddft.qccalcs.base_qccalc import BaseQCCalc
 from ddft.eks import BaseEKS, VKS, Hartree, xLDA
+from ddft.utils.misc import set_default_option
 
 __all__ = ["dft"]
 
@@ -31,8 +32,12 @@ class dft(BaseQCCalc):
         self.vks_model = VKS(self.eks_model, self.grid)
 
         # set up the eigen module for the forward pass and scf module
-        eigen_options = self.__setup_eigen_options(eigen_options)
-        bck_options = self.__setup_solve_options(bck_options)
+        eigen_options = set_default_option(
+            self.__get_default_eigen_options(),
+            eigen_options)
+        bck_options = set_default_option(
+            self.__get_default_solve_options(),
+            bck_options)
         self.eigen_options = eigen_options
 
         # set up the initial density before running scf module
@@ -148,17 +153,21 @@ class dft(BaseQCCalc):
             vext = torch.zeros_like(self.grid.rgrid[:,0]).unsqueeze(0) # (nbatch, nr)
         return vext
 
-    def __setup_eigen_options(self, options):
-        nsize = self.hmodel.shape[0]
+    def __get_default_eigen_options(self):
+        nsize = self.hmodel.shape[-1]*self.hmodel.shape[-2]
+        defopt = {}
         if nsize < 100:
-            options["method"] = "exacteig"
-        return options
+            defopt["method"] = "exacteig"
+        return defopt
 
-    def __setup_solve_options(self, options):
-        nsize = self.hmodel.shape[0]
-        if nsize < 100:
-            options["method"] = "exactsolve"
-        return options
+    def __get_default_solve_options(self):
+        nsize = self.hmodel.shape[-1]*self.hmodel.shape[-2]
+        defopt = {}
+        if nsize < 20:
+            defopt["method"] = "exactsolve"
+        else:
+            defopt["method"] = "lbfgs"
+        return defopt
 
     ############################# editable module #############################
     def getparamnames(self, methodname, prefix=""):
