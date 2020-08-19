@@ -13,6 +13,7 @@ Test the gradient for the intermediate methods (not basic module and not API)
 """
 
 dtype = torch.float64
+device = torch.device("cpu")
 
 def test_grad_basis_cgto():
     basisname = "6-311++G**"
@@ -44,44 +45,82 @@ def test_grad_basis_cgto():
     gradgradcheck(fcn, (atomzs, atomposs, wf, vext))
 
 def test_grad_poisson_radial():
-    radgrid = LegendreLogM3RadGrid(nr=100, ra=2.)
-    r = radgrid.rgrid.squeeze(-1) # (nr,)
-    w = torch.linspace(0.8, 1.2, 5, dtype=r.dtype, device=r.device).unsqueeze(-1) # (nw,1)
-    w = w.requires_grad_()
-    f = torch.exp(-r/w) # (nw, nr)
+    ra = torch.tensor(2., dtype=dtype, device=device).requires_grad_()
+    w = torch.linspace(0.8, 1.2, 5, dtype=dtype, device=device).unsqueeze(-1).requires_grad_() # (nw,1)
+
+    gridparams = (ra,)
+    def getgrid(ra):
+        radgrid = LegendreLogM3RadGrid(nr=100, ra=ra, dtype=dtype, device=device)
+        return radgrid
+
+    runtest_grad_poisson(w, getgrid, gridparams)
+
+def test_grad_poisson_spherical():
+    ra = torch.tensor(2., dtype=dtype, device=device).requires_grad_()
+    w = torch.linspace(0.8, 1.2, 5, dtype=dtype, device=device).unsqueeze(-1).requires_grad_() # (nw,1)
+
+    gridparams = (ra,)
+    def getgrid(ra):
+        radgrid = LegendreLogM3RadGrid(nr=100, ra=ra, dtype=dtype, device=device)
+        grid = Lebedev(radgrid, prec=13, basis_maxangmom=4, dtype=dtype, device=device)
+        return grid
+
+    runtest_grad_poisson(w, getgrid, gridparams)
+
+def test_grad_poisson_multiatoms():
+    ra = torch.tensor(2., dtype=dtype, device=device).requires_grad_()
+    w = torch.linspace(0.8, 1.2, 5, dtype=dtype, device=device).unsqueeze(-1).requires_grad_() # (nw,1)
+    dist = torch.tensor(1., dtype=dtype, device=device).requires_grad_()
+
+    gridparams = (ra, dist)
+    def getgrid(ra, dist):
+        atompos = torch.tensor([[-0.5, 0., 0.], [0.5, 0., 0.]], dtype=dtype, device=device) * dist
+        radgrid = LegendreLogM3RadGrid(nr=100, ra=ra, dtype=dtype, device=device)
+        sphgrid = Lebedev(radgrid, prec=13, basis_maxangmom=4, dtype=dtype, device=device)
+        grid = BeckeMultiGrid(sphgrid, atompos=atompos, dtype=dtype, device=device)
+        return grid
+
+    def getr(grid):
+        return grid.rgrid.norm(dim=-1)
+
+    # turn off the res check because the results won't be accurate enough
+    runtest_grad_poisson(w, getgrid, gridparams, getr, reschk=False)
+
+
+def runtest_grad_poisson(w, getgrid, gridparams, getr=None, reschk=True, gradchk=True):
+    if getr is None:
+        getr = lambda grid: grid.rgrid[:,0]
+
+    def getfpois(w, *gridparams):
+        grid = getgrid(*gridparams)
+        r = getr(grid) # (nr)
+        f = torch.exp(-r/w) # (nw, nr)
+        fpois = grid.solve_poisson(f) # (nw, nr)
+        return fpois
+
+    def getloss(w, *gridparams):
+        fpois = getfpois(w, *gridparams)
+        loss = fpois.mean(dim=-1).sum()
+        return loss
+
+    grid = getgrid(*gridparams)
+    r = getr(grid) # (nr)
+    f = torch.exp(-r/w)
+
+    fpois = getfpois(w, *gridparams)
+    fpois_true = w*w*f + 2*w*w*w/r*torch.expm1(-r/w) # (nw, nr)
+    if reschk:
+        assert torch.allclose(fpois, fpois_true)
 
     # analytically calculated gradients
-    fpois_true = w*w*f + 2*w*w*w/r*torch.expm1(-r/w) # (nw, nr)
     gwidth_true = 4*w*f.mean(dim=-1, keepdim=True) + (f*r).mean(dim=-1, keepdim=True) +\
         6*w*w*(torch.expm1(-r/w)/r).mean(dim=-1, keepdim=True) # (nw,1)
 
-    fpois = radgrid.solve_poisson(f) # (nw, nr)
-    loss = fpois.mean(dim=-1).sum()
+    loss = getloss(w, *gridparams)
     gwidth, = torch.autograd.grad(loss, (w,), retain_graph=True)
-    assert torch.allclose(gwidth, gwidth_true)
+    if reschk:
+        assert torch.allclose(gwidth, gwidth_true)
 
-    print(gwidth.view(-1))
-    print(gwidth_true.view(-1))
-    print((gwidth_true-gwidth).view(-1))
-
-def test_grad_spherical_radial():
-    radgrid = LegendreLogM3RadGrid(nr=100, ra=2.)
-    grid = Lebedev(radgrid, prec=13, basis_maxangmom=4)
-    r = grid.rgrid[:,0] # (nr)
-    w = torch.linspace(0.8, 1.2, 5, dtype=r.dtype, device=r.device).unsqueeze(-1) # (nw,1)
-    w = w.requires_grad_()
-    f = torch.exp(-r/w) # (nw, nr)
-
-    # analytically calculated gradients
-    fpois_true = w*w*f + 2*w*w*w/r*torch.expm1(-r/w) # (nw, nr)
-    gwidth_true = 4*w*f.mean(dim=-1, keepdim=True) + (f*r).mean(dim=-1, keepdim=True) +\
-        6*w*w*(torch.expm1(-r/w)/r).mean(dim=-1, keepdim=True) # (nw,1)
-
-    fpois = grid.solve_poisson(f) # (nw, nr)
-    loss = fpois.mean(dim=-1).sum()
-    gwidth, = torch.autograd.grad(loss, (w,), retain_graph=True)
-    assert torch.allclose(gwidth, gwidth_true)
-
-    print(gwidth.view(-1))
-    print(gwidth_true.view(-1))
-    print((gwidth_true-gwidth).view(-1))
+    if gradchk:
+        gradcheck(getloss, (w, *gridparams))
+        gradgradcheck(getloss, (w, *gridparams))
