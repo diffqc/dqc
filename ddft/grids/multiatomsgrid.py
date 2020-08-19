@@ -115,6 +115,9 @@ class BeckeMultiGrid(BaseMultiAtomsGrid):
             natoms_list.append(agr.integralbox(-fa/(4*np.pi), dim=-1)) # (nbatch,)
             Vatoms_list.append(agr.solve_poisson(fa)) # (nbatch, ngrid)
 
+        if self.natoms == 1:
+            return Vatoms_list[0]
+
         def get_extrap_fcn(iatom):
             # NOTE: This extrapolation function is only valid if molecule's charge == 0
             natom = natoms_list[iatom] # (nbatch,)
@@ -127,9 +130,6 @@ class BeckeMultiGrid(BaseMultiAtomsGrid):
             rgrid = self._rgrid # (nr, ndim)
             res = torch.cat((rgrid[:self.idx_grids_l[iatom],:], rgrid[self.idx_grids_r[iatom]:,:]), dim=0)
             return res
-
-        if self.natoms == 1:
-            return Vatoms_list[0]
 
         # perform interpolation and extrapolation
         Vtot = torch.zeros_like(fatoms).to(fatoms.device) # (nbatch, nr)
@@ -161,7 +161,10 @@ class BeckeMultiGrid(BaseMultiAtomsGrid):
     #################### editable module parts ####################
     def getparamnames(self, methodname, prefix=""):
         if methodname == "solve_poisson":
-            if self.same_grid:
+            if self.natoms == 1:
+                return self.getparamnames("get_atom_weights", prefix=prefix) + \
+                       self.atom_grids[0].getparamnames("solve_poisson", prefix=prefix+"atom_grids[0].")
+            elif self.same_grid:
                 return [prefix+"atompos", prefix+"_rgrid"] + \
                        self.atom_grids[0].getparamnames("get_dvolume", prefix=prefix+"atom_grids[0].") + \
                        self.atom_grids[0].getparamnames("solve_poisson", prefix=prefix+"atom_grids[0].") + \
@@ -170,6 +173,8 @@ class BeckeMultiGrid(BaseMultiAtomsGrid):
                 raise RuntimeError("Unimplemented")
         elif methodname == "get_dvolume":
             return [prefix+"_dvolume"]
+        elif methodname == "get_atom_weights":
+            return [prefix+"atompos", prefix+"_rgrid"]
         else:
             return super().getparamnames(methodname, prefix=prefix)
 
