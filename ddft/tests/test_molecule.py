@@ -14,6 +14,8 @@ Test various configurations using the molecule API.
 """
 
 dtype = torch.float64
+device = torch.device("cpu")
+
 class PseudoLDA(BaseEKS):
     def __init__(self, a, p):
         super(PseudoLDA, self).__init__()
@@ -25,25 +27,6 @@ class PseudoLDA(BaseEKS):
 
     def getfwdparamnames(self, prefix=""):
         return [prefix+"a", prefix+"p"]
-
-def get_atom(atomname):
-    basis = "6-311++G**"
-    if atomname == "He":
-        atomz = 2.0
-        energy = -2.90 # ???
-        # pyscf_energy = -2.72102435e # LDA, 6-311++G**, grid level 4
-    elif atomname == "Be":
-        atomz = 4.0
-        energy = -14.2219
-        # pyscf_energy = -14.2207456807576 # LDA, 6-311++G**, grid level 4
-    elif atomname == "Ne":
-        atomz = 10.0
-        energy = -127.4718
-        # pyscf_energy = -127.469035524253 # LDA, 6-311++G**, grid level 4
-    atomzs = torch.tensor([atomz], dtype=dtype)
-    energy = torch.tensor(energy, dtype=dtype)
-    atomposs = torch.tensor([[0.0, 0.0, 0.0]], dtype=dtype)
-    return atomzs, atomposs, basis, energy
 
 def test_atom2():
     systems = {
@@ -64,11 +47,25 @@ def test_mol2():
     basis = "6-311++G**"
     runtest_molsystem_energy(systems, basis)
 
-def test_mol_grad():
-    dtype = torch.float64
-    device = torch.device("cpu")
+def test_atom_grad():
+    isystem = 0
+    systems = [ # atomzs
+        [2], [4],
+    ]
+    basis = "6-31G"
+    a = torch.tensor(-0.7385587663820223, dtype=dtype, device=device).requires_grad_()
+    p = torch.tensor(4./3, dtype=dtype, device=device).requires_grad_()
+    systemargs = ()
+    def get_system():
+        atomzs = systems[isystem]
+        atomposs = torch.tensor([[0.0, 0.0, 0.0]], dtype=dtype, device=device)
+        system = (atomzs, atomposs)
+        return mol(system, basis, requires_grad=True)
 
-    basis = "6-311++G**"
+    runtest_molsystem_grad(a, p, get_system, systemargs)
+
+def test_mol_grad():
+    basis = "6-31G"
     isystem = 0
     systems = [ # (atomzs, dist)
         ([1,1], 1.0),
@@ -82,17 +79,26 @@ def test_mol_grad():
     a = torch.tensor(-0.7385587663820223, dtype=dtype, device=device).requires_grad_()
     p = torch.tensor(4./3, dtype=dtype, device=device).requires_grad_()
 
-    def get_energy(dist, a, p):
+    systemargs = (dist,)
+    def get_system(dist):
         atomzs = systems[isystem][0]
         atomposs = torch.tensor([[0.5, 0, 0], [-0.5, 0, 0]], dtype=dtype, device=device) * dist
         system = (atomzs, atomposs)
-        eks_model = PseudoLDA(a, p)
         m = mol(system, basis, requires_grad=True)
+        return m
+
+    runtest_molsystem_grad(a, p, get_system, systemargs)
+
+def runtest_molsystem_grad(a, p, get_system, systemargs):
+    def get_energy(a, p, *systemargs):
+        m = get_system(*systemargs)
+        eks_model = PseudoLDA(a, p)
         scf = dft(m, eks_model=eks_model)
         energy = scf.energy()
         return energy
 
-    gradcheck(get_energy, (dist, a, p))
+    gradcheck(get_energy, (a, p, *systemargs))
+    # gradgradcheck(get_energy, (a, p, *systemargs), eps=1e-4)
 
 def runtest_molsystem_energy(systems, basis):
     for s in systems:
@@ -104,4 +110,5 @@ def runtest_molsystem_energy(systems, basis):
         assert torch.allclose(energy, torch.tensor(energy_true, dtype=energy.dtype))
 
 if __name__ == "__main__":
+    # test_atom_grad()
     test_mol_grad()
