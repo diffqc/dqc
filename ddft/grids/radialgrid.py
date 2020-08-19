@@ -7,6 +7,7 @@ from ddft.grids.base_grid import BaseGrid
 from ddft.utils.legendre import legint, legvander, legder, deriv_legval
 from ddft.utils.interp import CubicSpline
 from ddft.utils.cumsum_quad import CumSumQuad
+from ddft.utils.safeops import eps as util_eps
 
 __all__ = ["RadialGrid"]
 
@@ -211,15 +212,15 @@ class LegendreDoubleExp2RadGrid(RadialGrid):
         super(LegendreDoubleExp2RadGrid, self).__init__(grid, tfm)
 
 class LegendreLogM3RadGrid(RadialGrid):
-    def __init__(self, nr, ra=1.0, dtype=torch.float, device=torch.device('cpu')):
+    def __init__(self, nr, ra=1.0, eps=None, dtype=torch.float, device=torch.device('cpu')):
         grid = LegendreGrid(nr, dtype=dtype, device=device)
-        tfm = LogM3Transformation(ra, dtype=dtype, device=device)
+        tfm = LogM3Transformation(ra, eps=eps, dtype=dtype, device=device)
         super(LegendreLogM3RadGrid, self).__init__(grid, tfm)
 
 class GaussChebyshevLogM3RadGrid(RadialGrid):
-    def __init__(self, nr, ra=1.0, dtype=torch.float, device=torch.device('cpu')):
+    def __init__(self, nr, ra=1.0, eps=None, dtype=torch.float, device=torch.device('cpu')):
         grid = GaussChebyshevGrid(nr, dtype=dtype, device=device)
-        tfm = LogM3Transformation(ra, dtype=dtype, device=device)
+        tfm = LogM3Transformation(ra, eps=eps, dtype=dtype, device=device)
         super(GaussChebyshevLogM3RadGrid, self).__init__(grid, tfm)
 
 ############################# fixed interval grid #############################
@@ -365,18 +366,20 @@ class IdentityTransformation(BaseGridTransformation):
 
 class LogM3Transformation(BaseGridTransformation):
     # eq (12) in https://aip.scitation.org/doi/pdf/10.1063/1.475719
-    def __init__(self, ra=1.0, dtype=torch.float, device=torch.device('cpu')):
+    def __init__(self, ra=1.0, eps=None, dtype=torch.float, device=torch.device('cpu')):
         # setup the parameters needed for the transformation
         if not isinstance(ra, torch.Tensor):
             ra = torch.tensor(ra, dtype=dtype, device=device)
         self.ra = ra
-        self.ln2 = np.log(2.0)
+        self.eps = eps if eps is not None else util_eps
+        self.ln2 = np.log(2.0 + self.eps)
 
     def transform(self, xlg):
-        return self.ra * (1 - torch.log1p(-xlg) / self.ln2)
+        # eps to safeguard from instability
+        return self.ra * (1 - torch.log1p(-xlg + self.eps) / self.ln2)
 
     def invtransform(self, rs):
-        return -torch.expm1(self.ln2 * (1. - rs/self.ra))
+        return -torch.expm1(self.ln2 * (1. - rs/self.ra)) + self.eps
 
     def get_scaling(self, rs):
         return self.ra / self.ln2 * torch.exp(-self.ln2 * (1. - rs / self.ra))
