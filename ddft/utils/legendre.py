@@ -58,7 +58,7 @@ def legder(c, dim=-1):
     return der
 
 ################# get the value of legendre in x #################
-@torch.jit.script
+# @torch.jit.script
 def _get_legcoeff(order:int):
     all_legcoeffs = [
         [1.],
@@ -79,7 +79,7 @@ def _get_legcoeff(order:int):
         # arr[-1] = 1.0
         # return np.polynomial.legendre.leg2poly(arr)
 
-@torch.jit.script
+# @torch.jit.script
 def legval(x:torch.Tensor, order:int):
     assert order >= 0, "Order must be a non-negative integer"
 
@@ -107,7 +107,7 @@ def legval(x:torch.Tensor, order:int):
             y = ym1 * x * ((2.0*i-1.0)/i) - ym2 * ((i-1.0)/i)
     return y
 
-@torch.jit.script
+# @torch.jit.script
 def deriv_legval(x:torch.Tensor, order:int):
     assert order >= 0, "Order must be a non-negative integer"
 
