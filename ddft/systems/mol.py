@@ -96,8 +96,8 @@ class mol(BaseSystem):
         if self.pp_energy is None:
             # atomzs: (natoms,)
             # atompos: (natoms, ndim)
-            r12 = (self._atomposs - self._atomposs.unsqueeze(1)).norm(dim=-1) # (natoms, natoms)
-            z12 = self._atomzs * self._atomzs.unsqueeze(1) # (natoms, natoms)
+            r12 = (self._atomposs.unsqueeze(-3) - self._atomposs.unsqueeze(-2)).norm(dim=-1) # (natoms, natoms)
+            z12 = self._atomzs.unsqueeze(-2) * self._atomzs.unsqueeze(-1) # (natoms, natoms)
             infdiag = torch.eye(r12.shape[0], dtype=r12.dtype, device=r12.device)
             idiag = infdiag.diagonal()
             idiag[:] = float("inf")
