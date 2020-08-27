@@ -5,6 +5,7 @@ from ddft.grids.radialgrid import LegendreLogM3RadGrid, GaussChebyshevLogM3RadGr
 from ddft.grids.sphangulargrid import Lebedev
 from ddft.grids.multiatomsgrid import BeckeMultiGrid
 from ddft.utils.misc import to_tensor
+from ddft.utils.safeops import eps as util_eps
 from ddft.utils.periodictable import get_atomz
 
 __all__ = ["mol"]
@@ -96,13 +97,17 @@ class mol(BaseSystem):
         if self.pp_energy is None:
             # atomzs: (natoms,)
             # atompos: (natoms, ndim)
-            r12 = (self._atomposs.unsqueeze(-3) - self._atomposs.unsqueeze(-2)).norm(dim=-1) # (natoms, natoms)
+            r12_pair = self._atomposs.unsqueeze(-3) - self._atomposs.unsqueeze(-2) # (natoms, natoms, ndim)
+            # add the diagonal with a small eps to safeguard from nan
+            r12_pair = r12_pair + torch.eye(r12_pair.shape[-2], dtype=self.dtype, device=self.device).unsqueeze(-1) * util_eps
+            r12 = r12_pair.norm(dim=-1) # (natoms, natoms)
             z12 = self._atomzs.unsqueeze(-2) * self._atomzs.unsqueeze(-1) # (natoms, natoms)
             infdiag = torch.eye(r12.shape[0], dtype=r12.dtype, device=r12.device)
             idiag = infdiag.diagonal()
             idiag[:] = float("inf")
             r12 = r12 + infdiag
-            self.pp_energy = (z12 / r12).sum() * 0.5
+            q_by_r = z12 / r12
+            self.pp_energy = q_by_r.sum() * 0.5
         return self.pp_energy
 
     def get_numel(self, split=False):

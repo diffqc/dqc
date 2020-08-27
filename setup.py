@@ -40,6 +40,7 @@ setup(
         "scipy>=0.15",
         "matplotlib>=1.5.3",
         "pybind11>=2.5.0",
+        "pytorch>=1.7.0", # 1.7.0 has a more stable div grad
     ],
     setup_requires=["pybind11>=2.5.0"],
     ext_modules=[get_torch_cpp_extension()],
