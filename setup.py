@@ -4,8 +4,8 @@ from setuptools import setup, find_packages
 module_name = "ddft"
 ext_name = "%s.csrc" % module_name
 cpp_sources = [
-    "src/coeffs.cpp",
-    "src/bind.cpp",
+    "ddft/csrc/coeffs.cpp",
+    "ddft/csrc/bind.cpp",
 ]
 
 def get_pybind_include():
