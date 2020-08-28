@@ -48,7 +48,13 @@ class CubicSpline(EditableModule):
             p3 = a - b # (nbatch, nr-1)
 
             t = (xq - xl[idxl]) / (dx[idxl]) # (nrq,)
-            yq = p0[:,idxl] + t * (p1[:,idxl] + t * (p2[:,idxl] + t * p3[:,idxl])) # (nbatch, nrq)
+            # yq = p0[:,idxl] + t * (p1[:,idxl] + t * (p2[:,idxl] + t * p3[:,idxl])) # (nbatch, nrq)
+            yq = p3[:,idxl] * t
+            yq += p2[:,idxl]
+            yq *= t
+            yq += p1[:,idxl]
+            yq *= t
+            yq += p0[:,idxl]
             return yq
 
         else:
@@ -79,7 +85,7 @@ class CubicSpline(EditableModule):
         return [prefix+"spline_mat_inv", prefix+"x"]
 
 
-@torch.jit.script
+# @torch.jit.script
 def get_spline_mat_inv(x:torch.Tensor, transpose:bool=True):
     """
     Returns the inverse of spline matrix where the gradient can be obtained just
