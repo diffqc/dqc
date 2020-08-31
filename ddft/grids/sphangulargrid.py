@@ -137,7 +137,7 @@ class Lebedev(BaseRadialAngularGrid):
         # get the basis Y as function of rq
         rqbasis = self._get_basis(phithetaqinterp) # (nsh, nr2interp)
         # get the value by multiplying and sum the radial function and the basis
-        frqinterp = (frqrad * rqbasis).sum(dim=1) # (nbatch, nr2interp)
+        frqinterp = torch.einsum("bsr,sr->br", frqrad, rqbasis) # (nbatch, nr2interp)
 
         # if there is no extrapolation, then we're done here
         if allinterp:
