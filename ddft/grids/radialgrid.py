@@ -2,6 +2,7 @@ from abc import abstractmethod, abstractproperty
 import torch
 import numpy as np
 import lintorch as lt
+import lintorch.optimize
 from numpy.polynomial.legendre import leggauss
 from ddft.grids.base_grid import BaseGrid
 from ddft.utils.legendre import legint, legvander, legder, deriv_legval
@@ -443,8 +444,8 @@ class DoubleExp2Transformation(BaseGridTransformation):
             return inv_alpha * (logrs + torch.exp(-x))
         x0 = torch.zeros_like(rs).to(rs.device)
 
-        # lt.equilibrium works with batching, so append the first dimension
-        x = lt.equilibrium(iter_fcn, x0.unsqueeze(0),
+        # equilibrium works with batching, so append the first dimension
+        x = lintorch.optimize.equilibrium(iter_fcn, x0.unsqueeze(0),
             params=[logrs.unsqueeze(0), 1./self.alpha.unsqueeze(0)],
             fwd_options={"method": "np_broyden1"}).squeeze(0)
         return x

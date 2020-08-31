@@ -1,5 +1,7 @@
 import torch
 import lintorch as lt
+import lintorch.optimize
+import lintorch.linalg
 from ddft.qccalcs.base_qccalc import BaseQCCalc
 from ddft.eks import BaseEKS, VKS, Hartree, xLDA
 from ddft.utils.misc import set_default_option
@@ -46,7 +48,7 @@ class dft(BaseQCCalc):
 
         # run the self-consistent iterations
         dm0 = dm0.view(nbatch, -1)
-        self.scf_dm = lt.equilibrium(
+        self.scf_dm = lintorch.optimize.equilibrium(
             fcn = self.__forward_pass,
             y0 = dm0,
             fwd_options = fwd_options,
@@ -115,7 +117,7 @@ class dft(BaseQCCalc):
         # evals: (nbatch, norb), evecs: (nbatch, nr, norb)
         hparams = (vext_tot,)
         rparams = []
-        eigvals, eigvecs = lt.lsymeig(
+        eigvals, eigvecs = lintorch.linalg.lsymeig(
             A = self.hmodel.get_hamiltonian(*hparams),
             neig = self.norb,
             M = self.hmodel.get_overlap(*rparams),
