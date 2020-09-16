@@ -447,7 +447,7 @@ class DoubleExp2Transformation(BaseGridTransformation):
         # equilibrium works with batching, so append the first dimension
         x = xitorch.optimize.equilibrium(iter_fcn, x0.unsqueeze(0),
             params=[logrs.unsqueeze(0), 1./self.alpha.unsqueeze(0)],
-            fwd_options={"method": "np_broyden1"}).squeeze(0)
+            fwd_options={"method": "broyden1", "alpha": -0.5}).squeeze(0)
         return x
 
     def get_scaling(self, rs):

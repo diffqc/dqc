@@ -97,15 +97,15 @@ def runtest_molsystem_grad(a, p, get_system, systemargs):
         energy = scf.energy()
         return energy
 
-    # gradcheck(get_energy, (a, p, *systemargs))
+    gradcheck(get_energy, (a, p, *systemargs))
     # gradgradcheck(get_energy, (a, p, *systemargs), eps=1e-4)
 
-    import time
-    t0 = time.time()
-    energy = get_energy(a, p, *systemargs)
-    ge = torch.ones_like(energy).requires_grad_()
-    t1 = time.time()
-    print("Forward   : %fs" % (t1-t0))
+    # import time
+    # t0 = time.time()
+    # energy = get_energy(a, p, *systemargs)
+    # ge = torch.ones_like(energy).requires_grad_()
+    # t1 = time.time()
+    # print("Forward   : %fs" % (t1-t0))
     # x = systemargs[0]
     # dedx, = torch.autograd.grad(energy, (x,), grad_outputs=ge, create_graph=True)
     # t2 = time.time()
@@ -122,7 +122,7 @@ def runtest_molsystem_energy(systems, basis):
         m = mol(s, basis)
         scf = dft(m, eks_model="lda")
         energy = scf.energy()
-        print("%.7f" % energy)
+        print("Energy: %.7f" % energy)
         assert torch.allclose(energy, torch.tensor(energy_true, dtype=energy.dtype))
 
 if __name__ == "__main__":

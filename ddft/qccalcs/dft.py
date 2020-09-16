@@ -14,7 +14,7 @@ class dft(BaseQCCalc):
     """
     def __init__(self, system, eks_model="lda", vext_fcn=None,
             # arguments for scf run
-            dm0=None, eigen_options={}, fwd_options={}, bck_options={}):
+            dm0=None, eigen_options={}, fwd_options=None, bck_options=None):
 
         # extract properties of the system
         self.system = system
@@ -24,6 +24,15 @@ class dft(BaseQCCalc):
         self.hmodel = self.system._get_hamiltonian()
         self.dtype = self.system.dtype
         self.device = self.system.device
+
+        # set the forward and backward options
+        if fwd_options is None:
+            fwd_options = {
+                "method": "broyden1",
+                "alpha": -0.5
+            }
+        if bck_options is None:
+            bck_options = {}
 
         # setup the external potential
         self.vext = self.__get_vext(vext_fcn)
