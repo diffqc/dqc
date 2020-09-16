@@ -1,9 +1,9 @@
 from abc import abstractmethod, abstractproperty
 from functools import reduce
 import torch
-import lintorch as lt
+import xitorch as xt
 
-class BaseHamiltonGenerator(lt.EditableModule):
+class BaseHamiltonGenerator(xt.EditableModule):
     def __init__(self, shape, dtype=None, device=None):
         self.shape = shape
         self.dtype = dtype

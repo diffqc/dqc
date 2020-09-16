@@ -1,9 +1,9 @@
 import torch
-import lintorch as lt
+import xitorch as xt
 
 __all__ = ["VKS"]
 
-class VKS(torch.nn.Module, lt.EditableModule):
+class VKS(torch.nn.Module, xt.EditableModule):
     def __init__(self, eks_model, grid):
         super(VKS, self).__init__()
         self.eks_model = eks_model

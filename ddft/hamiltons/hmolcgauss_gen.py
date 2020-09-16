@@ -2,7 +2,7 @@ from abc import abstractmethod, abstractproperty
 from functools import reduce
 import torch
 import numpy as np
-import lintorch as lt
+import xitorch as xt
 
 from ddft.hamiltons.base_hamilton_gen import BaseHamiltonGenerator
 from ddft.utils.spharmonics import spharmonics
@@ -134,10 +134,10 @@ class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
         extpot_mat = torch.einsum("...r,br,cr->...bc", vext, self.basis_dvolume, self.basis)
         mat = extpot_mat + self.kin_coul_mat
         mat = (mat + mat.transpose(-2,-1)) * 0.5 # ensure the symmetricity
-        return lt.LinearOperator.m(mat, is_hermitian=True)
+        return xt.LinearOperator.m(mat, is_hermitian=True)
 
     def get_overlap(self):
-        return lt.LinearOperator.m(self.olp_mat, is_hermitian=True)
+        return xt.LinearOperator.m(self.olp_mat, is_hermitian=True)
 
     def dm2dens(self, dm): # batchified
         # dm: (*BD, nbasis, nbasis)

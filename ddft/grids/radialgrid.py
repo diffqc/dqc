@@ -1,8 +1,8 @@
 from abc import abstractmethod, abstractproperty
 import torch
 import numpy as np
-import lintorch as lt
-import lintorch.optimize
+import xitorch as xt
+import xitorch.optimize
 from numpy.polynomial.legendre import leggauss
 from ddft.grids.base_grid import BaseGrid
 from ddft.utils.legendre import legint, legvander, legder, deriv_legval
@@ -445,7 +445,7 @@ class DoubleExp2Transformation(BaseGridTransformation):
         x0 = torch.zeros_like(rs).to(rs.device)
 
         # equilibrium works with batching, so append the first dimension
-        x = lintorch.optimize.equilibrium(iter_fcn, x0.unsqueeze(0),
+        x = xitorch.optimize.equilibrium(iter_fcn, x0.unsqueeze(0),
             params=[logrs.unsqueeze(0), 1./self.alpha.unsqueeze(0)],
             fwd_options={"method": "np_broyden1"}).squeeze(0)
         return x
@@ -475,12 +475,12 @@ class DoubleExp2Transformation(BaseGridTransformation):
     #         raise RuntimeError("Unimplemented %s method for setparams" % methodname)
 
 if __name__ == "__main__":
-    import lintorch as lt
+    import xitorch as xt
     grid = LegendreShiftExpRadGrid(100, 1e-4, 1e2, dtype=torch.float64)
     rgrid = grid.rgrid.clone().detach()
     f = torch.exp(-rgrid[:,0].unsqueeze(0)**2*0.5)
     print(f)
 
-    lt.list_operating_params(grid.solve_poisson, f)
-    lt.list_operating_params(grid.interpolate, f, rgrid)
-    lt.list_operating_params(grid.get_dvolume)
+    xt.list_operating_params(grid.solve_poisson, f)
+    xt.list_operating_params(grid.interpolate, f, rgrid)
+    xt.list_operating_params(grid.get_dvolume)

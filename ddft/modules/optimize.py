@@ -1,5 +1,5 @@
 import torch
-import lintorch as lt
+import xitorch as xt
 from ddft.utils.misc import set_default_option
 from ddft.utils.fd import finite_differences
 

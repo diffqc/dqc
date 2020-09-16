@@ -1,8 +1,8 @@
 from abc import abstractmethod, abstractproperty
 import torch
-import lintorch as lt
+import xitorch as xt
 
-class BaseGrid(lt.EditableModule):
+class BaseGrid(xt.EditableModule):
 
     @abstractmethod
     def get_dvolume(self):

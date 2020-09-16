@@ -1,5 +1,5 @@
 import torch
-import lintorch as lt
+import xitorch as xt
 import numpy as np
 from abc import abstractmethod
 from ddft.utils.interp import get_spline_mat_inv
@@ -9,7 +9,7 @@ This file contains the cumulative sum quadrature functions.
 The functions are usually used in solve_poisson method in grid objects.
 """
 
-class BaseCumSumQuad(lt.EditableModule):
+class BaseCumSumQuad(xt.EditableModule):
     @abstractmethod
     def cumsum(y):
         pass

@@ -1,10 +1,10 @@
 import torch
 from abc import abstractmethod
-import lintorch as lt
+import xitorch as xt
 
 __all__ = ["BaseEKS"]
 
-class BaseEKS(lt.EditableModule):
+class BaseEKS(xt.EditableModule):
     def __init__(self):
         super(BaseEKS, self).__init__()
         self._grid = None

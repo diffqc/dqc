@@ -180,7 +180,7 @@ class BeckeMultiGrid(BaseMultiAtomsGrid):
 
 
 if __name__ == "__main__":
-    import lintorch as lt
+    import xitorch as xt
     from ddft.grids.radialgrid import LegendreShiftExpRadGrid
     from ddft.grids.sphangulargrid import Lebedev
     dtype = torch.float64
@@ -191,5 +191,5 @@ if __name__ == "__main__":
     rgrid = grid.rgrid.clone().detach()
     f = torch.exp(-rgrid[:,0].unsqueeze(0)**2*0.5)
 
-    lt.list_operating_params(grid.solve_poisson, f)
-    lt.list_operating_params(grid.get_dvolume)
+    xt.list_operating_params(grid.solve_poisson, f)
+    xt.list_operating_params(grid.get_dvolume)

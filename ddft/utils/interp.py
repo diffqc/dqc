@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from lintorch import EditableModule
+from xitorch import EditableModule
 
 def searchsorted(a, v, side="left"):
     idx = np.searchsorted(a.detach().numpy(), v.detach().numpy(), side=side)

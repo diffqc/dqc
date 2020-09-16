@@ -1,5 +1,5 @@
 import torch
-import lintorch as lt
+import xitorch as xt
 from abc import abstractmethod, abstractproperty
 
 class BaseBasisModule(torch.nn.Module):

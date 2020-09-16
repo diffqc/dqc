@@ -299,13 +299,13 @@ class Lebedev(BaseRadialAngularGrid):
 
 
 if __name__ == "__main__":
-    import lintorch as lt
+    import xitorch as xt
     from ddft.grids.radialgrid import LegendreShiftExpRadGrid
     radgrid = LegendreShiftExpRadGrid(100, 1e-4, 1e2, dtype=torch.float64)
     grid = Lebedev(radgrid, prec=5, basis_maxangmom=4, dtype=torch.float64)
     rgrid = grid.rgrid.clone().detach()
     f = torch.exp(-rgrid[:,0].unsqueeze(0)**2*0.5)
 
-    lt.list_operating_params(grid.solve_poisson, f)
-    lt.list_operating_params(grid.interpolate, f, rgrid)
-    lt.list_operating_params(grid.get_dvolume)
+    xt.list_operating_params(grid.solve_poisson, f)
+    xt.list_operating_params(grid.interpolate, f, rgrid)
+    xt.list_operating_params(grid.get_dvolume)

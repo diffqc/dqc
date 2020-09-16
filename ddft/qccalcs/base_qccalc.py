@@ -1,7 +1,7 @@
 from abc import abstractmethod
-import lintorch as lt
+import xitorch as xt
 
-class BaseQCCalc(lt.EditableModule):
+class BaseQCCalc(xt.EditableModule):
     #################### postprocess functions ####################
     @abstractmethod
     def energy(self):
