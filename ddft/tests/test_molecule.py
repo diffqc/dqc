@@ -98,7 +98,7 @@ def runtest_molsystem_grad(a, p, get_system, systemargs):
         return energy
 
     gradcheck(get_energy, (a, p, *systemargs))
-    # gradgradcheck(get_energy, (a, p, *systemargs), eps=1e-4)
+    gradgradcheck(get_energy, (a, p, *systemargs), eps=1e-4)
 
     # import time
     # t0 = time.time()
