@@ -462,19 +462,6 @@ class DoubleExp2Transformation(BaseGridTransformation):
         else:
             return super().getparamnames(methodname, prefix=prefix)
 
-    # def getparams(self, methodname):
-    #     if methodname == "invtransform" or methodname == "transform" or methodname == "get_scaling":
-    #         return [self.alpha]
-    #     else:
-    #         raise RuntimeError("Unimplemented %s method for getparams" % methodname)
-    #
-    # def setparams(self, methodname, *params):
-    #     if methodname == "invtransform" or methodname == "transform" or methodname == "get_scaling":
-    #         self.alpha, = params[:1]
-    #         return 1
-    #     else:
-    #         raise RuntimeError("Unimplemented %s method for setparams" % methodname)
-
 if __name__ == "__main__":
     import xitorch as xt
     grid = LegendreShiftExpRadGrid(100, 1e-4, 1e2, dtype=torch.float64)
