@@ -29,7 +29,8 @@ class dft(BaseQCCalc):
         if fwd_options is None:
             fwd_options = {
                 "method": "broyden1",
-                "alpha": -0.5
+                "alpha": -0.5,
+                "maxiter": 50,
             }
         if bck_options is None:
             bck_options = {}
@@ -60,8 +61,8 @@ class dft(BaseQCCalc):
         self.scf_dm = xitorch.optimize.equilibrium(
             fcn = self.__forward_pass,
             y0 = dm0,
-            fwd_options = fwd_options,
-            bck_options = bck_options) # (nbatch, nbasis_tot*nbasis_tot)
+            bck_options = bck_options,
+            **fwd_options) # (nbatch, nbasis_tot*nbasis_tot)
         self.scf_dm = self.scf_dm.view(nbatch, nbasis_tot, nbasis_tot) # (nbatch, nbasis_tot, nbasis_tot)
         self.scf_density = self.hmodel.dm2dens(self.scf_dm)
 
@@ -130,7 +131,7 @@ class dft(BaseQCCalc):
             A = self.hmodel.get_hamiltonian(*hparams),
             neig = self.norb,
             M = self.hmodel.get_overlap(*rparams),
-            fwd_options = self.eigen_options)
+            **self.eigen_options)
         # eigvals, eigvecs = self.eigen_model(hparams, rparams=rparams)
 
         return eigvals, eigvecs, vks
