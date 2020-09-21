@@ -3,10 +3,10 @@ import torch
 import numpy as np
 import xitorch as xt
 import xitorch.optimize
+from xitorch.interpolate import Interp1D
 from numpy.polynomial.legendre import leggauss
 from ddft.grids.base_grid import BaseGrid
 from ddft.utils.legendre import legint, legvander, legder, deriv_legval
-from ddft.utils.interp import CubicSpline
 from ddft.utils.cumsum_quad import CumSumQuad
 from ddft.utils.safeops import eps as util_eps
 
@@ -58,7 +58,7 @@ class RadialGrid(BaseGrid):
         self.x, self.w = grid.get_xw()
         self.z, self.dxdz = grid.get_z_dxdz() # (nx,)
         self._boxshape = (len(self.x),)
-        self._interpolator = CubicSpline(self.x)
+        self._interpolator = Interp1D(self.x, method="cspline", bc_type="natural", extrap="bound")
         self._cumsumquad = CumSumQuad(self.z, side="both", method="simpson")
 
         self._transformobj = tfmobj
@@ -144,7 +144,7 @@ class RadialGrid(BaseGrid):
         # doing the interpolation
         # cubic interpolation is slower, but more robust on backward gradient
         xq = self.transformobj.invtransform(rqinterp) # (nrq,)
-        frqinterp = self.interpolator.interp(f, xq)
+        frqinterp = self.interpolator(xq, f)
         # coeff = torch.matmul(f, self.inv_basis) # (nbatch, nr)
         # basis = legvander(xq, nr-1, orderfirst=True)
         # frqinterp = torch.matmul(coeff, basis)
