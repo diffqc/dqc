@@ -68,10 +68,10 @@ class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
             assert self.nelmtstot % self.nelmts == 0, "The number of gaussian is not the multiple of nelmts"
             self.nbasis = self.nelmtstot // self.nelmts
         self.natoms = atompos.shape[0]
-        self._grid = grid
         dtype = alphas.dtype
         device = alphas.device
         super(HamiltonMoleculeCGaussGenerator, self).__init__(
+            grid = grid,
             shape = (self.nbasis, self.nbasis),
             dtype = dtype,
             device = device)
@@ -112,7 +112,7 @@ class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
         self.olp_mat = (self.olp_mat + self.olp_mat.transpose(-2,-1)) * 0.5
 
         # get the basis
-        self.rgrid = self._grid.rgrid_in_xyz # (nr, 3)
+        self.rgrid = self.grid.rgrid_in_xyz # (nr, 3)
         rab = self.rgrid - centres.unsqueeze(1) # (nbasis*nelmts, nr, 3)
         dist_sq = (rab*rab).sum(dim=-1) # (nbasis*nelmts, nr)
         rab_power = ((rab+1e-15)**ijks.unsqueeze(1)).prod(dim=-1) # (nbasis*nelmts, nr)
@@ -126,7 +126,7 @@ class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
             basis = basis_all_coeff.view(self.nbasis, self.nelmts, -1).sum(dim=1) # (nbasis, nr)
         norm_basis = basis * norm.squeeze(0).unsqueeze(-1)
         self.basis = norm_basis # (nbasis, nr)
-        self.basis_dvolume = self.basis * self._grid.get_dvolume() # (nbasis, nr)
+        self.basis_dvolume = self.basis * self.grid.get_dvolume() # (nbasis, nr)
 
     def get_hamiltonian(self, vext):
         # kin_coul_mat: (nbasis, nbasis)
