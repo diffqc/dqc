@@ -64,7 +64,7 @@ def test_atom_grad():
 
     runtest_molsystem_grad(a, p, get_system, systemargs)
 
-def test_mol_grad():
+def test_mol_grad(profiling=False):
     basis = "6-31G"
     isystem = 0
     systems = [ # (atomzs, dist)
@@ -78,6 +78,14 @@ def test_mol_grad():
     dist = torch.tensor(systems[isystem][1], dtype=dtype, device=device).requires_grad_()
     a = torch.tensor(-0.7385587663820223, dtype=dtype, device=device).requires_grad_()
     p = torch.tensor(4./3, dtype=dtype, device=device).requires_grad_()
+    fwd_options = {
+        "method": "broyden1",
+        "f_tol": 1e-9
+    }
+    bck_options = {
+        "method": "broyden1",
+        "f_tol": 1e-9
+    }
 
     systemargs = (dist,)
     def get_system(dist):
@@ -87,34 +95,39 @@ def test_mol_grad():
         m = mol(system, basis, requires_grad=True)
         return m
 
-    runtest_molsystem_grad(a, p, get_system, systemargs)
+    runtest_molsystem_grad(a, p, get_system, systemargs, profiling,
+        fwd_options, bck_options)
 
-def runtest_molsystem_grad(a, p, get_system, systemargs):
+def runtest_molsystem_grad(a, p, get_system, systemargs,
+        profiling=False,
+        fwd_options=None,
+        bck_options=None):
     def get_energy(a, p, *systemargs):
         m = get_system(*systemargs)
         eks_model = PseudoLDA(a, p)
-        scf = dft(m, eks_model=eks_model)
+        scf = dft(m, eks_model=eks_model, fwd_options=fwd_options, bck_options=bck_options)
         energy = scf.energy()
         return energy
 
-    gradcheck(get_energy, (a, p, *systemargs))
-    gradgradcheck(get_energy, (a, p, *systemargs), eps=1e-4)
+    if not profiling:
+        gradcheck(get_energy, (a, p, *systemargs))
+        gradgradcheck(get_energy, (a, p, *systemargs), eps=1e-4, rtol=1e-2)
+    else:
+        import time
+        t0 = time.time()
+        energy = get_energy(a, p, *systemargs)
+        ge = torch.ones_like(energy).requires_grad_()
+        t1 = time.time()
+        print("Forward   : %fs" % (t1-t0))
+        x = systemargs[0]
+        dedx, = torch.autograd.grad(energy, (x,), grad_outputs=ge, create_graph=True)
+        t2 = time.time()
+        print("Backward  : %fs" % (t2-t1))
 
-    # import time
-    # t0 = time.time()
-    # energy = get_energy(a, p, *systemargs)
-    # ge = torch.ones_like(energy).requires_grad_()
-    # t1 = time.time()
-    # print("Forward   : %fs" % (t1-t0))
-    # x = systemargs[0]
-    # dedx, = torch.autograd.grad(energy, (x,), grad_outputs=ge, create_graph=True)
-    # t2 = time.time()
-    # print("Backward  : %fs" % (t2-t1))
-    #
-    # dedxx, = torch.autograd.grad(dedx, (x,), create_graph=True)
-    # t3 = time.time()
-    # print("2 backward: %fs" % (t3-t2))
-    # print(dedxx)
+        dedxx, = torch.autograd.grad(dedx, (x,), create_graph=True)
+        t3 = time.time()
+        print("2 backward: %fs" % (t3-t2))
+        print(dedxx)
 
 def runtest_molsystem_energy(systems, basis):
     for s in systems:
@@ -128,4 +141,4 @@ def runtest_molsystem_energy(systems, basis):
 if __name__ == "__main__":
     # test_atom_grad()
     # with torch.autograd.detect_anomaly():
-        test_mol_grad()
+        test_mol_grad(profiling=True)
