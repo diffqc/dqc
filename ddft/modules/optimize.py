@@ -1,7 +1,6 @@
 import torch
 import xitorch as xt
 from ddft.utils.misc import set_default_option
-from ddft.utils.fd import finite_differences
 
 class OptimizationModule(torch.nn.Module):
     """
@@ -160,83 +159,3 @@ class _BackwardOpt(torch.autograd.Function):
             return (grad_fmodel, None, None)
         else:
             raise RuntimeError("Unimplemented gradient contribution from the argmin")
-
-if __name__ == "__main__":
-    class DummyModule(torch.nn.Module):
-        def __init__(self, A):
-            super(DummyModule, self).__init__()
-            self.A = torch.nn.Parameter(A)
-
-        def forward(self, x, y):
-            # x: (nbatch, nr)
-            # y: (nbatch, nr)
-            nbatch = y.shape[0]
-            tanh = torch.nn.Tanh()
-            A = self.A.unsqueeze(0).expand(nbatch, -1, -1)
-            Ax = torch.bmm(A, x.unsqueeze(-1)).squeeze(-1)
-            Axy = Ax + y
-            xnew = Axy**2 + 1.
-            # xnew = tanh(0.1 * Axy)
-            loss = ((x - xnew)**2).sum()
-            return loss
-
-    dtype = torch.float64
-    fwd_options = {
-        "max_niter": 60,
-        "lr": 1e-2,
-        "verbose": True,
-        "method": "lbfgs",
-    }
-    nr = 3
-    nbatch = 1
-    torch.manual_seed(124)
-    A  = torch.randn((nr, nr)).to(dtype)
-    print(A)
-    y  = torch.rand((nbatch, nr)).to(dtype).requires_grad_()
-    x0 = torch.rand((nbatch, nr)).to(dtype).requires_grad_()
-
-    model = DummyModule(A)
-    optmodel = OptimizationModule(model, optimized_nparams=1,
-        return_arg=True,
-        forward_options=fwd_options)
-    minloss, yopt = optmodel(x0, y)
-
-    print("Forward results:")
-    print(yopt)
-    print("    should be close to 0:")
-    print(minloss)
-
-    def getloss(A, y, x0, return_model=False):
-        model = DummyModule(A)
-        optmodel = OptimizationModule(model, optimized_nparams=1,
-            return_arg=True,
-            forward_options=fwd_options)
-        minloss, yopt = optmodel(x0, y)
-        loss = minloss
-        if not return_model:
-            return loss
-        else:
-            return loss, model
-
-    # gradient with backprop
-    loss, model = getloss(A, y, x0, return_model=True)
-    loss.backward()
-    A_grad = list(model.parameters())[0].grad.data
-    y_grad = y.grad.data
-
-    # gradient with finite_differences
-    with torch.no_grad():
-        A_fd = finite_differences(getloss, (A, y, x0), 0, eps=1e-4)
-        y_fd = finite_differences(getloss, (A, y, x0), 1, eps=1e-4)
-
-    print("Gradient of A:")
-    print(A_grad)
-    print(A_fd)
-    print("    should be close to 1:")
-    print(A_grad / A_fd)
-
-    print("Gradient of x:")
-    print(y_grad)
-    print(y_fd)
-    print("    should be close to 1:")
-    print(y_grad / y_fd)

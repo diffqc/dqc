@@ -177,19 +177,3 @@ class BeckeMultiGrid(BaseMultiAtomsGrid):
             return [prefix+"atompos", prefix+"_rgrid"]
         else:
             return super().getparamnames(methodname, prefix=prefix)
-
-
-if __name__ == "__main__":
-    import xitorch as xt
-    from ddft.grids.radialgrid import LegendreShiftExpRadGrid
-    from ddft.grids.sphangulargrid import Lebedev
-    dtype = torch.float64
-    atompos = torch.tensor([[0.0, 0.0, 0.0]], dtype=dtype)
-    radgrid = LegendreShiftExpRadGrid(100, 1e-4, 1e2, dtype=dtype)
-    anggrid = Lebedev(radgrid, prec=5, basis_maxangmom=4, dtype=dtype)
-    grid = BeckeMultiGrid(anggrid, atompos, dtype=dtype)
-    rgrid = grid.rgrid.clone().detach()
-    f = torch.exp(-rgrid[:,0].unsqueeze(0)**2*0.5)
-
-    xt.list_operating_params(grid.solve_poisson, f)
-    xt.list_operating_params(grid.get_dvolume)

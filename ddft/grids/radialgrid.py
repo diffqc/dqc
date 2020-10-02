@@ -461,14 +461,3 @@ class DoubleExp2Transformation(BaseGridTransformation):
             return [prefix+"alpha"]
         else:
             return super().getparamnames(methodname, prefix=prefix)
-
-if __name__ == "__main__":
-    import xitorch as xt
-    grid = LegendreShiftExpRadGrid(100, 1e-4, 1e2, dtype=torch.float64)
-    rgrid = grid.rgrid.clone().detach()
-    f = torch.exp(-rgrid[:,0].unsqueeze(0)**2*0.5)
-    print(f)
-
-    xt.list_operating_params(grid.solve_poisson, f)
-    xt.list_operating_params(grid.interpolate, f, rgrid)
-    xt.list_operating_params(grid.get_dvolume)

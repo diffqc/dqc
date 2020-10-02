@@ -197,9 +197,3 @@ class dft(BaseQCCalc):
                    self.grid.getparamnames("integralbox", prefix=prefix+"grid.")
         else:
             raise KeyError("getparamnames has no %s method" % methodname)
-
-if __name__ == "__main__":
-    from ddft.systems.mol import mol
-    m = mol("Be 0 0 0", basis="6-311++G**")
-    scf = dft(m)
-    print(scf.energy())
