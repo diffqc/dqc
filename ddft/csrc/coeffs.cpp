@@ -4,6 +4,7 @@
 #include <torch/torch.h>
 #include <pybind11/pybind11.h>
 // #include <iostream>
+#include <initializer_list>
 #include <cmath>
 #include "coeffs.h"
 
@@ -21,7 +22,6 @@ torch::Tensor get_overlap_mat(int ijk_left_max, int ijk_right_max, int max_basis
     torch::Tensor& qab, // (nbasis_tot, nbasis_tot, ndim)
     py::dict& e_memory, py::str& key_format) {
 
-  auto all = Slice(None,None,None);
   auto overlap_dim = torch::empty_like(qab); // (nbasis_tot, nbasis_tot, ndim)
 
   for (int i = 0; i < ijk_left_max+1; ++i) {
@@ -88,13 +88,66 @@ torch::Tensor get_kinetics_mat(int ijk_left_max, int ijk_right_max, int max_basi
   return res;
 }
 
+torch::Tensor get_coulomb_mat(int max_ijkflat, int max_basis,
+    py::list& idx_ijk,
+    torch::Tensor& rcd_sq,
+    torch::Tensor& ijk_pairs2_unique,
+    // arguments for get_ecoeff (return: (nbasis_tot, nbasis_tot))
+    torch::Tensor& alpha, torch::Tensor& betas, torch::Tensor& gamma,
+    torch::Tensor& kappa, torch::Tensor& qab,
+    py::dict& e_memory, py::str& key_format,
+    // arguments for get_rcoeff (+gamma and rcd_sq)
+    torch::Tensor& rcd,
+    py::dict& r_memory, py::str& rkey_format) {
+
+  // coulomb: (natoms, nbasis*nelmts, nbasis*nelmts)
+  auto coulomb = torch::zeros_like(rcd_sq);
+  auto numel = ijk_pairs2_unique.numel();
+  for (int i = 0; i < numel; ++i) {
+    auto ijk_flat_value = ijk_pairs2_unique.select(/*dim=*/0, /*index=*/i).item<int>();
+    // auto idx = idx_ijk.select(/*dim=*/0, /*index=*/i);
+    auto idx = py::cast<torch::Tensor>(idx_ijk[i]);
+    auto slice0 = {idx};
+    std::initializer_list<at::indexing::TensorIndex> slice1 = {Slice(None, None, None), idx};
+
+    // unpack ijk_flat_value
+    auto ijk_pair2 = ijk_flat_value % max_ijkflat;
+    auto ijk_pair1 = (ijk_flat_value / max_ijkflat) % max_ijkflat;
+    auto ijk_pair0 = (ijk_flat_value / max_ijkflat) / max_ijkflat;
+    auto k = ijk_pair0 / max_basis;
+    auto l = ijk_pair1 / max_basis;
+    auto m = ijk_pair2 / max_basis;
+    auto u = ijk_pair0 % max_basis;
+    auto v = ijk_pair1 % max_basis;
+    auto w = ijk_pair2 % max_basis;
+
+    for (int r = 0; r < k + u + 1; ++r) {
+      auto Erku = get_ecoeff(k, u, r, 0, alpha, betas, gamma, kappa, qab,
+          e_memory, key_format).index(slice0);
+      for (int s = 0; s < l + v + 1; ++s) {
+        auto Eslv = get_ecoeff(l, v, s, 1, alpha, betas, gamma, kappa, qab,
+            e_memory, key_format).index(slice0);
+        for (int t = 0; t < m + w + 1; ++t) {
+          auto Etmw = get_ecoeff(m, w, t, 2, alpha, betas, gamma, kappa, qab,
+              e_memory, key_format).index(slice0);
+          auto Rrst = get_rcoeff(r, s, t, 0, rcd, rcd_sq, gamma,
+              r_memory, rkey_format).index(slice1);
+          auto val = coulomb.index(slice1) + Erku * Eslv * Etmw * Rrst;
+          coulomb.index_put_(slice1, val);
+        }
+      }
+    }
+  }
+  coulomb *= -(2 * M_PI / gamma);
+  return coulomb;
+}
+
 /************** coefficients **************/
 torch::Tensor get_ecoeff(int i, int j, int t, int xyz,
     torch::Tensor& alpha, torch::Tensor& betas, torch::Tensor& gamma,
     torch::Tensor& kappa, torch::Tensor& qab,
     py::dict& e_memory, py::str& key_format) {
 
-  auto all = Slice(None,None,None);
   if ((t < 0) || (t > i+j) || (i < 0) || (j < 0)) {
     return torch::zeros_like(qab.select(/*dim=*/2,/*index=*/0));
   }
@@ -125,7 +178,7 @@ torch::Tensor get_ecoeff(int i, int j, int t, int xyz,
 
 torch::Tensor get_rcoeff(int r, int s, int t, int n,
     torch::Tensor& rcd, torch::Tensor& rcd_sq, torch::Tensor& gamma,
-    py::dict& r_memory, py::str& key_format) {
+    py::dict& r_memory, py::str& rkey_format) {
 
   auto all = Slice(None,None,None);
   if ((r < 0) || (s < 0) || (t < 0)) {
@@ -133,7 +186,7 @@ torch::Tensor get_rcoeff(int r, int s, int t, int n,
   }
 
   // access the coefficients
-  auto key = key_format.format(r, s, t, n);
+  auto key = rkey_format.format(r, s, t, n);
   if (r_memory.contains(key)) {
     return py::cast<torch::Tensor>(r_memory[key]);
   }
@@ -141,21 +194,22 @@ torch::Tensor get_rcoeff(int r, int s, int t, int n,
   torch::Tensor c1, c2, coeff;
   if ((r == 0) && (s == 0) && (t == 0)) {
     // (natoms, nelmts_tot, nelmts_tot)
-    coeff = torch::pow(-2*gamma, n) * boys(n, gamma*rcd_sq);
+    auto gamma_rcd = gamma * rcd_sq;
+    coeff = torch::pow(-2*gamma, n) * boys(n, gamma_rcd);
   }
   else if (r > 0) {
-    c1 = get_rcoeff(r-2, s, t, n+1, rcd, rcd_sq, gamma, r_memory, key_format);
-    c2 = get_rcoeff(r-1, s, t, n+1, rcd, rcd_sq, gamma, r_memory, key_format);
+    c1 = get_rcoeff(r-2, s, t, n+1, rcd, rcd_sq, gamma, r_memory, rkey_format);
+    c2 = get_rcoeff(r-1, s, t, n+1, rcd, rcd_sq, gamma, r_memory, rkey_format);
     coeff = (r-1) * c1 + rcd.select(/*dim=*/3, /*index=*/0) * c2;
   }
   else if (s > 0) {
-    c1 = get_rcoeff(r, s-2, t, n+1, rcd, rcd_sq, gamma, r_memory, key_format);
-    c2 = get_rcoeff(r, s-1, t, n+1, rcd, rcd_sq, gamma, r_memory, key_format);
+    c1 = get_rcoeff(r, s-2, t, n+1, rcd, rcd_sq, gamma, r_memory, rkey_format);
+    c2 = get_rcoeff(r, s-1, t, n+1, rcd, rcd_sq, gamma, r_memory, rkey_format);
     coeff = (s-1) * c1 + rcd.select(/*dim=*/3, /*index=*/1) * c2;
   }
   else {
-    c1 = get_rcoeff(r, s, t-2, n+1, rcd, rcd_sq, gamma, r_memory, key_format);
-    c2 = get_rcoeff(r, s, t-1, n+1, rcd, rcd_sq, gamma, r_memory, key_format);
+    c1 = get_rcoeff(r, s, t-2, n+1, rcd, rcd_sq, gamma, r_memory, rkey_format);
+    c2 = get_rcoeff(r, s, t-1, n+1, rcd, rcd_sq, gamma, r_memory, rkey_format);
     coeff = (t-1) * c1 + rcd.select(/*dim=*/3, /*index=*/2) * c2;
   }
   r_memory[key] = coeff;
@@ -163,15 +217,13 @@ torch::Tensor get_rcoeff(int r, int s, int t, int n,
 }
 
 /************** helper functions **************/
-torch::Tensor boys(int n, torch::Tensor t) {
-  double nhalf = n + 0.5;
-  auto t2 = t + 1e-12; // add small noise
-  return incgamma(nhalf, t2) / (2 * torch::pow(t2, nhalf));
-}
 
-torch::Tensor incgamma(double n, torch::Tensor t) {
-  // TODO: complete this ???
-  return t; // ???
+torch::Tensor boys(int n, torch::Tensor& t) {
+  auto options = torch::TensorOptions().dtype(t.dtype()).device(t.device());
+  auto nhalf = torch::full(1, /*value=*/n + 0.5, options);
+  auto t2 = t + 1e-12; // add small noise
+  auto exp_part = -nhalf * torch::log(t2) + torch::lgamma(nhalf);
+  return 0.5 * torch::igamma(nhalf, t2) * torch::exp(exp_part);
 }
 
 #endif

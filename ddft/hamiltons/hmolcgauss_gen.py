@@ -7,7 +7,8 @@ import xitorch as xt
 from ddft.hamiltons.base_hamilton_gen import BaseHamiltonGenerator
 from ddft.utils.spharmonics import spharmonics
 from ddft.utils.gamma import incgamma
-from ddft.csrc import get_ecoeff, get_overlap_mat, get_kinetics_mat
+from ddft.csrc import get_ecoeff, get_overlap_mat, get_kinetics_mat, \
+    get_coulomb_mat
 
 class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
     """
@@ -242,9 +243,6 @@ class Ecoeff(object):
         self.kinetics = None
         self.coulomb = None
 
-    def _split_pair(self, ijkpair):
-        return ijkpair // self.max_basis, ijk_pair % self.max_basis
-
     def get_overlap(self):
         if self.overlap is None:
             # NOTE: using this makes test_grad_intermediate.py::test_grad_dft_cgto produces nan in gradgradcheck energy
@@ -266,83 +264,12 @@ class Ecoeff(object):
     def get_coulomb(self):
         # returns (natoms, nbasis*nelmts, nbasis*nelmts)
         if self.coulomb is None:
-            # coulomb: (natoms, nbasis*nelmts, nbasis*nelmts)
-            coulomb = torch.zeros_like(self.rcd_sq).to(self.rcd_sq.device)
-            for ijk_flat_value, idx in zip(self.ijk_pairs2_unique, self.idx_ijk):
-                # idx: (nbasis*nelmts, nbasis*nelmts)
-                k, l, m, u, v, w = self._unpack_ijk_flat_value(ijk_flat_value)
-
-                for r in range(k+u+1):
-                    Erku = self.get_coeff(k, u, r, 0)[idx] # flatten tensor
-                    for s in range(l+v+1):
-                        Eslv = self.get_coeff(l, v, s, 1)[idx]
-                        for t in range(m+w+1):
-                            Etmw = self.get_coeff(m, w, t, 2)[idx]
-                            Rrst = self.get_rcoeff(r, s, t, 0)[:,idx] # (natoms, -1)
-                            coulomb[:,idx] += (Erku * Eslv * Etmw) * Rrst
-            self.coulomb = -(2*np.pi/self.gamma) * coulomb
+            self.coulomb = get_coulomb_mat(
+                self.max_ijkflat, self.max_basis,
+                self.idx_ijk,
+                self.rcd_sq,
+                self.ijk_pairs2_unique,
+                self.alphas, self.betas, self.gamma, self.kappa, self.qab,
+                self.e_memory, self.key_format,
+                self.rcd, self.r_memory, self.key_format)
         return self.coulomb
-
-    def get_coeff(self, i, j, t, xyz):
-        return get_ecoeff(i, j, t, xyz,
-            self.alphas, self.betas, self.gamma, self.kappa, self.qab,
-            self.e_memory, self.key_format)
-
-    def get_rcoeff(self, r, s, t, n):
-        # rcd: (natoms, nbasis*nelmts, nbasis*nelmts, 3)
-        # return: (natoms, nbasis*nelmts, nbasis*nelmts)
-        if r < 0 or s < 0 or t < 0:
-            return 0.0
-        coeff = self._access_rcoeff(r, s, t, n)
-        if coeff is not None:
-            return coeff
-
-        if r == 0 and s == 0 and t == 0:
-            # (natoms, nbasis*nelmts, nbasis*nelmts)
-            coeff = (-2*self.gamma)**n * self._boys(n, self.gamma * self.rcd_sq)
-        elif r > 0:
-            coeff = (r-1) * self.get_rcoeff(r-2, s, t, n+1) + \
-                    self.rcd[:,:,:,0] * self.get_rcoeff(r-1, s, t, n+1)
-        elif s > 0:
-            coeff = (s-1) * self.get_rcoeff(r, s-2, t, n+1) + \
-                    self.rcd[:,:,:,1] * self.get_rcoeff(r, s-1, t, n+1)
-        elif t > 0:
-            coeff = (t-1) * self.get_rcoeff(r, s, t-2, n+1) + \
-                    self.rcd[:,:,:,2] * self.get_rcoeff(r, s, t-1, n+1)
-
-        # save the coefficients
-        key = self.key_format.format(r,s,t,n)
-        self.r_memory[key] = coeff
-        return coeff
-
-    def _unpack_ijk_flat_value(self, ijk_flat_value):
-        ijk_pair2 = ijk_flat_value % self.max_ijkflat
-        ijk_pair1 = (ijk_flat_value // self.max_ijkflat) % self.max_ijkflat
-        ijk_pair0 = (ijk_flat_value // self.max_ijkflat) // self.max_ijkflat
-        k = ijk_pair0 // self.max_basis
-        l = ijk_pair1 // self.max_basis
-        m = ijk_pair2 // self.max_basis
-        u = ijk_pair0 % self.max_basis
-        v = ijk_pair1 % self.max_basis
-        w = ijk_pair2 % self.max_basis
-        return k, l, m, u, v, w
-
-    def _boys(self, n, T):
-        nhalf = n + 0.5
-        T = T + 1e-12 # add small noise
-        # return incgamma(nhalf, T) / 2 * T**(1-nhalf)
-        return incgamma(nhalf, T) / (2 * T**nhalf)
-
-    def _access_coeff(self, i, j, t, xyz):
-        key = self.key_format.format(i,j,t,xyz)
-        if key in self.e_memory:
-            return self.e_memory[key]
-        else:
-            return None
-
-    def _access_rcoeff(self, r, s, t, n):
-        key = self.key_format.format(r,s,t,n)
-        if key in self.r_memory:
-            return self.r_memory[key]
-        else:
-            return None

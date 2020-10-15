@@ -21,6 +21,16 @@ torch::Tensor get_kinetics_mat(int ijk_left_max, int ijk_right_max, int max_basi
     torch::Tensor& kappa, torch::Tensor& qab,
     py::dict& e_memory, py::str& key_format);
 
+torch::Tensor get_coulomb_mat(int max_ijkflat, int max_basis,
+    py::list& idx_ijk, torch::Tensor& rcd_sq,
+    torch::Tensor& ijk_pairs2_unique,
+    // arguments for get_ecoeff (return: (nbasis_tot, nbasis_tot))
+    torch::Tensor& alpha, torch::Tensor& betas, torch::Tensor& gamma,
+    torch::Tensor& kappa, torch::Tensor& qab,
+    py::dict& e_memory, py::str& ekey_format,
+    // arguments for get_rcoeff (+gamma and rcd_sq)
+    torch::Tensor& rcd, py::dict& r_memory, py::str& rkey_format);
+
 // coefficients
 torch::Tensor get_ecoeff(int i, int j, int t, int xyz,
     torch::Tensor& alpha, torch::Tensor& betas, torch::Tensor& gamma,
@@ -32,6 +42,5 @@ torch::Tensor get_rcoeff(int r, int s, int t, int n,
     py::dict& r_memory, py::str& key_format);
 
 // helper functions
-torch::Tensor boys(int n, torch::Tensor t);
-torch::Tensor incgamma(double n, torch::Tensor t);
+torch::Tensor boys(int n, torch::Tensor& t);
 #endif
