@@ -178,7 +178,7 @@ class dft(BaseQCCalc):
         if nsize < 20:
             defopt["method"] = "exactsolve"
         else:
-            defopt["method"] = "lbfgs"
+            defopt["method"] = None  # let xitorch decides
         return defopt
 
     ############################# editable module #############################
