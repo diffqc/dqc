@@ -1,4 +1,5 @@
 import time
+import pytest
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
@@ -65,17 +66,24 @@ def test_atom_grad():
     runtest_molsystem_grad(a, p, get_system, systemargs)
 
 def test_mol_grad(profiling=False):
-    basis = "6-31G"
-    isystem = 0
-    systems = [ # (atomzs, dist)
-        ([1,1], 1.0),
-        ([3,3], 5.0),
-        ([7,7], 2.0),
-        ([9,9], 2.5),
-        ([6,8], 2.0),
-    ]
+    system = ([1,1], 1.0)
+    _helper_test_mol_grad(system, profiling=profiling)
 
-    dist = torch.tensor(systems[isystem][1], dtype=dtype, device=device).requires_grad_()
+def run_mol_grad_all(profiling=False):
+    systems = [ # (atomzs, dist)
+        # ([1,1], 1.0),
+        # ([3,3], 5.0),
+        ([7,7], 2.0),
+        # ([9,9], 2.5),
+        # ([6,8], 2.0),
+    ]
+    for system in systems:
+        _helper_test_mol_grad(system, profiling=profiling)
+
+def _helper_test_mol_grad(sysdesc, profiling=False):
+    basis = "6-31G"
+
+    dist = torch.tensor(sysdesc[1], dtype=dtype, device=device).requires_grad_()
     a = torch.tensor(-0.7385587663820223, dtype=dtype, device=device).requires_grad_()
     p = torch.tensor(4./3, dtype=dtype, device=device).requires_grad_()
     fwd_options = {
@@ -83,13 +91,11 @@ def test_mol_grad(profiling=False):
         "f_tol": 1e-9
     }
     bck_options = {
-        "method": "broyden1",
-        "f_tol": 1e-9
     }
 
     systemargs = (dist,)
     def get_system(dist):
-        atomzs = systems[isystem][0]
+        atomzs = sysdesc[0]
         atomposs = torch.tensor([[0.5, 0, 0], [-0.5, 0, 0]], dtype=dtype, device=device) * dist
         system = (atomzs, atomposs)
         m = mol(system, basis, requires_grad=True)
@@ -141,4 +147,5 @@ def runtest_molsystem_energy(systems, basis):
 if __name__ == "__main__":
     # test_atom_grad()
     # with torch.autograd.detect_anomaly():
-        test_mol_grad(profiling=True)
+        # test_mol_grad(profiling=True)
+        run_mol_grad_all(profiling=True)
