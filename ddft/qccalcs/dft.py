@@ -53,9 +53,12 @@ class dft(BaseQCCalc):
         self.eigen_options = eigen_options
 
         # set up the initial density before running scf module
-        dm0 = self.__get_init_dm(dm0) # (nbatch, nbasis_tot, nbasis_tot)
-        nbatch, nbasis_tot, _ = dm0.shape
-        y0 = self.__dm_to_fock(dm0)  # y0 is sfock
+        if dm0 is None:
+            fock0 = self.__get_init_fock()
+        else:
+            fock0 = self.__dm_to_fock(dm0)
+        nbatch, nbasis_tot, _ = fock0.shape
+        y0 = fock0
 
         # run the self-consistent iterations
         y0 = y0.view(nbatch, -1)  # flatten the initial values
@@ -66,6 +69,7 @@ class dft(BaseQCCalc):
             verbose = True,
             **fwd_options) # (nbatch, nbasis_tot*nbasis_tot)
         yout = yout.view(nbatch, nbasis_tot, nbasis_tot) # (nbatch, nbasis_tot, nbasis_tot)
+
         self.scf_dm = self.__fock_to_dm(yout)
         self.scf_density = self.hmodel.dm2dens(self.scf_dm)
 
@@ -170,15 +174,16 @@ class dft(BaseQCCalc):
         else:
             raise TypeError("eks_model must be a BaseEKS or a string")
 
-    def __get_init_dm(self, dm0):
-        if dm0 is None:
-            dm0 = torch.zeros(self.hmodel.shape, dtype=self.dtype, device=self.device).unsqueeze(0)
-            dens0 = self.hmodel.dm2dens(dm0)
-            _, eigvecs, _ = self.__diagonalize(dens0)
-            dm0 = torch.einsum("bpo,bqo->bpq", eigvecs, eigvecs) # (nbatch, nbasis_tot, nbasis_tot)
-            dm0 = self.__normalize_dm(dm0)
+    def __get_init_fock(self):
+        vext_tot = self.vext
+        hparams = (vext_tot,)
+        fock0 = self.hmodel.get_hamiltonian(*hparams).fullmatrix()
 
-        return dm0
+        # do one forward pass
+        fock0shape = fock0.shape
+        nbatch = fock0shape[0]
+        fock0 = self.__forward_pass2(fock0.view(nbatch, -1)).view(fock0shape)
+        return fock0
 
     def __get_vext(self, vext_fcn):
         if vext_fcn is not None:
