@@ -65,25 +65,20 @@ def test_atom_grad():
 
     runtest_molsystem_grad(a, p, get_system, systemargs)
 
-def test_mol_grad(profiling=False):
-    system = ([1,1], 1.0)
-    _helper_test_mol_grad(system, profiling=profiling)
+@pytest.mark.parametrize(
+    "atomzs,dist,gradx,grad2x",
+    [((1, 1), 1.5, 6.967e-3, 2.872e-1),
+     ((3, 3), 5.0, -6.292e-3, 1.900e-2),
+     ((7, 7), 2.0, -2.497e-1, 2.261e0),
+     ((9, 9), 3.0, 5.531e-2, 1.730e-1),
+     ((6, 8), 2.0, -3.246e-1, 2.176e0)]
+)
+def test_mol_grad_all(atomzs, dist, gradx, grad2x):
+    run_test_mol_grad(atomzs, dist, gradx, grad2x)
 
-def run_mol_grad_all(profiling=False):
-    systems = [ # (atomzs, dist)
-        # ([1,1], 1.0),
-        # ([3,3], 5.0),
-        ([7,7], 2.0),
-        # ([9,9], 2.5),
-        # ([6,8], 2.0),
-    ]
-    for system in systems:
-        _helper_test_mol_grad(system, profiling=profiling)
-
-def _helper_test_mol_grad(sysdesc, profiling=False):
+def run_test_mol_grad(atomzs, dist, gradx=None, grad2x=None):
     basis = "6-31G"
 
-    dist = torch.tensor(sysdesc[1], dtype=dtype, device=device).requires_grad_()
     a = torch.tensor(-0.7385587663820223, dtype=dtype, device=device).requires_grad_()
     p = torch.tensor(4./3, dtype=dtype, device=device).requires_grad_()
     fwd_options = {
@@ -93,16 +88,41 @@ def _helper_test_mol_grad(sysdesc, profiling=False):
     bck_options = {
     }
 
-    systemargs = (dist,)
-    def get_system(dist):
-        atomzs = sysdesc[0]
-        atomposs = torch.tensor([[0.5, 0, 0], [-0.5, 0, 0]], dtype=dtype, device=device) * dist
-        system = (atomzs, atomposs)
-        m = mol(system, basis, requires_grad=True)
-        return m
+    dist = torch.tensor(dist, dtype=dtype, device=device).requires_grad_()
+    atomposs = torch.tensor([[0.5, 0, 0], [-0.5, 0, 0]], dtype=dtype, device=device) * dist
+    tinit = time.time()
+    m = mol((atomzs, atomposs), basis, requires_grad=True)
+    eks_model = PseudoLDA(a, p)
+    scf = dft(m, eks_model=eks_model, fwd_options=fwd_options, bck_options=bck_options)
+    energy = scf.energy()
 
-    runtest_molsystem_grad(a, p, get_system, systemargs, profiling,
-        fwd_options, bck_options)
+    # only take grad in x to save time
+    t0 = time.time()
+    if gradx is None:
+        print("Forward   : %.3fs" % (t0 - tinit))
+
+    dedx = torch.autograd.grad(energy, dist, create_graph=True)[0]
+    t1 = time.time()
+
+    if gradx is not None:
+        gradx = dedx * 0 + gradx
+        assert torch.allclose(dedx, gradx, rtol=1e-2, atol=1e-5)
+    else:
+        print("Backward  : %.3fs" % (t1 - t0))
+
+    t2 = time.time()
+    d2edx2 = torch.autograd.grad(dedx, dist, create_graph=True)[0]
+    t3 = time.time()
+
+    if grad2x is not None:
+        grad2x = d2edx2 * 0 + grad2x
+        assert torch.allclose(d2edx2, grad2x, rtol=1e-2, atol=1e-5)
+    else:
+        print("2 backward: %.3fs" % (t3 - t2))
+
+    print("Energy: ", energy.item())
+    print("dEdx  : ", dedx.item())
+    print("d2Edx2: ", d2edx2.item())
 
 def runtest_molsystem_grad(a, p, get_system, systemargs,
         profiling=False,
@@ -144,8 +164,40 @@ def runtest_molsystem_energy(systems, basis):
         print("Energy: %.7f" % energy)
         assert torch.allclose(energy, torch.tensor(energy_true, dtype=energy.dtype))
 
+# functions used to get the true values of grad x of molecules
+def calc_molsystem_energy_grad(atomzs, dist_central, eps=1e-2):
+    basis = "6-31G"
+
+    a = torch.tensor(-0.7385587663820223, dtype=dtype, device=device).requires_grad_()
+    p = torch.tensor(4./3, dtype=dtype, device=device).requires_grad_()
+    fwd_options = {
+        "method": "broyden1",
+        "f_tol": 1e-9
+    }
+    bck_options = {
+    }
+
+    dists = [dist_central - eps, dist_central, dist_central + eps]
+    energies = []
+    for d in dists:
+        dist = torch.tensor(d, dtype=dtype, device=device).requires_grad_()
+        atomposs = torch.tensor([[0.5, 0, 0], [-0.5, 0, 0]], dtype=dtype, device=device) * dist
+        m = mol((atomzs, atomposs), basis, requires_grad=True)
+        eks_model = PseudoLDA(a, p)
+        scf = dft(m, eks_model=eks_model, fwd_options=fwd_options, bck_options=bck_options)
+        energies.append(scf.energy().item())
+
+    dedx = (energies[-1] - energies[0]) / (2 * eps)
+    d2edx2 = (energies[0] + energies[2] - 2 * energies[1]) / (eps * eps)
+    print("dedx: ", dedx)
+    print("d2edx2: ", d2edx2)
+
 if __name__ == "__main__":
-    # test_atom_grad()
-    # with torch.autograd.detect_anomaly():
-        # test_mol_grad(profiling=True)
-        run_mol_grad_all(profiling=True)
+    run_test_mol_grad((1., 1.), 1.5)
+    # calc_molsystem_energy_grad([6., 8.], 2.0)
+
+    # (1, 1), 1.5: 6.967e-3, 2.872e-1
+    # (3, 3), 5.0: -6.292e-3, 1.900e-2
+    # [7, 7], 2.0: -2.497e-1, 2.261e0
+    # [9, 9], 3.0: 5.531e-2, 1.730e-1
+    # [6, 8], 2.0: -3.246e-1, 2.176e0
