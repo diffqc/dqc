@@ -55,15 +55,18 @@ class dft(BaseQCCalc):
         # set up the initial density before running scf module
         dm0 = self.__get_init_dm(dm0) # (nbatch, nbasis_tot, nbasis_tot)
         nbatch, nbasis_tot, _ = dm0.shape
+        y0 = self.__dm_to_fock(dm0)  # y0 is sfock
 
         # run the self-consistent iterations
-        dm0 = dm0.view(nbatch, -1)
-        self.scf_dm = xitorch.optimize.equilibrium(
-            fcn = self.__forward_pass,
-            y0 = dm0,
-            bck_options = bck_options,
+        y0 = y0.view(nbatch, -1)  # flatten the initial values
+        yout = xitorch.optimize.equilibrium(
+            fcn = self.__forward_pass2,
+            y0 = y0,
+            bck_options = {**bck_options, "verbose": True},
+            verbose = True,
             **fwd_options) # (nbatch, nbasis_tot*nbasis_tot)
-        self.scf_dm = self.scf_dm.view(nbatch, nbasis_tot, nbasis_tot) # (nbatch, nbasis_tot, nbasis_tot)
+        yout = yout.view(nbatch, nbasis_tot, nbasis_tot) # (nbatch, nbasis_tot, nbasis_tot)
+        self.scf_dm = self.__fock_to_dm(yout)
         self.scf_density = self.hmodel.dm2dens(self.scf_dm)
 
         # postprocess properties
@@ -94,20 +97,39 @@ class dft(BaseQCCalc):
         if gridpts is None:
             return self.scf_density
 
-    def __forward_pass(self, dm):
-        # dm: (nbatch, nbasis_tot*nbasis_tot)
-        nbatch = dm.shape[0]
-        dm = dm.view(nbatch, *self.hmodel.shape) # (nbatch, nbasis_tot, nbasis_tot)
-        dm = (dm + dm.transpose(-2,-1)) * 0.5
-        density = self.hmodel.dm2dens(dm) # (nbatch, nr)
-        # eigvecs: (nbatch, nbasis_tot, norb)
-        eigvals, eigvecs, vks = self.__diagonalize(density)
+    def __forward_pass2(self, fock):
+        # reshape the fock matrix to its proper size
+        nbatch = fock.shape[0]
+        fock = fock.view(nbatch, *self.hmodel.shape)
 
-        # obtain the new density matrix
-        new_dm = torch.einsum("bpo,bqo->bpq", eigvecs, eigvecs) # (nbatch, nbasis_tot, nbasis_tot)
-        new_dm = self.__normalize_dm(new_dm)
+        new_dm = self.__fock_to_dm(fock)
+        new_fock = self.__dm_to_fock(new_dm)
 
-        return new_dm.view(nbatch, -1)
+        return new_fock.view(nbatch, -1)
+
+    def __fock_to_dm(self, fock):
+        # diagonalize
+        rparams = ()
+        eigvals, eigvecs = xitorch.linalg.lsymeig(
+            A = xt.LinearOperator.m(fock, is_hermitian=True),
+            neig = self.norb,
+            M = self.hmodel.get_overlap(*rparams),
+            **self.eigen_options)
+
+        # calculate the new density and the HKS potential
+        dm = torch.einsum("...po,...qo->...pq", eigvecs, eigvecs)
+        dm = self.__normalize_dm(dm)
+        return dm
+
+    def __dm_to_fock(self, dm):
+        density = self.hmodel.dm2dens(dm)
+        vks = self.vks_model(density)
+        vext_tot = self.vext + vks
+
+        # get the new fock matrix
+        hparams = (vext_tot,)
+        fock = self.hmodel.get_hamiltonian(*hparams).fullmatrix()
+        return fock
 
     def __normalize_dm(self, dm): # batchified
         # normalize the new density matrix
@@ -183,10 +205,17 @@ class dft(BaseQCCalc):
 
     ############################# editable module #############################
     def getparamnames(self, methodname, prefix=""):
-        if methodname == "__forward_pass":
-            return self.getparamnames("__diagonalize", prefix=prefix) + \
-                   self.getparamnames("__normalize_dm", prefix=prefix) + \
-                   self.hmodel.getparamnames("dm2dens", prefix=prefix+"hmodel.")
+        if methodname == "__forward_pass2":
+            return self.getparamnames("__fock_to_dm", prefix=prefix) + \
+                   self.getparamnames("__dm_to_fock", prefix=prefix)
+        elif methodname == "__fock_to_dm":
+            return self.getparamnames("__normalize_dm", prefix=prefix) + \
+                   self.hmodel.getparamnames("get_overlap", prefix=prefix+"hmodel.")
+        elif methodname == "__dm_to_fock":
+            return [prefix + "vext"] + \
+                   self.hmodel.getparamnames("dm2dens", prefix=prefix+"hmodel.") + \
+                   self.vks_model.getparamnames("__call__", prefix=prefix+"vks_model.") + \
+                   self.hmodel.getparamnames("get_hamiltonian", prefix=prefix+"hmodel.")
         elif methodname == "__diagonalize":
             return [prefix+"vext"] + \
                    self.hmodel.getparamnames("get_hamiltonian", prefix=prefix+"hmodel.") + \
