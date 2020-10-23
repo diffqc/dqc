@@ -71,7 +71,7 @@ class dft(BaseQCCalc):
         yout = yout.view(nbatch, nbasis_tot, nbasis_tot) # (nbatch, nbasis_tot, nbasis_tot)
 
         self.scf_dm = self.__fock_to_dm(yout)
-        self.scf_density = self.hmodel.dm2dens(self.scf_dm)
+        self.scf_density = self.hmodel.dm2dens(self.scf_dm).density
 
         # postprocess properties
         self.scf_energy = None
@@ -126,7 +126,7 @@ class dft(BaseQCCalc):
         return dm
 
     def __dm_to_fock(self, dm):
-        density = self.hmodel.dm2dens(dm)
+        density = self.hmodel.dm2dens(dm).density
         vks = self.vks_model(density)
         vext_tot = self.vext + vks
 
@@ -138,7 +138,7 @@ class dft(BaseQCCalc):
     def __normalize_dm(self, dm): # batchified
         # normalize the new density matrix
         # dm: (*BM, nbasis_tot, nbasis_tot)
-        dens = self.hmodel.dm2dens(dm) # (*BD, nr)
+        dens = self.hmodel.dm2dens(dm).density # (*BD, nr)
         dens_tot = self.grid.integralbox(dens, dim=-1, keepdim=True) # (*BD, 1)
         normfactor = self.numel / dens_tot # (*BD, 1)
         dm = dm * normfactor.unsqueeze(-1) # (*BMD, nbasis_tot, nbasis_tot)

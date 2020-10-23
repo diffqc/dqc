@@ -4,7 +4,7 @@ import torch
 import numpy as np
 import xitorch as xt
 
-from ddft.hamiltons.base_hamilton_gen import BaseHamiltonGenerator
+from ddft.hamiltons.base_hamilton_gen import BaseHamiltonGenerator, DensityInfo
 from ddft.utils.spharmonics import spharmonics
 from ddft.utils.gamma import incgamma
 from ddft.csrc import get_ecoeff, get_overlap_mat, get_kinetics_mat, \
@@ -140,12 +140,13 @@ class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
     def get_overlap(self):
         return xt.LinearOperator.m(self.olp_mat, is_hermitian=True)
 
-    def dm2dens(self, dm): # batchified
+    def dm2dens(self, dm, calc_gradn=False): # batchified
         # dm: (*BD, nbasis, nbasis)
         # self.basis: (*BB, nbasis, nr)
         # return: (*BDM, nr)
         dens = (torch.matmul(dm, self.basis) * self.basis).sum(dim=-2) # (*BDM, nr)
-        return dens
+        res = DensityInfo(density=dens, gradn=None)
+        return res
 
     def getparamnames(self, methodname, prefix=""):
         if methodname == "get_hamiltonian":

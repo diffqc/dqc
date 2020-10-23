@@ -3,6 +3,9 @@ from functools import reduce
 import torch
 import xitorch as xt
 from typing import List
+from collections import namedtuple
+
+DensityInfo = namedtuple("DensityInfo", ["density", "gradn"])
 
 class BaseHamiltonGenerator(xt.EditableModule):
     """
@@ -60,7 +63,7 @@ class BaseHamiltonGenerator(xt.EditableModule):
         pass
 
     @abstractmethod
-    def dm2dens(self, dm:torch.Tensor) -> torch.Tensor:
+    def dm2dens(self, dm:torch.Tensor, calc_gradn=False) -> DensityInfo:
         """
         Convert the density matrix to the density profile on the grid points.
 
@@ -68,11 +71,17 @@ class BaseHamiltonGenerator(xt.EditableModule):
         ---------
         dm: torch.Tensor
             The density matrix tensor with shape ``(..., nbasis, nbasis)``
+        calc_gradn: bool
+            If True, it will return "gradn" field in the DensityInfo. Otherwise,
+            the "gradn" field will be None.
 
         Returns
         -------
-        torch.Tensor
-            The density on the grid. It is a tensor with shape ``(..., nr)``
+        DensityInfo
+            The namedtuple containing ("density", "gradn").
+            "density" will be a tensor with shape ``(..., nr)``,
+            "gradn" will be a None or a tuple of 3 tensors with shape
+            ``(..., nr)`` corresponding to gradx, grady, and gradz.
         """
         pass
 
