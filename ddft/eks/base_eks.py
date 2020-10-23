@@ -23,10 +23,14 @@ class BaseEKS(xt.EditableModule):
         return self._grid
 
     @abstractmethod
-    def forward(self, density):
+    def forward(self, density, gradn=None):
         pass
 
-    def potential(self, density):
+    def potential(self, density, gradn=None):
+        if gradn is not None:
+            raise RuntimeError("Automatic potential finder with gradn is not "
+                               "available yet. Please implement it manually in "
+                               "class %s" % self.__class__.__name__)
         if density.requires_grad:
             xinp = density
         else:
@@ -49,6 +53,11 @@ class BaseEKS(xt.EditableModule):
         dx, = torch.autograd.grad(y, (xinp,), grad_outputs=dv,
             create_graph=torch.is_grad_enabled())
         return dx / dv
+
+    # properties
+    @property
+    def need_gradn(self):
+        return False
 
     def __add__(self, other):
         other = _normalize(other)
@@ -123,11 +132,15 @@ class NegEKS(BaseEKS):
     def set_grid(self, grid):
         self.eks.set_grid(grid)
 
-    def forward(self, density):
-        return -self.eks(density)
+    def forward(self, density, gradn=None):
+        return -self.eks(density, gradn)
 
-    def potential(self, density):
-        return -self.eks.potential(density)
+    def potential(self, density, gradn=None):
+        return -self.eks.potential(density, gradn)
+
+    @property
+    def need_gradn(self):
+        return self.eks.need_gradn
 
     def getfwdparamnames(self, prefix=""):
         return self.eks.getfwdparamnames(prefix=prefix+"eks.")
@@ -137,17 +150,22 @@ class AddEKS(BaseEKS):
         super(AddEKS, self).__init__()
         self.a = a
         self.b = b
+        self._need_gradn = self.a.need_gradn or self.b.need_gradn
 
     def set_grid(self, grid):
         self.a.set_grid(grid)
         self.b.set_grid(grid)
         self._grid = grid
 
-    def forward(self, density):
-        return self.a(density) + self.b(density)
+    def forward(self, density, gradn=None):
+        return self.a(density, gradn) + self.b(density, gradn)
 
-    def potential(self, density):
-        return self.a.potential(density) + self.b.potential(density)
+    def potential(self, density, gradn=None):
+        return self.a.potential(density, gradn) + self.b.potential(density, gradn)
+
+    @property
+    def need_gradn(self):
+        return self._need_gradn
 
     def getfwdparamnames(self, prefix=""):
         return self.a.getfwdparamnames(prefix=prefix+"a.") + \
@@ -158,13 +176,18 @@ class MultEKS(BaseEKS):
         super(MultEKS, self).__init__()
         self.a = a
         self.b = b
+        self._need_gradn = self.a.need_gradn or self.b.need_gradn
 
     def set_grid(self, grid):
         self.a.set_grid(grid)
         self.b.set_grid(grid)
 
-    def forward(self, density):
-        return self.a(density) * self.b(density)
+    def forward(self, density, gradn=None):
+        return self.a(density, gradn) * self.b(density, gradn)
+
+    @property
+    def need_gradn(self):
+        return self._need_gradn
 
     def getfwdparamnames(self, prefix=""):
         return self.a.getfwdparamnames(prefix=prefix+"a.") + \
@@ -175,13 +198,18 @@ class DivEKS(BaseEKS):
         super(DivEKS, self).__init__()
         self.a = a
         self.b = b
+        self._need_gradn = self.a.need_gradn or self.b.need_gradn
 
     def set_grid(self, grid):
         self.a.set_grid(grid)
         self.b.set_grid(grid)
 
-    def forward(self, density):
-        return self.a(density) / self.b(density)
+    def forward(self, density, gradn=None):
+        return self.a(density, gradn) / self.b(density, gradn)
+
+    @property
+    def need_gradn(self):
+        return self._need_gradn
 
     def getfwdparamnames(self, prefix=""):
         return self.a.getfwdparamnames(prefix=prefix+"a.") + \

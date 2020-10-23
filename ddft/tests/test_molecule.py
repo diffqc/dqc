@@ -23,7 +23,7 @@ class PseudoLDA(BaseEKS):
         self.a = a
         self.p = p
 
-    def forward(self, density):
+    def forward(self, density, gradn=None):
         return self.a * safepow(density.abs(), self.p)
 
     def getfwdparamnames(self, prefix=""):

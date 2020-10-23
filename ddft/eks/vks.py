@@ -10,9 +10,9 @@ class VKS(torch.nn.Module, xt.EditableModule):
         self.eks_model.set_grid(grid)
         self.grid = grid
 
-    def forward(self, x):
-        assert x.ndim == 2, "The input to VKS module must be 2-dimensional tensor (nbatch, nrgrid)"
-        return self.eks_model.potential(x)
+    def forward(self, n, gradn=None):
+        assert n.ndim == 2, "The input to VKS module must be 2-dimensional tensor (nbatch, nrgrid)"
+        return self.eks_model.potential(n)
 
     def getparamnames(self, methodname, prefix=""):
         if methodname == "forward" or methodname == "__call__":
