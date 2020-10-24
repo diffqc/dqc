@@ -126,8 +126,14 @@ class dft(BaseQCCalc):
         return dm
 
     def __dm_to_fock(self, dm):
-        density = self.hmodel.dm2dens(dm).density
-        vks = self.vks_model(density)
+        densinfo = self.hmodel.dm2dens(
+            dm,
+            calc_gradn = self.vks_model.need_gradn,
+        )
+        vks = self.vks_model(
+            density = densinfo.density,
+            gradn = densinfo.gradn,
+        )
         vext_tot = self.vext + vks
 
         # get the new fock matrix
