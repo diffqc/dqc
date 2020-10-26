@@ -3,7 +3,7 @@ import xitorch as xt
 import xitorch.optimize
 import xitorch.linalg
 from ddft.qccalcs.base_qccalc import BaseQCCalc
-from ddft.eks import BaseEKS, VKS, Hartree, xLDA
+from ddft.eks import BaseEKS, Hartree, xLDA
 from ddft.utils.misc import set_default_option
 
 __all__ = ["dft"]
@@ -41,7 +41,7 @@ class dft(BaseQCCalc):
         # set up the vhks
         eks_model = self.__get_eks_model(eks_model)
         self.eks_model = eks_model + Hartree()
-        self.vks_model = VKS(self.eks_model, self.grid)
+        self.eks_model.set_grid(self.grid)
 
         # set up the eigen module for the forward pass and scf module
         eigen_options = set_default_option(
@@ -128,9 +128,9 @@ class dft(BaseQCCalc):
     def __dm_to_fock(self, dm):
         densinfo = self.hmodel.dm2dens(
             dm,
-            calc_gradn = self.vks_model.need_gradn,
+            calc_gradn = self.eks_model.need_gradn,
         )
-        vks = self.vks_model(
+        vks = self.eks_model.potential(
             density = densinfo.density,
             gradn = densinfo.gradn,
         )
@@ -152,7 +152,7 @@ class dft(BaseQCCalc):
 
     def __diagonalize(self, density):
         # calculate the total potential experienced by Kohn-Sham particles
-        vks = self.vks_model(density) # (nbatch, nr)
+        vks = self.eks_model.potential(density) # (nbatch, nr)
         vext_tot = self.vext + vks
 
         # compute the eigenpairs
@@ -225,13 +225,13 @@ class dft(BaseQCCalc):
         elif methodname == "__dm_to_fock":
             return [prefix + "vext"] + \
                    self.hmodel.getparamnames("dm2dens", prefix=prefix+"hmodel.") + \
-                   self.vks_model.getparamnames("__call__", prefix=prefix+"vks_model.") + \
+                   self.eks_model.getparamnames("potential", prefix=prefix+"eks_model.") + \
                    self.hmodel.getparamnames("get_hamiltonian", prefix=prefix+"hmodel.")
         elif methodname == "__diagonalize":
             return [prefix+"vext"] + \
                    self.hmodel.getparamnames("get_hamiltonian", prefix=prefix+"hmodel.") + \
                    self.hmodel.getparamnames("get_overlap", prefix=prefix+"hmodel.") + \
-                   self.vks_model.getparamnames("__call__", prefix=prefix+"vks_model.")
+                   self.eks_model.getparamnames("potential", prefix=prefix+"eks_model.")
         elif methodname == "__normalize_dm":
             return [prefix+"numel"] + \
                    self.grid.getparamnames("integralbox", prefix=prefix+"grid.")

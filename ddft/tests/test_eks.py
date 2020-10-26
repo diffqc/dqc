@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from ddft.eks import BaseEKS, VKS, Hartree
+from ddft.eks import BaseEKS, Hartree
 from ddft.utils.safeops import safepow
 from ddft.grids.base_grid import BaseRadialAngularGrid, Base3DGrid
 
@@ -48,9 +48,9 @@ def run_vks_test(gridname, fcnname, rtol=1e-5, atol=1e-8):
     a = torch.tensor([1.0]).to(dtype)
     p = torch.tensor([1.3333]).to(dtype)
     eks_mdl = EKS1(a, p)
-    vks_mdl = VKS(eks_mdl, grid)
+    eks_mdl.set_grid(grid)
     eks = eks_mdl(density)
-    vks = vks_mdl(density)
+    vks = eks_mdl.potential(density)
 
     eks_theory = a*density**p
     vks_theory = a*p*density**(p-1.0)
@@ -63,8 +63,7 @@ def run_hartree_test(gridname, fcnname, rtol=1e-5, atol=1e-8):
 
     hartree_mdl = Hartree()
     hartree_mdl.set_grid(grid)
-    vks_hartree_mdl = VKS(hartree_mdl, grid)
-    vks_hartree = vks_hartree_mdl(density)
+    vks_hartree = hartree_mdl.potential(density)
 
     def eks_sum(density):
         eks_grid = hartree_mdl(density)
