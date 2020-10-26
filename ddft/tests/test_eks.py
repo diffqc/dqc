@@ -10,8 +10,9 @@ class EKS1(BaseEKS):
         self.a = torch.nn.Parameter(a)
         self.p = torch.nn.Parameter(p)
 
-    def forward(self, x):
-        return self.a * x**self.p
+    def forward(self, density_up, density_dn, gradn_up=None, gradn_dn=None):
+        x = density_up + density_dn
+        return self.a * x ** self.p
 
 def test_vks_radial_legendre():
     run_vks_test("legradialshiftexp", "exp")
@@ -49,24 +50,26 @@ def run_vks_test(gridname, fcnname, rtol=1e-5, atol=1e-8):
     p = torch.tensor([1.3333]).to(dtype)
     eks_mdl = EKS1(a, p)
     eks_mdl.set_grid(grid)
-    eks = eks_mdl(density)
-    vks = eks_mdl.potential(density)
+    half_density = density * 0.5
+    eks = eks_mdl(half_density, half_density)
+    vks, _ = eks_mdl.potential(half_density, half_density)
 
-    eks_theory = a*density**p
-    vks_theory = a*p*density**(p-1.0)
+    eks_theory = a * density ** p
+    vks_theory = a * p * density ** (p - 1.0)
     assert torch.allclose(eks, eks_theory, rtol=rtol, atol=atol)
     assert torch.allclose(vks, vks_theory, rtol=rtol, atol=atol)
 
 def run_hartree_test(gridname, fcnname, rtol=1e-5, atol=1e-8):
     dtype = torch.float64
     grid, density = _setup_density(gridname, fcnname, dtype=dtype)
+    half_density = density * 0.5
 
     hartree_mdl = Hartree()
     hartree_mdl.set_grid(grid)
-    vks_hartree = hartree_mdl.potential(density)
+    vks_hartree, _ = hartree_mdl.potential(half_density, half_density)
 
     def eks_sum(density):
-        eks_grid = hartree_mdl(density)
+        eks_grid = hartree_mdl(half_density, half_density)
         return eks_grid.sum()
 
     vks_poisson = grid.solve_poisson(-4.0 * np.pi * density)

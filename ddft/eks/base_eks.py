@@ -23,18 +23,24 @@ class BaseEKS(xt.EditableModule):
         return self._grid
 
     @abstractmethod
-    def forward(self, density, gradn=None):
+    def forward(self, density_up, density_dn, gradn_up=None, gradn_dn=None):
         pass
 
-    def potential(self, density, gradn=None):
-        if gradn is not None:
+    def potential(self, density_up, density_dn, gradn_up=None, gradn_dn=None):
+        assert (gradn_up is None) == (gradn_dn is None)
+        if gradn_up is not None:
             raise RuntimeError("Automatic potential finder with gradn is not "
                                "available yet. Please implement it manually in "
                                "class %s" % self.__class__.__name__)
-        if density.requires_grad:
-            xinp = density
+        if density_up.requires_grad:
+            xinp_u = density_up
         else:
-            xinp = density.detach().requires_grad_()
+            xinp_u = density_up.detach().requires_grad_()
+
+        if density_dn.requires_grad:
+            xinp_d = density_dn
+        else:
+            xinp_d = density_dn.detach().requires_grad_()
 
         dv = self.grid.get_dvolume()
         # the factor will be cancelled out, so removing it from graph will
@@ -45,14 +51,14 @@ class BaseEKS(xt.EditableModule):
         # which could be very small due to small density and could cause
         # underflow
         dv = dv / factor
-        dv = dv.expand(density.shape[0], -1)
+        dv = dv.expand(density_up.shape[0], -1)
 
         with torch.enable_grad():
-            y = self.forward(xinp) # (nbatch,nr)
+            y = self.forward(xinp_u, xinp_d) # (nbatch,nr)
 
-        dx, = torch.autograd.grad(y, (xinp,), grad_outputs=dv,
+        dx_u, dx_d = torch.autograd.grad(y, (xinp_u, xinp_d), grad_outputs=dv,
             create_graph=torch.is_grad_enabled())
-        return dx / dv
+        return dx_u / dv, dx_d / dv
 
     # properties
     @property
@@ -132,11 +138,11 @@ class NegEKS(BaseEKS):
     def set_grid(self, grid):
         self.eks.set_grid(grid)
 
-    def forward(self, density, gradn=None):
-        return -self.eks(density, gradn)
+    def forward(self, density_up, density_dn, gradn_up=None, gradn_dn=None):
+        return -self.eks(density_up, density_dn, gradn_up, gradn_dn)
 
-    def potential(self, density, gradn=None):
-        return -self.eks.potential(density, gradn)
+    def potential(self, density_up, density_dn, gradn_up=None, gradn_dn=None):
+        return -self.eks.potential(density_up, density_dn, gradn_up, gradn_dn)
 
     @property
     def need_gradn(self):
@@ -157,11 +163,14 @@ class AddEKS(BaseEKS):
         self.b.set_grid(grid)
         self._grid = grid
 
-    def forward(self, density, gradn=None):
-        return self.a(density, gradn) + self.b(density, gradn)
+    def forward(self, density_up, density_dn, gradn_up=None, gradn_dn=None):
+        return self.a(density_up, density_dn, gradn_up, gradn_dn) + \
+               self.b(density_up, density_dn, gradn_up, gradn_dn)
 
-    def potential(self, density, gradn=None):
-        return self.a.potential(density, gradn) + self.b.potential(density, gradn)
+    def potential(self, density_up, density_dn, gradn_up=None, gradn_dn=None):
+        apot = self.a.potential(density_up, density_dn, gradn_up, gradn_dn)
+        bpot = self.b.potential(density_up, density_dn, gradn_up, gradn_dn)
+        return (apot[0] + bpot[0]), (apot[1] + bpot[1])
 
     @property
     def need_gradn(self):
@@ -182,8 +191,9 @@ class MultEKS(BaseEKS):
         self.a.set_grid(grid)
         self.b.set_grid(grid)
 
-    def forward(self, density, gradn=None):
-        return self.a(density, gradn) * self.b(density, gradn)
+    def forward(self, density_up, density_dn, gradn_up=None, gradn_dn=None):
+        return self.a(density_up, density_dn, gradn_up, gradn_dn) * \
+               self.b(density_up, density_dn, gradn_up, gradn_dn)
 
     @property
     def need_gradn(self):
@@ -204,8 +214,9 @@ class DivEKS(BaseEKS):
         self.a.set_grid(grid)
         self.b.set_grid(grid)
 
-    def forward(self, density, gradn=None):
-        return self.a(density, gradn) / self.b(density, gradn)
+    def forward(self, density_up, density_dn, gradn_up=None, gradn_dn=None):
+        return self.a(density_up, density_dn, gradn_up, gradn_dn) / \
+               self.b(density_up, density_dn, gradn_up, gradn_dn)
 
     @property
     def need_gradn(self):
