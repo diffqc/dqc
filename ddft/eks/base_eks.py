@@ -24,9 +24,15 @@ class BaseEKS(xt.EditableModule):
 
     @abstractmethod
     def forward(self, density_up, density_dn, gradn_up=None, gradn_dn=None):
+        """
+        Returns the energy per unit volume at each point in the grid.
+        """
         pass
 
     def potential(self, density_up, density_dn, gradn_up=None, gradn_dn=None):
+        """
+        Returns the potential at each point in the grid.
+        """
         assert (gradn_up is None) == (gradn_dn is None)
         if gradn_up is not None:
             raise RuntimeError("Automatic potential finder with gradn is not "
