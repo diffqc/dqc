@@ -3,7 +3,8 @@ import xitorch as xt
 import xitorch.optimize
 import xitorch.linalg
 from ddft.qccalcs.base_qccalc import BaseQCCalc
-from ddft.eks import BaseEKS, Hartree, xLDA
+from ddft.eks import BaseEKS, Hartree
+from ddft.eks.factory import get_xc
 from ddft.utils.misc import set_default_option
 
 __all__ = ["dft"]
@@ -12,7 +13,7 @@ class dft(BaseQCCalc):
     """
     Perform the restricted Kohn-Sham DFT.
     """
-    def __init__(self, system, eks_model="lda", vext_fcn=None,
+    def __init__(self, system, eks_model="lda,", vext_fcn=None,
             # arguments for scf run
             dm0=None, eigen_options={}, fwd_options=None, bck_options=None):
 
@@ -176,10 +177,7 @@ class dft(BaseQCCalc):
     ############# parameters setup functions #############
     def __get_eks_model(self, eks_model):
         if type(eks_model) == str:
-            if eks_model == "lda":
-                return xLDA()
-            else:
-                raise RuntimeError("Unknown eks model: %s" % eks_model)
+            return get_xc(eks_model)
         elif isinstance(eks_model, BaseEKS):
             return eks_model
         else:

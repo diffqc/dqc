@@ -43,7 +43,8 @@ def test_atom2():
         "Ne 0 0 0": -127.4718
     }
     basis = "6-311++G**"
-    runtest_molsystem_energy(systems, basis)
+    eks_model = "lda,"
+    runtest_molsystem_energy(systems, basis, eks_model)
 
 def test_mol2():
     systems = {
@@ -54,7 +55,8 @@ def test_mol2():
         "C -1 0 0; O 1 0 0"      : -111.49737, # pyscf: -111.490687028797 # LDA, 6-311++G**, grid level 4
     }
     basis = "6-311++G**"
-    runtest_molsystem_energy(systems, basis)
+    eks_model = "lda,"
+    runtest_molsystem_energy(systems, basis, eks_model)
 
 def test_atom_grad():
     isystem = 0
@@ -163,11 +165,11 @@ def runtest_molsystem_grad(a, p, get_system, systemargs,
         print("2 backward: %fs" % (t3-t2))
         print(dedxx)
 
-def runtest_molsystem_energy(systems, basis):
+def runtest_molsystem_energy(systems, basis, eks_model):
     for s in systems:
         energy_true = systems[s]
         m = mol(s, basis)
-        scf = dft(m, eks_model="lda")
+        scf = dft(m, eks_model=eks_model)
         energy = scf.energy()
         print("Energy: %.7f" % energy)
         assert torch.allclose(energy, torch.tensor(energy_true, dtype=energy.dtype))
