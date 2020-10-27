@@ -75,29 +75,6 @@ class BaseEKS(xt.EditableModule):
         other = _normalize(other)
         return AddEKS(self, other)
 
-    def __sub__(self, other):
-        other = _normalize(other)
-        return AddEKS(self, NegEKS(other))
-
-    def __rsub__(self, other):
-        other = _normalize(other)
-        return AddEKS(NegEKS(self), other)
-
-    def __mul__(self, other):
-        other = _normalize(other)
-        return MultEKS(self, other)
-
-    def __div__(self, other):
-        other = _normalize(other)
-        return DivEKS(self, other)
-
-    def __rdiv__(self, other):
-        other = _normalize(other)
-        return DivEKS(other, self)
-
-    def __neg__(self):
-        return NegEKS(self)
-
     ############### editable module part ###############
     @abstractmethod
     def getfwdparamnames(self, prefix=""):
@@ -111,52 +88,8 @@ class BaseEKS(xt.EditableModule):
         else:
             raise KeyError("Getparamnames has no %s method" % methodname)
 
-class TensorEKS(BaseEKS):
-    def __init__(self, tensor):
-        super(TensorEKS, self).__init__()
-        self.tensor = tensor
-
-    def forward(self, density):
-        return density * 0 + self.tensor
-
-    def getfwdparamnames(self, prefix=""):
-        return [prefix+"tensor"]
-
-
-class ConstEKS(BaseEKS):
-    def __init__(self, c):
-        super(ConstEKS, self).__init__()
-        self.c = c
-
-    def forward(self, density):
-        return density * 0 + self.c
-
-    def getfwdparamnames(self, prefix=""):
-        return [prefix+"c"]
-
 
 ######################## arithmetics ########################
-class NegEKS(BaseEKS):
-    def __init__(self, eks):
-        super(NegEKS, self).__init__()
-        self.eks = eks
-
-    def set_grid(self, grid):
-        self.eks.set_grid(grid)
-
-    def forward(self, density_up, density_dn, gradn_up=None, gradn_dn=None):
-        return -self.eks(density_up, density_dn, gradn_up, gradn_dn)
-
-    def potential(self, density_up, density_dn, gradn_up=None, gradn_dn=None):
-        return -self.eks.potential(density_up, density_dn, gradn_up, gradn_dn)
-
-    @property
-    def need_gradn(self):
-        return self.eks.need_gradn
-
-    def getfwdparamnames(self, prefix=""):
-        return self.eks.getfwdparamnames(prefix=prefix+"eks.")
-
 class AddEKS(BaseEKS):
     def __init__(self, a, b):
         super(AddEKS, self).__init__()
@@ -177,52 +110,6 @@ class AddEKS(BaseEKS):
         apot = self.a.potential(density_up, density_dn, gradn_up, gradn_dn)
         bpot = self.b.potential(density_up, density_dn, gradn_up, gradn_dn)
         return (apot[0] + bpot[0]), (apot[1] + bpot[1])
-
-    @property
-    def need_gradn(self):
-        return self._need_gradn
-
-    def getfwdparamnames(self, prefix=""):
-        return self.a.getfwdparamnames(prefix=prefix+"a.") + \
-               self.b.getfwdparamnames(prefix=prefix+"b.")
-
-class MultEKS(BaseEKS):
-    def __init__(self, a, b):
-        super(MultEKS, self).__init__()
-        self.a = a
-        self.b = b
-        self._need_gradn = self.a.need_gradn or self.b.need_gradn
-
-    def set_grid(self, grid):
-        self.a.set_grid(grid)
-        self.b.set_grid(grid)
-
-    def forward(self, density_up, density_dn, gradn_up=None, gradn_dn=None):
-        return self.a(density_up, density_dn, gradn_up, gradn_dn) * \
-               self.b(density_up, density_dn, gradn_up, gradn_dn)
-
-    @property
-    def need_gradn(self):
-        return self._need_gradn
-
-    def getfwdparamnames(self, prefix=""):
-        return self.a.getfwdparamnames(prefix=prefix+"a.") + \
-               self.b.getfwdparamnames(prefix=prefix+"b.")
-
-class DivEKS(BaseEKS):
-    def __init__(self, a, b):
-        super(DivEKS, self).__init__()
-        self.a = a
-        self.b = b
-        self._need_gradn = self.a.need_gradn or self.b.need_gradn
-
-    def set_grid(self, grid):
-        self.a.set_grid(grid)
-        self.b.set_grid(grid)
-
-    def forward(self, density_up, density_dn, gradn_up=None, gradn_dn=None):
-        return self.a(density_up, density_dn, gradn_up, gradn_dn) / \
-               self.b(density_up, density_dn, gradn_up, gradn_dn)
 
     @property
     def need_gradn(self):
