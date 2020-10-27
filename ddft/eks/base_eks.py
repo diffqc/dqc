@@ -48,23 +48,16 @@ class BaseEKS(xt.EditableModule):
         else:
             xinp_d = density_dn.detach().requires_grad_()
 
-        dv = self.grid.get_dvolume()
-        # the factor will be cancelled out, so removing it from graph will
-        # increase the numerical stability
-        factor = dv.min().detach()
-        # making the minimum to be 1 seem to make it more robust
-        # this is probably because it will be multiplied with the potential
-        # which could be very small due to small density and could cause
-        # underflow
-        dv = dv / factor
-        dv = dv.expand(density_up.shape[0], -1)
-
         with torch.enable_grad():
-            y = self.forward(xinp_u, xinp_d) # (nbatch,nr)
+            y = self.forward(xinp_u, xinp_d)
 
-        dx_u, dx_d = torch.autograd.grad(y, (xinp_u, xinp_d), grad_outputs=dv,
+        dx_u, dx_d = torch.autograd.grad(
+            outputs=y,
+            inputs=(xinp_u, xinp_d),
+            grad_outputs=torch.ones_like(y),
             create_graph=torch.is_grad_enabled())
-        return dx_u / dv, dx_d / dv
+
+        return dx_u, dx_d
 
     # properties
     @property
@@ -84,7 +77,7 @@ class BaseEKS(xt.EditableModule):
         if methodname == "forward" or methodname == "__call__":
             return self.getfwdparamnames(prefix=prefix)
         elif methodname == "potential":
-            return self.getfwdparamnames(prefix=prefix) + self.grid.getparamnames("get_dvolume", prefix=prefix+"grid.")
+            return self.getfwdparamnames(prefix=prefix)
         else:
             raise KeyError("Getparamnames has no %s method" % methodname)
 
