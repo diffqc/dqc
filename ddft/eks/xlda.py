@@ -6,8 +6,8 @@ __all__ = ["xLDA"]
 
 class xLDA(Exchange):
     def __init__(self, a=-0.7385587663820223, p=4./3):
-        self.a = torch.astensor(a)
-        self.p = torch.astensor(p)
+        self.a = torch.as_tensor(a)
+        self.p = torch.as_tensor(p)
 
     def _forward(self, density, gradn=None):
         return self.a * safepow(density.abs(), self.p)

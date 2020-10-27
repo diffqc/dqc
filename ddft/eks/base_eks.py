@@ -95,7 +95,7 @@ class BaseEKS(xt.EditableModule):
     ############### editable module part ###############
     @abstractmethod
     def getfwdparamnames(self, prefix=""):
-        pass
+        return []
 
     def getparamnames(self, methodname, prefix=""):
         if methodname == "forward" or methodname == "__call__":
