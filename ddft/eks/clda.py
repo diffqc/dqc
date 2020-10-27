@@ -29,7 +29,7 @@ class cLDA_PW(BaseEKS):
         f_zeta = ((1 + zeta) ** (4./3) + (1 - zeta)**(4./3) - 2) / (2 ** (4./3) - 2)
         f_pw = g[0] + zeta**4 * f_zeta*(g[1] - g[0] + g[2] / self.a_fz20) - \
                f_zeta * g[2] / self.a_fz20
-        return f_pw
+        return f_pw * (density_up + density_dn)
 
     def getfwdparamnames(self, prefix=""):
         return [
