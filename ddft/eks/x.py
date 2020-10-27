@@ -1,8 +1,17 @@
+from abc import abstractmethod
 from ddft.eks.base_eks import BaseEKS
 
 __all__ = ["Exchange"]
 
 class Exchange(BaseEKS):
+    @abstractmethod
+    def _forward(self, density, gradn):
+        pass
+
+    @abstractmethod
+    def _potential(self, density, gradn):
+        pass
+
     def forward(self, density_up, density_dn, gradn_up=None, gradn_dn=None):
         # Ex(nu, nd) = 0.5 * (Ex(2*nu) + Ex(2*nd))
 
