@@ -5,9 +5,9 @@ from ddft.eks.x import Exchange
 __all__ = ["xLDA"]
 
 class xLDA(Exchange):
-    def __init__(self, a=-0.7385587663820223, p=4./3):
-        self.a = torch.as_tensor(a)
-        self.p = torch.as_tensor(p)
+    def __init__(self):
+        self.a = torch.tensor(-0.7385587663820223)
+        self.p = torch.tensor(4./3)
 
     def _forward(self, density, gradn=None):
         return self.a * safepow(density.abs(), self.p)
