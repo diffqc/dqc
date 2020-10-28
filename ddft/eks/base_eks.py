@@ -8,9 +8,14 @@ class BaseEKS(xt.EditableModule):
     def __init__(self):
         super(BaseEKS, self).__init__()
         self._grid = None
+        self._hmodel = None
 
     def set_grid(self, grid):
         self._grid = grid
+
+    def set_hmodel(self, hmodel):
+        self._hmodel = hmodel
+        self._grid = hmodel.grid
 
     def __call__(self, *args, **kwargs):
         return self.forward(*args, **kwargs)
@@ -19,8 +24,14 @@ class BaseEKS(xt.EditableModule):
     @property
     def grid(self):
         if self._grid is None:
-            raise RuntimeError("The grid must be set by set_grid first before calling grid")
+            raise RuntimeError("The grid must be set by set_grid or set_hmodel first before calling grid")
         return self._grid
+
+    @property
+    def hmodel(self):
+        if self._hmodel is None:
+            raise RuntimeError("The hmodel must be set by set_hmodel first before calling grid")
+        return self._hmodel
 
     @abstractmethod
     def forward(self, densinfo_u, densinfo_d):
