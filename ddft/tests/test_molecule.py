@@ -201,7 +201,9 @@ def calc_molsystem_energy_grad(atomzs, dist_central, eps=1e-2):
     print("d2edx2: ", d2edx2)
 
 if __name__ == "__main__":
-    run_test_mol_grad((1., 1.), 1.5)
+    # run_test_mol_grad((1., 1.), 1.5)
+    run_test_mol_grad((6., 8.), 2.0)
+    # run_test_mol_grad((9., 9.), 3.0)
     # calc_molsystem_energy_grad([6., 8.], 2.0)
 
     # (1, 1), 1.5: 6.967e-3, 2.872e-1

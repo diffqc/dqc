@@ -42,7 +42,7 @@ class dft(BaseQCCalc):
         # set up the vhks
         eks_model = self.__get_eks_model(eks_model)
         self.eks_model = eks_model + Hartree()
-        self.eks_model.set_grid(self.grid)
+        self.eks_model.set_hmodel(self.hmodel)
 
         # set up the eigen module for the forward pass and scf module
         eigen_options = set_default_option(
@@ -83,7 +83,7 @@ class dft(BaseQCCalc):
             # calculate the total potential experienced by Kohn-Sham particles
             # from the last forward calculation
             densinfo = self.scf_densinfo
-            eigvals, eigvecs, vks = self.__diagonalize(densinfo)
+            eigvals, eigvecs, vks_linop, vks = self.__diagonalize(densinfo)
 
             # calculates the Kohn-Sham energy
             half_densinfo = densinfo * 0.5
@@ -92,6 +92,12 @@ class dft(BaseQCCalc):
 
             # calculate the individual non-interacting particles energy
             sum_eigvals = 2 * eigvals.sum(dim=-1) # (nbatch,)
+
+            # The expression below (i.e. with eigvecs) is preferred because it
+            # removes the necessity to calculate the potential directly.
+            # However, it is unstable for twice differentiable.
+            # Therefore, the expression with integralbox is temporarily used.
+            # vks_integral = 2 * torch.einsum("...rc,...rc->...", vks_linop.mm(eigvecs), eigvecs)
             vks_integral = self.grid.integralbox(vks * densinfo.density, dim=-1)
 
             # compute the interacting particles energy
@@ -133,15 +139,14 @@ class dft(BaseQCCalc):
             calc_gradn = self.eks_model.need_gradn,
         )
         half_densinfo = densinfo * 0.5
-        vks, _ = self.eks_model.potential(
+        vks_linop, _ = self.eks_model.potential_linop(
             densinfo_u = half_densinfo,
             densinfo_d = half_densinfo,
         )
-        vext_tot = self.vext + vks
+        vext_linop = self.hmodel.get_vext(self.vext)
 
         # get the new fock matrix
-        hparams = (vext_tot,)
-        fock_linop = self.hmodel.get_kincoul() + self.hmodel.get_vext(vext_tot)
+        fock_linop = self.hmodel.get_kincoul() + vks_linop + vext_linop
         fock = fock_linop.fullmatrix()
         return fock
 
@@ -157,19 +162,23 @@ class dft(BaseQCCalc):
     def __diagonalize(self, densinfo):
         # calculate the total potential experienced by Kohn-Sham particles
         half_densinfo = densinfo * 0.5
+        # vks_linop, _ = self.eks_model.potential_linop(half_densinfo, half_densinfo) # (nbatch, nr)
         vks, _ = self.eks_model.potential(half_densinfo, half_densinfo) # (nbatch, nr)
-        vext_tot = self.vext + vks
+        vks_linop = self.hmodel.get_vext(vks)
+        vext_linop = self.hmodel.get_vext(self.vext)
 
         # compute the eigenpairs
         # evals: (nbatch, norb), evecs: (nbatch, nr, norb)
+        A = self.hmodel.get_kincoul() + vks_linop + vext_linop
         eigvals, eigvecs = xitorch.linalg.lsymeig(
-            A = self.hmodel.get_kincoul() + self.hmodel.get_vext(vext_tot),
+            A = A,
             neig = self.norb,
             M = self.hmodel.get_overlap(),
             **self.eigen_options)
         # eigvals, eigvecs = self.eigen_model(hparams, rparams=rparams)
 
-        return eigvals, eigvecs, vks
+        # return eigvals, eigvecs, vks_linop
+        return eigvals, eigvecs, vks_linop, vks
 
     ############# parameters setup functions #############
     def __get_eks_model(self, eks_model):
@@ -224,7 +233,7 @@ class dft(BaseQCCalc):
         elif methodname == "__dm_to_fock":
             return [prefix + "vext"] + \
                    self.hmodel.getparamnames("dm2dens", prefix=prefix+"hmodel.") + \
-                   self.eks_model.getparamnames("potential", prefix=prefix+"eks_model.") + \
+                   self.eks_model.getparamnames("potential_linop", prefix=prefix+"eks_model.") + \
                    self.hmodel.getparamnames("get_kincoul", prefix=prefix+"hmodel.") + \
                    self.hmodel.getparamnames("get_vext", prefix=prefix+"hmodel.")
         elif methodname == "__diagonalize":
@@ -232,7 +241,7 @@ class dft(BaseQCCalc):
                    self.hmodel.getparamnames("get_kincoul", prefix=prefix+"hmodel.") + \
                    self.hmodel.getparamnames("get_vext", prefix=prefix+"hmodel.") + \
                    self.hmodel.getparamnames("get_overlap", prefix=prefix+"hmodel.") + \
-                   self.eks_model.getparamnames("potential", prefix=prefix+"eks_model.")
+                   self.eks_model.getparamnames("potential_linop", prefix=prefix+"eks_model.")
         elif methodname == "__normalize_dm":
             return [prefix+"numel"] + \
                    self.grid.getparamnames("integralbox", prefix=prefix+"grid.")

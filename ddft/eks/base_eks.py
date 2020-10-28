@@ -40,6 +40,7 @@ class BaseEKS(xt.EditableModule):
         """
         pass
 
+    # deprecated
     def potential(self, densinfo_u, densinfo_d):
         """
         Returns the potential at each point in the grid.
@@ -76,6 +77,17 @@ class BaseEKS(xt.EditableModule):
 
         return dx_u, dx_d
 
+    def potential_linop(self, densinfo_u, densinfo_d):
+        if densinfo_u is densinfo_d:
+            potu, potd = self.potential(densinfo_u, densinfo_d)
+            u = self.hmodel.get_vext(potu)
+            return u, u
+        else:
+            potu, potd = self.potential(densinfo_u, densinfo_d)
+            u = self.hmodel.get_vext(potu)
+            d = self.hmodel.get_vext(potd)
+        return u, d
+
     # properties
     @property
     def need_gradn(self):
@@ -95,6 +107,9 @@ class BaseEKS(xt.EditableModule):
             return self.getfwdparamnames(prefix=prefix)
         elif methodname == "potential":
             return self.getfwdparamnames(prefix=prefix)
+        elif methodname == "potential_linop":
+            return self.getfwdparamnames(prefix=prefix) + \
+                   self.hmodel.getparamnames("get_vext", prefix=prefix+"hmodel.")
         else:
             raise KeyError("Getparamnames has no %s method" % methodname)
 
@@ -111,6 +126,12 @@ class AddEKS(BaseEKS):
         self.a.set_grid(grid)
         self.b.set_grid(grid)
         self._grid = grid
+
+    def set_hmodel(self, hmodel):
+        self.a.set_hmodel(hmodel)
+        self.b.set_hmodel(hmodel)
+        self._grid = hmodel.grid
+        self._hmodel = hmodel
 
     def forward(self, densinfo_u, densinfo_d):
         return self.a(densinfo_u, densinfo_d) + \
