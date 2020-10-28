@@ -31,7 +31,7 @@ def test_grad_basis_cgto():
         grid = BeckeMultiGrid(sphgrid, atomposs, dtype=dtype)
         bases_list = [CartCGTOBasis(atomz, basisname, dtype=dtype) for atomz in atomzs]
         h = bases_list[0].construct_hamiltonian(grid, bases_list, atomposs)
-        H_model = h.get_hamiltonian(vext)
+        H_model = h.get_vext(vext) + h.get_kincoul()
         y = H_model.mm(wf)
         return (y**2).sum()
 

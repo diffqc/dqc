@@ -141,7 +141,8 @@ class dft(BaseQCCalc):
 
         # get the new fock matrix
         hparams = (vext_tot,)
-        fock = self.hmodel.get_hamiltonian(*hparams).fullmatrix()
+        fock_linop = self.hmodel.get_kincoul() + self.hmodel.get_vext(vext_tot)
+        fock = fock_linop.fullmatrix()
         return fock
 
     def __normalize_dm(self, dm): # batchified
@@ -161,12 +162,10 @@ class dft(BaseQCCalc):
 
         # compute the eigenpairs
         # evals: (nbatch, norb), evecs: (nbatch, nr, norb)
-        hparams = (vext_tot,)
-        rparams = []
         eigvals, eigvecs = xitorch.linalg.lsymeig(
-            A = self.hmodel.get_hamiltonian(*hparams),
+            A = self.hmodel.get_kincoul() + self.hmodel.get_vext(vext_tot),
             neig = self.norb,
-            M = self.hmodel.get_overlap(*rparams),
+            M = self.hmodel.get_overlap(),
             **self.eigen_options)
         # eigvals, eigvecs = self.eigen_model(hparams, rparams=rparams)
 
@@ -183,8 +182,7 @@ class dft(BaseQCCalc):
 
     def __get_init_fock(self):
         vext_tot = self.vext
-        hparams = (vext_tot,)
-        fock0 = self.hmodel.get_hamiltonian(*hparams).fullmatrix()
+        fock0 = (self.hmodel.get_vext(vext_tot) + self.hmodel.get_kincoul()).fullmatrix()
 
         # do one forward pass
         fock0shape = fock0.shape
@@ -227,10 +225,12 @@ class dft(BaseQCCalc):
             return [prefix + "vext"] + \
                    self.hmodel.getparamnames("dm2dens", prefix=prefix+"hmodel.") + \
                    self.eks_model.getparamnames("potential", prefix=prefix+"eks_model.") + \
-                   self.hmodel.getparamnames("get_hamiltonian", prefix=prefix+"hmodel.")
+                   self.hmodel.getparamnames("get_kincoul", prefix=prefix+"hmodel.") + \
+                   self.hmodel.getparamnames("get_vext", prefix=prefix+"hmodel.")
         elif methodname == "__diagonalize":
             return [prefix+"vext"] + \
-                   self.hmodel.getparamnames("get_hamiltonian", prefix=prefix+"hmodel.") + \
+                   self.hmodel.getparamnames("get_kincoul", prefix=prefix+"hmodel.") + \
+                   self.hmodel.getparamnames("get_vext", prefix=prefix+"hmodel.") + \
                    self.hmodel.getparamnames("get_overlap", prefix=prefix+"hmodel.") + \
                    self.eks_model.getparamnames("potential", prefix=prefix+"eks_model.")
         elif methodname == "__normalize_dm":

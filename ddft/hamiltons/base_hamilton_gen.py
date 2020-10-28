@@ -21,23 +21,34 @@ class BaseHamiltonGenerator(xt.EditableModule):
         return self._grid
 
     @abstractmethod
-    def get_hamiltonian(self, vext:torch.Tensor, *hparams) -> xt.LinearOperator:
+    def get_kincoul(self) -> xt.LinearOperator:
         """
-        Return the Hamiltonian LinearOperator given the external potential and
-        other parameters.
+        Return the LinearOperator of the kinetic energy and electron-ion
+        Coulomb potential.
+
+        Returns
+        -------
+        xt.LinearOperator
+            LinearOperator with shape ``(..., nbasis, nbasis)`` of the kinetics
+            and the electron-ion Coulomb potential.
+        """
+        pass
+
+    @abstractmethod
+    def get_vext(self, vext:torch.Tensor) -> xt.LinearOperator:
+        """
+        Return the Hamiltonian LinearOperator of the external potential.
 
         Arguments
         ---------
         vext: torch.Tensor
             The external potential with the shape of ``(...,nr)`` where ``nr``
             is the number of points in the grid.
-        *hparams
-            Other parameters required to specify the Hamiltonian.
 
         Returns
         -------
         xt.LinearOperator
-            Hamiltonian as Hermitian LinearOperator with shape
+            External potential operator as Hermitian LinearOperator with shape
             ``(..., nbasis, nbasis)``
         """
         pass

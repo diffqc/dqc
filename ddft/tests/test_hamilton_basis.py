@@ -100,10 +100,10 @@ def test_hamilton_molecule_cgto():
     for atomz in [1.0]:
         runtest(atomz, "6-311++G**", rtol=5e-4)
 
-def get_evals(grid, h, *hparams):
+def get_evals(grid, h):
     nr = grid.rgrid.shape[0]
     vext = torch.zeros(nr).to(dtype)
-    H = h.get_hamiltonian(vext, *hparams).fullmatrix()
+    H = (h.get_vext(vext) + h.get_kincoul()).fullmatrix()
     olp = h.get_overlap().fullmatrix()
 
     # check symmetricity of those matrices

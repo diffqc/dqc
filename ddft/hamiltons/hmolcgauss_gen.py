@@ -129,11 +129,13 @@ class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
         self.basis = norm_basis # (nbasis, nr)
         self.basis_dvolume = self.basis * self.grid.get_dvolume() # (nbasis, nr)
 
-    def get_hamiltonian(self, vext):
+    def get_kincoul(self):
         # kin_coul_mat: (nbasis, nbasis)
+        return xt.LinearOperator.m(self.kin_coul_mat, is_hermitian=True)
+
+    def get_vext(self, vext):
         # vext: (..., nr)
-        extpot_mat = torch.einsum("...r,br,cr->...bc", vext, self.basis_dvolume, self.basis)
-        mat = extpot_mat + self.kin_coul_mat
+        mat = torch.einsum("...r,br,cr->...bc", vext, self.basis_dvolume, self.basis)
         mat = (mat + mat.transpose(-2,-1)) * 0.5 # ensure the symmetricity
         return xt.LinearOperator.m(mat, is_hermitian=True)
 
@@ -149,8 +151,10 @@ class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
         return res
 
     def getparamnames(self, methodname, prefix=""):
-        if methodname == "get_hamiltonian":
-            return [prefix+"basis_dvolume", prefix+"basis", prefix+"kin_coul_mat"]
+        if methodname == "get_kincoul":
+            return [prefix+"kin_coul_mat"]
+        elif methodname == "get_vext":
+            return [prefix+"basis_dvolume", prefix+"basis"]
         elif methodname == "get_overlap":
             return [prefix+"olp_mat"]
         elif methodname == "dm2dens":
