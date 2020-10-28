@@ -72,7 +72,7 @@ class dft(BaseQCCalc):
         yout = yout.view(nbatch, nbasis_tot, nbasis_tot) # (nbatch, nbasis_tot, nbasis_tot)
 
         self.scf_dm = self.__fock_to_dm(yout)
-        self.scf_density = self.hmodel.dm2dens(self.scf_dm).density
+        self.scf_densinfo = self.hmodel.dm2dens(self.scf_dm)
 
         # postprocess properties
         self.scf_energy = None
@@ -82,17 +82,17 @@ class dft(BaseQCCalc):
         if self.scf_energy is None:
             # calculate the total potential experienced by Kohn-Sham particles
             # from the last forward calculation
-            density = self.scf_density
-            eigvals, eigvecs, vks = self.__diagonalize(density)
+            densinfo = self.scf_densinfo
+            eigvals, eigvecs, vks = self.__diagonalize(densinfo)
 
             # calculates the Kohn-Sham energy
-            half_density = density * 0.5
-            eks_density = self.eks_model(half_density, half_density) # energy density (nbatch, nr)
+            half_densinfo = densinfo * 0.5
+            eks_density = self.eks_model(half_densinfo, half_densinfo) # energy density (nbatch, nr)
             Eks = self.grid.integralbox(eks_density, dim=-1) # (nbatch,)
 
             # calculate the individual non-interacting particles energy
             sum_eigvals = 2 * eigvals.sum(dim=-1) # (nbatch,)
-            vks_integral = self.grid.integralbox(vks*density, dim=-1)
+            vks_integral = self.grid.integralbox(vks * densinfo.density, dim=-1)
 
             # compute the interacting particles energy
             Etot = sum_eigvals - vks_integral + Eks + self.system.get_nuclei_energy()
@@ -132,12 +132,10 @@ class dft(BaseQCCalc):
             dm,
             calc_gradn = self.eks_model.need_gradn,
         )
-        half_density = densinfo.density * 0.5
+        half_densinfo = densinfo * 0.5
         vks, _ = self.eks_model.potential(
-            density_up = half_density,
-            density_dn = half_density,
-            gradn_up = densinfo.gradn,
-            gradn_dn = densinfo.gradn,
+            densinfo_u = half_densinfo,
+            densinfo_d = half_densinfo,
         )
         vext_tot = self.vext + vks
 
@@ -155,10 +153,10 @@ class dft(BaseQCCalc):
         dm = dm * normfactor.unsqueeze(-1) # (*BMD, nbasis_tot, nbasis_tot)
         return dm # (*BMD, nbasis_tot, nbasis_tot)
 
-    def __diagonalize(self, density):
+    def __diagonalize(self, densinfo):
         # calculate the total potential experienced by Kohn-Sham particles
-        half_density = density * 0.5
-        vks, _ = self.eks_model.potential(half_density, half_density) # (nbatch, nr)
+        half_densinfo = densinfo * 0.5
+        vks, _ = self.eks_model.potential(half_densinfo, half_densinfo) # (nbatch, nr)
         vext_tot = self.vext + vks
 
         # compute the eigenpairs

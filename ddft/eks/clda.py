@@ -15,7 +15,10 @@ class cLDA_PW(BaseEKS):
         self.a_beta4  = torch.tensor([[0.49294], [0.62517], [0.49671]])
         self.a_fz20   = torch.tensor(1.709920934161365617563962776245)
 
-    def forward(self, density_up, density_dn, gradn_up=None, gradn_dn=None):
+    def forward(self, densinfo_u, densinfo_d):
+        density_up = densinfo_u.density
+        density_dn = densinfo_d.density
+
         exunif, rs, zeta, t2, alpha = get_c_rs_zeta_t2_alpha(
             density_up, density_dn
         )

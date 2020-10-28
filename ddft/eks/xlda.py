@@ -9,11 +9,11 @@ class xLDA(Exchange):
         self.a = torch.tensor(-0.7385587663820223)
         self.p = torch.tensor(4./3)
 
-    def _forward(self, density, gradn=None):
-        return self.a * safepow(density.abs(), self.p)
+    def _forward(self, densinfo):
+        return self.a * safepow(densinfo.density.abs(), self.p)
 
-    def _potential(self, density, gradn=None):
-        return self.p * self.a * safepow(density.abs(), self.p - 1)
+    def _potential(self, densinfo):
+        return self.p * self.a * safepow(densinfo.density.abs(), self.p - 1)
 
     def getfwdparamnames(self, prefix=""):
         return [prefix + "a", prefix + "p"]

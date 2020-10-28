@@ -23,37 +23,43 @@ class BaseEKS(xt.EditableModule):
         return self._grid
 
     @abstractmethod
-    def forward(self, density_up, density_dn, gradn_up=None, gradn_dn=None):
+    def forward(self, densinfo_u, densinfo_d):
         """
         Returns the energy per unit volume at each point in the grid.
         """
         pass
 
-    def potential(self, density_up, density_dn, gradn_up=None, gradn_dn=None):
+    def potential(self, densinfo_u, densinfo_d):
         """
         Returns the potential at each point in the grid.
         """
+        gradn_up = densinfo_u.gradn
+        gradn_dn = densinfo_d.gradn
+
         assert (gradn_up is None) == (gradn_dn is None)
         if gradn_up is not None:
             raise RuntimeError("Automatic potential finder with gradn is not "
                                "available yet. Please implement it manually in "
                                "class %s" % self.__class__.__name__)
-        if density_up.requires_grad:
-            xinp_u = density_up
-        else:
-            xinp_u = density_up.detach().requires_grad_()
 
-        if density_dn.requires_grad:
-            xinp_d = density_dn
+        if densinfo_u.density.requires_grad:
+            densinfo_u0 = densinfo_u
         else:
-            xinp_d = density_dn.detach().requires_grad_()
+            newdens = densinfo_u.density.detach().requires_grad_()
+            densinfo_u0 = densinfo_u._replace(density=newdens)
+
+        if densinfo_d.density.requires_grad:
+            densinfo_d0 = densinfo_d
+        else:
+            newdens = densinfo_d.density.detach().requires_grad_()
+            densinfo_d0 = densinfo_u._replace(density=newdens)
 
         with torch.enable_grad():
-            y = self.forward(xinp_u, xinp_d)
+            y = self.forward(densinfo_u0, densinfo_d0)
 
         dx_u, dx_d = torch.autograd.grad(
             outputs=y,
-            inputs=(xinp_u, xinp_d),
+            inputs=(densinfo_u0.density, densinfo_d0.density),
             grad_outputs=torch.ones_like(y),
             create_graph=torch.is_grad_enabled())
 
@@ -95,13 +101,13 @@ class AddEKS(BaseEKS):
         self.b.set_grid(grid)
         self._grid = grid
 
-    def forward(self, density_up, density_dn, gradn_up=None, gradn_dn=None):
-        return self.a(density_up, density_dn, gradn_up, gradn_dn) + \
-               self.b(density_up, density_dn, gradn_up, gradn_dn)
+    def forward(self, densinfo_u, densinfo_d):
+        return self.a(densinfo_u, densinfo_d) + \
+               self.b(densinfo_u, densinfo_d)
 
-    def potential(self, density_up, density_dn, gradn_up=None, gradn_dn=None):
-        apot = self.a.potential(density_up, density_dn, gradn_up, gradn_dn)
-        bpot = self.b.potential(density_up, density_dn, gradn_up, gradn_dn)
+    def potential(self, densinfo_u, densinfo_d):
+        apot = self.a.potential(densinfo_u, densinfo_d)
+        bpot = self.b.potential(densinfo_u, densinfo_d)
         return (apot[0] + bpot[0]), (apot[1] + bpot[1])
 
     @property

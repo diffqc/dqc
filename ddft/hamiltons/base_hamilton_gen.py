@@ -4,8 +4,7 @@ import torch
 import xitorch as xt
 from typing import List
 from collections import namedtuple
-
-DensityInfo = namedtuple("DensityInfo", ["density", "gradn"])
+from ddft.utils.datastruct import DensityInfo
 
 class BaseHamiltonGenerator(xt.EditableModule):
     """

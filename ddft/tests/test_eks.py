@@ -2,6 +2,7 @@ import torch
 import numpy as np
 from ddft.eks import BaseEKS, Hartree
 from ddft.utils.safeops import safepow
+from ddft.utils.datastruct import DensityInfo
 from ddft.grids.base_grid import BaseRadialAngularGrid, Base3DGrid
 
 class EKS1(BaseEKS):
@@ -10,8 +11,8 @@ class EKS1(BaseEKS):
         self.a = torch.nn.Parameter(a)
         self.p = torch.nn.Parameter(p)
 
-    def forward(self, density_up, density_dn, gradn_up=None, gradn_dn=None):
-        x = density_up + density_dn
+    def forward(self, densinfo_u, densinfo_d):
+        x = densinfo_u.density + densinfo_d.density
         return self.a * x ** self.p
 
 def test_vks_radial_legendre():
@@ -45,14 +46,15 @@ def run_vks_test(gridname, fcnname, rtol=1e-5, atol=1e-8):
     dtype = torch.float64
     grid, density = _setup_density(gridname, fcnname, dtype=dtype)
     density = density * density # avoid negative profile
+    densinfo = DensityInfo(density=density)
 
     a = torch.tensor([1.0]).to(dtype)
     p = torch.tensor([1.3333]).to(dtype)
     eks_mdl = EKS1(a, p)
     eks_mdl.set_grid(grid)
-    half_density = density * 0.5
-    eks = eks_mdl(half_density, half_density)
-    vks, _ = eks_mdl.potential(half_density, half_density)
+    half_densinfo = densinfo * 0.5
+    eks = eks_mdl(half_densinfo, half_densinfo)
+    vks, _ = eks_mdl.potential(half_densinfo, half_densinfo)
 
     eks_theory = a * density ** p
     vks_theory = a * p * density ** (p - 1.0)
@@ -63,13 +65,15 @@ def run_hartree_test(gridname, fcnname, rtol=1e-5, atol=1e-8):
     dtype = torch.float64
     grid, density = _setup_density(gridname, fcnname, dtype=dtype)
     half_density = density * 0.5
+    half_densinfo = DensityInfo(density=half_density)
 
     hartree_mdl = Hartree()
     hartree_mdl.set_grid(grid)
-    vks_hartree, _ = hartree_mdl.potential(half_density, half_density)
+    vks_hartree, _ = hartree_mdl.potential(half_densinfo, half_densinfo)
 
     def eks_sum(density):
-        eks_grid = hartree_mdl(half_density, half_density)
+        half_densinfo = DensityInfo(density = 0.5 * density)
+        eks_grid = hartree_mdl(half_densinfo, half_densinfo)
         return eks_grid.sum()
 
     vks_poisson = grid.solve_poisson(-4.0 * np.pi * density)
