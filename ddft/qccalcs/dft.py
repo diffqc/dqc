@@ -93,12 +93,9 @@ class dft(BaseQCCalc):
             # calculate the individual non-interacting particles energy
             sum_eigvals = 2 * eigvals.sum(dim=-1) # (nbatch,)
 
-            # The expression below (i.e. with eigvecs) is preferred because it
-            # removes the necessity to calculate the potential directly.
-            # However, it is unstable for twice differentiable.
-            # Therefore, the expression with integralbox is temporarily used.
-            # vks_integral = 2 * torch.einsum("...rc,...rc->...", vks_linop.mm(eigvecs), eigvecs)
-            vks_integral = self.grid.integralbox(vks * densinfo.density, dim=-1)
+            # NOTE: if the gradient is unstable, please try using the integralbox
+            vks_integral = 2 * torch.einsum("...rc,...rc->...", vks_linop.mm(eigvecs), eigvecs)
+            # vks_integral = self.grid.integralbox(vks * densinfo.density, dim=-1)
 
             # compute the interacting particles energy
             Etot = sum_eigvals - vks_integral + Eks + self.system.get_nuclei_energy()
@@ -209,8 +206,13 @@ class dft(BaseQCCalc):
     def __get_default_eigen_options(self):
         nsize = self.hmodel.shape[-1]*self.hmodel.shape[-2]
         defopt = {}
-        if nsize < 100:
-            defopt["method"] = "exacteig"
+
+        # NOTE: temporary use of custom_exacteig because exacteig uses symeig
+        # backward from pytorch which has not been stabilized in the degenerate
+        # case. Watch https://github.com/pytorch/pytorch/issues/47599
+        # if nsize < 100:
+        #     defopt["method"] = "exacteig"
+        defopt["method"] = "custom_exacteig"
         return defopt
 
     def __get_default_solve_options(self):
