@@ -159,9 +159,5 @@ class AddEKS(BaseEKS):
 def _normalize(a):
     if isinstance(a, BaseEKS):
         return a
-    elif isinstance(a, torch.Tensor):
-        return TensorEKS()
-    elif isinstance(a, int) or isinstance(a, float):
-        return ConstEKS(a * 1.0)
     else:
         raise TypeError("Unknown type %s for operating with EKS object" % type(a))
