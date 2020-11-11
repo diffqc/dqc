@@ -5,29 +5,6 @@ from ddft.utils.safeops import safepow
 from ddft.utils.datastruct import DensityInfo
 from ddft.grids.base_grid import BaseRadialAngularGrid, Base3DGrid
 
-class EKS1(BaseEKS):
-    def __init__(self, a, p):
-        super(EKS1, self).__init__()
-        self.a = torch.nn.Parameter(a)
-        self.p = torch.nn.Parameter(p)
-
-    def forward(self, densinfo_u, densinfo_d):
-        x = densinfo_u.density + densinfo_d.density
-        return self.a * x ** self.p
-
-def test_vks_radial_legendre():
-    run_vks_test("legradialshiftexp", "exp")
-
-def test_vks_lebedev():
-    run_vks_test("lebedev", "gauss-l1")
-    run_vks_test("lebedev", "gauss-l2")
-    run_vks_test("lebedev", "gauss-l1m1")
-    run_vks_test("lebedev", "gauss-l2m2")
-
-def test_vks_becke():
-    run_vks_test("becke", "exp")
-    run_vks_test("becke", "exp-twocentres")
-
 def test_hartree_radial_legendre():
     run_hartree_test("legradialshiftexp", "exp")
 
@@ -42,25 +19,6 @@ def test_hartree_becke():
     run_hartree_test("becke", "exp", rtol=rtol, atol=atol)
     run_hartree_test("becke", "exp-twocentres", rtol=rtol, atol=atol)
 
-def run_vks_test(gridname, fcnname, rtol=1e-5, atol=1e-8):
-    dtype = torch.float64
-    grid, density = _setup_density(gridname, fcnname, dtype=dtype)
-    density = density * density # avoid negative profile
-    densinfo = DensityInfo(density=density)
-
-    a = torch.tensor([1.0]).to(dtype)
-    p = torch.tensor([1.3333]).to(dtype)
-    eks_mdl = EKS1(a, p)
-    eks_mdl.set_grid(grid)
-    half_densinfo = densinfo * 0.5
-    eks = eks_mdl(half_densinfo, half_densinfo)
-    vks, _ = eks_mdl.potential(half_densinfo, half_densinfo)
-
-    eks_theory = a * density ** p
-    vks_theory = a * p * density ** (p - 1.0)
-    assert torch.allclose(eks, eks_theory, rtol=rtol, atol=atol)
-    assert torch.allclose(vks, vks_theory, rtol=rtol, atol=atol)
-
 def run_hartree_test(gridname, fcnname, rtol=1e-5, atol=1e-8):
     dtype = torch.float64
     grid, density = _setup_density(gridname, fcnname, dtype=dtype)
@@ -69,7 +27,7 @@ def run_hartree_test(gridname, fcnname, rtol=1e-5, atol=1e-8):
 
     hartree_mdl = Hartree()
     hartree_mdl.set_grid(grid)
-    vks_hartree, _ = hartree_mdl.potential(half_densinfo, half_densinfo)
+    eks_hartree = hartree_mdl.forward(half_densinfo, half_densinfo)
 
     def eks_sum(density):
         half_densinfo = DensityInfo(density = 0.5 * density)
@@ -77,7 +35,8 @@ def run_hartree_test(gridname, fcnname, rtol=1e-5, atol=1e-8):
         return eks_grid.sum()
 
     vks_poisson = grid.solve_poisson(-4.0 * np.pi * density)
-    assert torch.allclose(vks_hartree, vks_poisson, rtol=rtol, atol=atol)
+    eks_poisson = vks_poisson * 0.5 * density
+    assert torch.allclose(eks_hartree, eks_poisson, rtol=rtol, atol=atol)
 
 def _setup_density(gridname, fcnname, dtype=torch.float64):
     from ddft.grids.radialgrid import LegendreShiftExpRadGrid

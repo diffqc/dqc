@@ -8,13 +8,18 @@ class Hartree(BaseEKS):
     def forward(self, densinfo_u, densinfo_d):
         # density: (nbatch, nr)
         density = densinfo_u.density + densinfo_d.density
-        vks, _ = self.potential(densinfo_u, densinfo_d)
+        vks, _ = self._potential(densinfo_u, densinfo_d)
         # dirichlet boundary
         # vks = vks - vks[:,-1]
         eks = 0.5 * vks * density
         return eks
 
-    def potential(self, densinfo_u, densinfo_d):
+    def potential_linop(self, densinfo_u, densinfo_d):
+        vks, _ = self._potential(densinfo_u, densinfo_d)
+        vks_linop = self.hmodel.get_vext(vks)
+        return vks_linop, vks_linop
+
+    def _potential(self, densinfo_u, densinfo_d):
         density = densinfo_u.density + densinfo_d.density
         vks = self.grid.solve_poisson(-4.0 * np.pi * density)
         return vks, vks

@@ -83,7 +83,7 @@ class dft(BaseQCCalc):
             # calculate the total potential experienced by Kohn-Sham particles
             # from the last forward calculation
             densinfo = self.scf_densinfo
-            eigvals, eigvecs, vks_linop, vks = self.__diagonalize(densinfo)
+            eigvals, eigvecs, vks_linop = self.__diagonalize(densinfo)
 
             # calculates the Kohn-Sham energy
             half_densinfo = densinfo * 0.5
@@ -159,9 +159,7 @@ class dft(BaseQCCalc):
     def __diagonalize(self, densinfo):
         # calculate the total potential experienced by Kohn-Sham particles
         half_densinfo = densinfo * 0.5
-        # vks_linop, _ = self.eks_model.potential_linop(half_densinfo, half_densinfo) # (nbatch, nr)
-        vks, _ = self.eks_model.potential(half_densinfo, half_densinfo) # (nbatch, nr)
-        vks_linop = self.hmodel.get_vext(vks)
+        vks_linop, _ = self.eks_model.potential_linop(half_densinfo, half_densinfo) # (nbatch, nr)
         vext_linop = self.hmodel.get_vext(self.vext)
 
         # compute the eigenpairs
@@ -172,10 +170,8 @@ class dft(BaseQCCalc):
             neig = self.norb,
             M = self.hmodel.get_overlap(),
             **self.eigen_options)
-        # eigvals, eigvecs = self.eigen_model(hparams, rparams=rparams)
 
-        # return eigvals, eigvecs, vks_linop
-        return eigvals, eigvecs, vks_linop, vks
+        return eigvals, eigvecs, vks_linop
 
     ############# parameters setup functions #############
     def __get_eks_model(self, eks_model):
