@@ -1,19 +1,26 @@
+import pylibxc
+from ddft.eks.libxc import LibXCLDA
+
+# to be deprecated
 from ddft.eks.xlda import xLDA
 from ddft.eks.clda import cLDA_PW
 
-__all__ = ["get_xc"]
+__all__ = ["get_xc", "get_libxc"]
 
+# to be deprecated
 def _get_x(xstr):
     return {
         "lda": xLDA,
     }[xstr]()
 
+# to be deprecated
 def _get_c(cstr):
     return {
         "lda": cLDA_PW,
         "lda_pw": cLDA_PW,
     }[cstr]()
 
+# to be deprecated
 def get_xc(xcstr):
     xclist = [s.strip().lower() for s in xcstr.split(",")]
     if len(xclist) == 1:
@@ -32,3 +39,12 @@ def get_xc(xcstr):
             raise ValueError("Invalid xc string: '%s'" % xcstr)
     else:
         raise ValueError("Invalid xc string: '%s'" % xcstr)
+
+def get_libxc(name):
+    obj = pylibxc.LibXCFunctional(name, "unpolarized")
+    family = obj.get_family()
+    del obj
+    if family == 1:  # LDA
+        return LibXCLDA(name)
+    else:
+        raise NotImplementedError("LibXC wrapper for family %d has not been implemented" % family)

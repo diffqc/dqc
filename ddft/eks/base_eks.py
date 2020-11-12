@@ -156,6 +156,108 @@ class AddEKS(BaseEKS):
         return self.a.getfwdparamnames(prefix=prefix+"a.") + \
                self.b.getfwdparamnames(prefix=prefix+"b.")
 
+class BaseLDA(BaseEKS):
+    @abstractmethod
+    def energy_unpol(self, rho):
+        """
+        Returns energy density given the density for unpolarized case.
+
+        Arguments
+        ---------
+        rho: torch.Tensor
+            The total density value.
+
+        Returns
+        -------
+        ene: torch.Tensor
+            The energy density per unit volume with the same shape as ``rho``.
+        """
+        pass
+
+    @abstractmethod
+    def energy_pol(self, rho_u, rho_d):
+        """
+        Returns energy density given the density for polarized case.
+
+        Arguments
+        ---------
+        rho_u: torch.Tensor
+            The spin-up density value.
+        rho_d: torch.Tensor
+            The spin-down density value.
+
+        Returns
+        -------
+        ene: torch.Tensor
+            The energy density per unit volume with the same shape as ``rho``.
+        """
+        pass
+
+    @abstractmethod
+    def potential_unpol(self, rho):
+        """
+        Returns vxc given the density for unpolarized case.
+
+        Arguments
+        ---------
+        rho: torch.Tensor
+            The total density value.
+
+        Returns
+        -------
+        vrho: torch.Tensor
+            The derivative of energy density per unit volume w.r.t. density.
+            Has the same shape as ``rho``.
+        """
+        pass
+
+    @abstractmethod
+    def potential_unpol(self, rho_u, rho_d):
+        """
+        Returns vxc given the density for polarized case.
+
+        Arguments
+        ---------
+        rho_u: torch.Tensor
+            The spin-up density value.
+        rho_d: torch.Tensor
+            The spin-down density value.
+
+        Returns
+        -------
+        vrho: torch.Tensor
+            The derivative of energy density per unit volume w.r.t. density.
+            Has shape of ``(2, *rho.shape)``.
+        """
+        pass
+
+    @abstractmethod
+    def getfwdparamnames(self, prefix=""):
+        pass
+
+    def forward(self, densinfo_u, densinfo_d):
+        rho = densinfo_u.density + densinfo_d.density
+        if id(densinfo_u) == id(densinfo_d):
+            ev = self.energy_unpol(rho)
+        else:
+            ev = self.energy_pol(densinfo_u.density, densinfo_d.density)
+        return ev
+
+    def potential_linop(self, densinfo_u, densinfo_d):
+        # obtain the potential as a function of space
+        if id(densinfo_u) == id(densinfo_d):
+            vxc_u = self.potential_unpol(densinfo_u)
+            vxc_d = vxc_u
+        else:
+            vxc_ud = self.potential_pol(densinfo_u, densinfo_d)
+            vxc_u = vxc_ud[0]
+            vxc_d = vxc_ud[1]
+
+        # get the linear operator
+        vxc_ulinop = self.hmodel.get_vext(vxc_u)
+        vxc_dlinop = self.hmodel.get_vext(vxc_d)
+        return vxc_ulinop, vxc_dlinop
+
 def _normalize(a):
     if isinstance(a, BaseEKS):
         return a

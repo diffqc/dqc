@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 from ddft.eks import BaseEKS, Hartree
+from ddft.eks.factory import get_libxc
 from ddft.utils.safeops import safepow
 from ddft.utils.datastruct import DensityInfo
 from ddft.grids.base_grid import BaseRadialAngularGrid, Base3DGrid
@@ -18,6 +19,23 @@ def test_hartree_becke():
     rtol, atol = 6e-3, 1e-2
     run_hartree_test("becke", "exp", rtol=rtol, atol=atol)
     run_hartree_test("becke", "exp-twocentres", rtol=rtol, atol=atol)
+
+def test_libxc_lda():
+    lda = get_libxc("lda_c_pw")
+
+    torch.manual_seed(123)
+    rho = torch.rand((1,), dtype=torch.float64).requires_grad_()
+    rho2 = torch.rand((1,), dtype=torch.float64).requires_grad_()
+
+    torch.autograd.gradcheck(lda.energy_unpol, (rho,))
+    torch.autograd.gradgradcheck(lda.energy_unpol, (rho,))
+    torch.autograd.gradcheck(lda.potential_unpol, (rho,))
+    torch.autograd.gradgradcheck(lda.potential_unpol, (rho,))
+
+    torch.autograd.gradcheck(lda.energy_pol, (rho, rho2))
+    torch.autograd.gradgradcheck(lda.energy_pol, (rho, rho2))
+    torch.autograd.gradcheck(lda.potential_pol, (rho, rho2))
+    torch.autograd.gradgradcheck(lda.potential_pol, (rho, rho2))
 
 def run_hartree_test(gridname, fcnname, rtol=1e-5, atol=1e-8):
     dtype = torch.float64
