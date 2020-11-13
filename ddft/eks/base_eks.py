@@ -236,8 +236,8 @@ class BaseLDA(BaseEKS):
         pass
 
     def forward(self, densinfo_u, densinfo_d):
-        rho = densinfo_u.density + densinfo_d.density
         if id(densinfo_u) == id(densinfo_d):
+            rho = densinfo_u.density + densinfo_d.density
             ev = self.energy_unpol(rho)
         else:
             ev = self.energy_pol(densinfo_u.density, densinfo_d.density)
