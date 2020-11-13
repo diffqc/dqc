@@ -5,7 +5,8 @@ __all__ = ["DensityInfo"]
 # density info
 _density_info_fields = [
     "density",  # torch.Tensor of density in the grid
-    "gradn",  # tuple of torch.Tensor representing (gradx_n, grady_n, gradz_n)
+    "gradn",  # torch.Tensor representing (gradx_n, grady_n, gradz_n) with shape
+              # ``(3, ...)``
     "laplacen",  # torch.Tensor of the laplace of the density
 ]
 DensityInfo = namedtuple(
@@ -16,8 +17,7 @@ DensityInfo = namedtuple(
 def _add_densinfo(a, b):
     return DensityInfo(
         density = a.density + b.density,
-        gradn = tuple((agn + bgn) for (agn, bgn) in zip(a.gradn, b.gradn)) \
-                if a.gradn is not None else None,
+        gradn = a.gradn + b.gradn if a.gradn is not None else None,
         laplacen = a.laplacen + b.laplacen if a.laplacen is not None else None,
     )
 
@@ -25,7 +25,7 @@ def _mul_densinfo(a, f):
     assert not isinstance(f, DensityInfo)
     return DensityInfo(
         density = a.density * f,
-        gradn = tuple((agn * f) for agn in a.gradn) if a.gradn is not None else None,
+        gradn = a.gradn * f if a.gradn is not None else None,
         laplacen = a.laplacen * f if a.laplacen is not None else None,
     )
 
