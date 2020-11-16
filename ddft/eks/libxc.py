@@ -322,23 +322,23 @@ def _extract_return_gga(ret, deriv):
     a = lambda v: torch.as_tensor(v.T)
     return tuple(a(ret[key]) for key in GGA_KEYS[deriv])
 
-if __name__ == "__main__":
-    lxc = LibXCGGA("gga_x_pbe")
-    torch.manual_seed(123)
-    rho = torch.rand((1,), dtype=torch.float64).requires_grad_()
-    rho2 = torch.rand((1,), dtype=torch.float64).requires_grad_()
-    sigma = torch.rand((1,), dtype=torch.float64).requires_grad_()
-    sigma2 = torch.rand((1,), dtype=torch.float64).requires_grad_()
-    sigma3 = torch.rand((1,), dtype=torch.float64).requires_grad_()
-    param_unpol = (rho, sigma)
-    param_pol = (rho, rho2, sigma, sigma2, sigma3)
-
-    torch.autograd.gradcheck(lxc.energy_unpol, param_unpol)
-    torch.autograd.gradgradcheck(lxc.energy_unpol, param_unpol)
-    torch.autograd.gradcheck(lxc.potential_unpol, param_unpol)
-    torch.autograd.gradgradcheck(lxc.potential_unpol, param_unpol)
-
-    torch.autograd.gradcheck(lxc.energy_pol, param_pol)
-    torch.autograd.gradgradcheck(lxc.energy_pol, param_pol)
-    torch.autograd.gradcheck(lxc.potential_pol, param_pol)
-    torch.autograd.gradgradcheck(lxc.potential_pol, param_pol)
+# if __name__ == "__main__":
+#     lxc = LibXCGGA("gga_x_pbe")
+#     torch.manual_seed(123)
+#     rho = torch.rand((1,), dtype=torch.float64).requires_grad_()
+#     rho2 = torch.rand((1,), dtype=torch.float64).requires_grad_()
+#     sigma = torch.rand((1,), dtype=torch.float64).requires_grad_()
+#     sigma2 = torch.rand((1,), dtype=torch.float64).requires_grad_()
+#     sigma3 = torch.rand((1,), dtype=torch.float64).requires_grad_()
+#     param_unpol = (rho, sigma)
+#     param_pol = (rho, rho2, sigma, sigma2, sigma3)
+#
+#     torch.autograd.gradcheck(lxc.energy_unpol, param_unpol)
+#     torch.autograd.gradgradcheck(lxc.energy_unpol, param_unpol)
+#     torch.autograd.gradcheck(lxc.potential_unpol, param_unpol)
+#     torch.autograd.gradgradcheck(lxc.potential_unpol, param_unpol)
+#
+#     torch.autograd.gradcheck(lxc.energy_pol, param_pol)
+#     torch.autograd.gradgradcheck(lxc.energy_pol, param_pol)
+#     torch.autograd.gradcheck(lxc.potential_pol, param_pol)
+#     torch.autograd.gradgradcheck(lxc.potential_pol, param_pol)
