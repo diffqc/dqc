@@ -132,7 +132,7 @@ class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
         # setup the basis
         self.rgrid = self.grid.rgrid_in_xyz # (nr, 3)
         rab = self.rgrid - self.centres.unsqueeze(1) # (nbasis*nelmts, nr, 3)
-        dist_sq = (rab*rab).sum(dim=-1) # (nbasis*nelmts, nr)
+        dist_sq = torch.einsum("...d,...d->...", rab, rab)
         rab_power = ((rab + eps)**self.ijks.unsqueeze(1)).prod(dim=-1) # (nbasis*nelmts, nr)
         exp_factor = torch.exp(-self.alphas.unsqueeze(-1) * dist_sq)  # (nelmtstot, nr)
         basis_all = rab_power * exp_factor  # (nbasis*nelmts, nr)
@@ -199,8 +199,7 @@ class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
         # dm: (*BD, nbasis, nbasis)
         # self.basis: (nbasis, nr)
         # return: (*BD, nr), (*BD, nr, 3)
-        # dens = torch.einsum("...ij,ir,jr->...r", dm, self.basis, self.basis)
-        dens = (torch.matmul(dm, self.basis) * self.basis).sum(dim=-2) # (*BD, nr)
+        dens = torch.einsum("...ij,ir,jr->...r", dm, self.basis, self.basis)
 
         # calculate the density gradient
         gdens = None
