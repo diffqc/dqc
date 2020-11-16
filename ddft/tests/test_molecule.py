@@ -34,34 +34,31 @@ class PseudoLDA(BaseLDA):
         return [prefix+"a", prefix+"p"]
 
 @pytest.mark.parametrize(
-    "i_eks",
+    "eks_model,system_str,energy_true",
     [
-        (0, "lda,"),
-        (1, "pbe,"),
+        ("lda,", "Be 0 0 0", -14.2219 ), # pyscf: -14.2207
+        ("lda,", "Ne 0 0 0", -127.4718), # pyscf: -127.4690
+        ("pbe,", "Be 0 0 0", -14.5432 ), # pyscf: -14.5422
+        ("pbe,", "Ne 0 0 0", -128.5023), # pyscf: -128.4996
     ]
 )
-def test_atom2(i_eks):
-    i, eks_model = i_eks
-    systems = {
-        # pyscf:     -14.2207, -14.5422
-        "Be 0 0 0": [-14.2219, -14.5432][i],
-        # pyscf:     -127.4690, -128.4996
-        "Ne 0 0 0": [-127.4718, -128.5023][i],
-    }
+def test_atom(eks_model, system_str, energy_true):
     basis = "6-311++G**"
-    runtest_molsystem_energy(systems, basis, eks_model)
+    runtest_molsystem_energy(system_str, basis, eks_model, energy_true)
 
-def test_mol2():
-    systems = {
-        "H -0.5 0 0; H 0.5 0 0"  : -0.9791401, # pyscf: -0.979143262 # LDA, 6-311++G**, grid level 4
-        "Li -2.5 0 0; Li 2.5 0 0": -14.393459, # pyscf: -14.3927863482007 # LDA, 6-311++G**, grid level 4
-        "N -1 0 0; N 1 0 0"      : -107.7327, # pyscf: -107.726124017789 # LDA, 6-311++G**, grid level 4
-        "F -1.25 0 0; F 1.25 0 0": -197.0101, # pyscf: -197.005308558326 # LDA, 6-311++G**, grid level 4
-        "C -1 0 0; O 1 0 0"      : -111.49737, # pyscf: -111.490687028797 # LDA, 6-311++G**, grid level 4
-    }
+@pytest.mark.parametrize(
+    "eks_model,system_str,energy_true",
+    [
+        ("lda,", "H -0.5 0 0; H 0.5 0 0", -0.9791401),  # pyscf: -0.979143262
+        ("lda,", "Li -2.5 0 0; Li 2.5 0 0", -14.393459),  # pyscf: -14.3927863482007
+        ("lda,", "N -1 0 0; N 1 0 0", -107.7327),  # pyscf: -107.726124017789
+        ("lda,", "F -1.25 0 0; F 1.25 0 0", -197.0101),  # pyscf: -197.005308558326
+        ("lda,", "C -1 0 0; O 1 0 0", -111.49737),  # pyscf: -111.490687028797
+    ]
+)
+def test_mol(eks_model, system_str, energy_true):
     basis = "6-311++G**"
-    eks_model = "lda,"
-    runtest_molsystem_energy(systems, basis, eks_model)
+    runtest_molsystem_energy(system_str, basis, eks_model, energy_true)
 
 def test_atom_grad():
     isystem = 0
@@ -170,14 +167,15 @@ def runtest_molsystem_grad(a, p, get_system, systemargs,
         print("2 backward: %fs" % (t3-t2))
         print(dedxx)
 
-def runtest_molsystem_energy(systems, basis, eks_model):
-    for s in systems:
-        energy_true = systems[s]
-        m = mol(s, basis)
-        scf = dft(m, eks_model=eks_model)
-        energy = scf.energy()
-        print("Energy: %.7f" % energy)
+def runtest_molsystem_energy(system_str, basis, eks_model, energy_true=None):
+    m = mol(system_str, basis)
+    scf = dft(m, eks_model=eks_model)
+    energy = scf.energy()
+    print("Energy: %.7f" % energy)
+    if energy_true is not None:
         assert torch.allclose(energy, torch.tensor(energy_true, dtype=energy.dtype))
+    else:
+        return energy
 
 # functions used to get the true values of grad x of molecules
 def calc_molsystem_energy_grad(atomzs, dist_central, eps=1e-2):
