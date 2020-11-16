@@ -21,21 +21,42 @@ def test_hartree_becke():
     run_hartree_test("becke", "exp-twocentres", rtol=rtol, atol=atol)
 
 def test_libxc_lda():
-    lda = get_libxc("lda_c_pw")
+    lxc = get_libxc("lda_c_pw")
 
     torch.manual_seed(123)
     rho = torch.rand((1,), dtype=torch.float64).requires_grad_()
     rho2 = torch.rand((1,), dtype=torch.float64).requires_grad_()
 
-    torch.autograd.gradcheck(lda.energy_unpol, (rho,))
-    torch.autograd.gradgradcheck(lda.energy_unpol, (rho,))
-    torch.autograd.gradcheck(lda.potential_unpol, (rho,))
-    torch.autograd.gradgradcheck(lda.potential_unpol, (rho,))
+    torch.autograd.gradcheck(lxc.energy_unpol, (rho,))
+    torch.autograd.gradgradcheck(lxc.energy_unpol, (rho,))
+    torch.autograd.gradcheck(lxc.potential_unpol, (rho,))
+    torch.autograd.gradgradcheck(lxc.potential_unpol, (rho,))
 
-    torch.autograd.gradcheck(lda.energy_pol, (rho, rho2))
-    torch.autograd.gradgradcheck(lda.energy_pol, (rho, rho2))
-    torch.autograd.gradcheck(lda.potential_pol, (rho, rho2))
-    torch.autograd.gradgradcheck(lda.potential_pol, (rho, rho2))
+    torch.autograd.gradcheck(lxc.energy_pol, (rho, rho2))
+    torch.autograd.gradgradcheck(lxc.energy_pol, (rho, rho2))
+    torch.autograd.gradcheck(lxc.potential_pol, (rho, rho2))
+    torch.autograd.gradgradcheck(lxc.potential_pol, (rho, rho2))
+
+def test_libxc_gga():
+    lxc = get_libxc("gga_x_pbe")
+    torch.manual_seed(123)
+    rho = torch.rand((1,), dtype=torch.float64).requires_grad_()
+    rho2 = torch.rand((1,), dtype=torch.float64).requires_grad_()
+    sigma = torch.rand((1,), dtype=torch.float64).requires_grad_()
+    sigma2 = torch.rand((1,), dtype=torch.float64).requires_grad_()
+    sigma3 = torch.rand((1,), dtype=torch.float64).requires_grad_()
+    param_unpol = (rho, sigma)
+    param_pol = (rho, rho2, sigma, sigma2, sigma3)
+
+    torch.autograd.gradcheck(lxc.energy_unpol, param_unpol)
+    torch.autograd.gradgradcheck(lxc.energy_unpol, param_unpol)
+    torch.autograd.gradcheck(lxc.potential_unpol, param_unpol)
+    torch.autograd.gradgradcheck(lxc.potential_unpol, param_unpol)
+
+    torch.autograd.gradcheck(lxc.energy_pol, param_pol)
+    torch.autograd.gradgradcheck(lxc.energy_pol, param_pol)
+    torch.autograd.gradcheck(lxc.potential_pol, param_pol)
+    torch.autograd.gradgradcheck(lxc.potential_pol, param_pol)
 
 def run_hartree_test(gridname, fcnname, rtol=1e-5, atol=1e-8):
     dtype = torch.float64

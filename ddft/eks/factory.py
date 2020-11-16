@@ -1,5 +1,5 @@
 import pylibxc
-from ddft.eks.libxc import LibXCLDA
+from ddft.eks.libxc import LibXCLDA, LibXCGGA
 
 # to be deprecated
 from ddft.eks.xlda import xLDA
@@ -46,5 +46,7 @@ def get_libxc(name):
     del obj
     if family == 1:  # LDA
         return LibXCLDA(name)
+    elif family == 2:  # GGA
+        return LibXCGGA(name)
     else:
         raise NotImplementedError("LibXC wrapper for family %d has not been implemented" % family)

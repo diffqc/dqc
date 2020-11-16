@@ -212,7 +212,7 @@ class BaseLDA(BaseEKS):
         pass
 
     @abstractmethod
-    def potential_unpol(self, rho_u, rho_d):
+    def potential_pol(self, rho_u, rho_d):
         """
         Returns vxc given the density for polarized case.
 
@@ -246,17 +246,182 @@ class BaseLDA(BaseEKS):
     def potential_linop(self, densinfo_u, densinfo_d):
         # obtain the potential as a function of space
         if id(densinfo_u) == id(densinfo_d):
-            vxc_u = self.potential_unpol(densinfo_u)
-            vxc_d = vxc_u
+            rho = densinfo_u.density + densinfo_d.density
+            vxc_u = self.potential_unpol(rho)
+
+            vxc_ulinop = self.hmodel.get_vext(vxc_u)
+            return vxc_ulinop, vxc_ulinop
         else:
-            vxc_ud = self.potential_pol(densinfo_u, densinfo_d)
+            vxc_ud = self.potential_pol(densinfo_u.density, densinfo_d.density)
             vxc_u = vxc_ud[0]
             vxc_d = vxc_ud[1]
 
-        # get the linear operator
-        vxc_ulinop = self.hmodel.get_vext(vxc_u)
-        vxc_dlinop = self.hmodel.get_vext(vxc_d)
-        return vxc_ulinop, vxc_dlinop
+            # get the linear operator
+            vxc_ulinop = self.hmodel.get_vext(vxc_u)
+            vxc_dlinop = self.hmodel.get_vext(vxc_d)
+            return vxc_ulinop, vxc_dlinop
+
+class BaseGGA(BaseEKS):
+    @abstractmethod
+    def energy_unpol(self, rho, sigma):
+        """
+        Returns energy density given the density for unpolarized case.
+
+        Arguments
+        ---------
+        rho: torch.Tensor
+            The total density value.
+        sigma: torch.Tensor
+            Contracted density gradient, i.e.
+            ``gradx(n)**2 + grady(n)**2 + gradz(n)**2``.
+            Must have the same shape as ``rho``.
+
+        Returns
+        -------
+        ene: torch.Tensor
+            The energy density per unit volume with the same shape as ``rho``.
+        """
+        pass
+
+    @abstractmethod
+    def energy_pol(self, rho_u, rho_d,
+                   sigma_uu, sigma_ud, sigma_dd):
+        """
+        Returns energy density given the density for polarized case.
+        All arguments must have the same shape
+
+        Arguments
+        ---------
+        rho_u: torch.Tensor
+            The spin-up density value.
+        rho_d: torch.Tensor
+            The spin-down density value.
+        sigma_uu: torch.Tensor
+            Contracted density gradient for spin-up and spin-up, i.e.
+            ``gradx(nu)*gradx(nu) + grady(nu)*grady(nu) + gradz(nu)*gradz(nu)``.
+        sigma_ud: torch.Tensor
+            Contracted density gradient for spin-up and spin-down.
+        sigma_dd: torch.Tensor
+            Contracted density gradient for spin-down and spin-down.
+
+        Returns
+        -------
+        ene: torch.Tensor
+            The energy density per unit volume with the same shape as ``rho_u``.
+        """
+        pass
+
+    @abstractmethod
+    def potential_unpol(self, rho, sigma):
+        """
+        Returns vxc given the density for unpolarized case.
+
+        Arguments
+        ---------
+        rho: torch.Tensor
+            The total density value.
+        sigma: torch.Tensor
+            Contracted density gradient, i.e.
+            ``gradx(n)**2 + grady(n)**2 + gradz(n)**2``.
+
+        Returns
+        -------
+        vrho: torch.Tensor
+            The derivative of energy density per unit volume w.r.t. density.
+            Has the same shape as ``rho``.
+        vsigma: torch.Tensor
+            The derivative of energy density per unit volume w.r.t. contracted
+            gradient density (or sigma).
+            Has the same shape as ``sigma``.
+        """
+        pass
+
+    @abstractmethod
+    def potential_pol(self, rho_u, rho_d,
+                        sigma_uu, sigma_ud, sigma_dd):
+        """
+        Returns vxc given the density for polarized case.
+
+        Arguments
+        ---------
+        rho_u: torch.Tensor
+            The spin-up density value.
+        rho_d: torch.Tensor
+            The spin-down density value.
+        sigma_uu: torch.Tensor
+            Contracted density gradient for spin-up and spin-up, i.e.
+            ``gradx(nu)*gradx(nu) + grady(nu)*grady(nu) + gradz(nu)*gradz(nu)``.
+        sigma_ud: torch.Tensor
+            Contracted density gradient for spin-up and spin-down.
+        sigma_dd: torch.Tensor
+            Contracted density gradient for spin-down and spin-down.
+
+        Returns
+        -------
+        vrho: torch.Tensor
+            The derivative of energy density per unit volume w.r.t. density.
+            Has shape of ``(2, *rho.shape)``.
+        vsigma: torch.Tensor
+            The derivative of energy density per unit volume w.r.t. contracted
+            density gradient.
+            Has shape of ``(3, *sigma.shape)``
+        """
+        pass
+
+    @abstractmethod
+    def getfwdparamnames(self, prefix=""):
+        pass
+
+    def forward(self, densinfo_u, densinfo_d):
+        if id(densinfo_u) == id(densinfo_d):  # unpolarized
+            rho = densinfo_u.density + densinfo_d.density
+            gradn = densinfo_u.gradn + densinfo_d.gradn  # (3, ...)
+            sigma = torch.sum(gradn * gradn, dim=0)  # (...)
+            ev = self.energy_unpol(rho, sigma)
+        else:
+            rho_u = densinfo_u.density
+            rho_d = densinfo_d.density
+            grad_u = densinfo_u.gradn
+            grad_d = densinfo_d.gradn
+            sigma_uu = torch.sum(grad_u * grad_u, dim=0)
+            sigma_ud = torch.sum(grad_u * grad_d, dim=0)
+            sigma_dd = torch.sum(grad_d * grad_d, dim=0)
+            ev = self.energy_pol(rho_u, rho_d, sigma_uu, sigma_ud, sigma_dd)
+        return ev
+
+    def potential_linop(self, densinfo_u, densinfo_d):
+        # obtain the potential and grad potential as a function of space
+        if id(densinfo_u) == id(densinfo_d):  # unpolarized
+            rho = densinfo_u.density + densinfo_d.density
+            gradn = densinfo_u.gradn + densinfo_d.gradn  # (3, ...)
+            sigma = torch.sum(gradn * gradn, dim=0)  # (...)
+            vrho, vsigma = self.potential_unpol(rho, sigma)
+            vxc_u = vrho
+            grad_vxc_u = 2 * vsigma * gradn
+
+            vxc_ulinop = self.hmodel.get_vext(vxc_u) + \
+                         self.hmodel.get_grad_vext(grad_vxc_u)
+            return vxc_ulinop, vxc_ulinop
+        else:
+            rho_u = densinfo_u.density
+            rho_d = densinfo_d.density
+            grad_u = densinfo_u.gradn
+            grad_d = densinfo_d.gradn
+            sigma_uu = torch.sum(grad_u * grad_u, dim=0)
+            sigma_ud = torch.sum(grad_u * grad_d, dim=0)
+            sigma_dd = torch.sum(grad_d * grad_d, dim=0)
+
+            # calculate the potential and grad potential
+            vrho, vsigma = self.potential_pol(rho_u, rho_d, sigma_uu, sigma_ud, sigma_dd)
+            vxc_u, vxc_d = vrho
+            grad_vxc_u = 2 * vsigma[0] * grad_u + vsigma[1] * grad_d
+            grad_vxc_d = 2 * vsigma[2] * grad_d + vsigma[1] * grad_u
+
+            vxc_ulinop = self.hmodel.get_vext(vxc_u) + \
+                         self.hmodel.get_grad_vext(grad_vxc_u)
+            vxc_dlinop = self.hmodel.get_vext(vxc_d) + \
+                         self.hmodel.get_grad_vext(grad_vxc_d)
+            return vxc_ulinop, vxc_dlinop
 
 def _normalize(a):
     if isinstance(a, BaseEKS):
