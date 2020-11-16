@@ -44,6 +44,10 @@ class dft(BaseQCCalc):
         self.eks_model = eks_model + Hartree()
         self.eks_model.set_hmodel(self.hmodel)
 
+        # set up the basis for hmodel
+        gradlevel = (1 if eks_model.need_gradn else 0)
+        self.hmodel.set_basis(gradlevel=gradlevel)
+
         # set up the eigen module for the forward pass and scf module
         eigen_options = set_default_option(
             self.__get_default_eigen_options(),
@@ -72,7 +76,9 @@ class dft(BaseQCCalc):
         yout = yout.view(nbatch, nbasis_tot, nbasis_tot) # (nbatch, nbasis_tot, nbasis_tot)
 
         self.scf_dm = self.__fock_to_dm(yout)
-        self.scf_densinfo = self.hmodel.dm2dens(self.scf_dm)
+        self.scf_densinfo = self.hmodel.dm2dens(
+            self.scf_dm,
+            calc_gradn=self.eks_model.need_gradn)
 
         # postprocess properties
         self.scf_energy = None

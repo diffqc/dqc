@@ -33,13 +33,22 @@ class PseudoLDA(BaseLDA):
     def getfwdparamnames(self, prefix=""):
         return [prefix+"a", prefix+"p"]
 
-def test_atom2():
+@pytest.mark.parametrize(
+    "i_eks",
+    [
+        (0, "lda,"),
+        (1, "pbe,"),
+    ]
+)
+def test_atom2(i_eks):
+    i, eks_model = i_eks
     systems = {
-        "Be 0 0 0": -14.2219,
-        "Ne 0 0 0": -127.4718
+        # pyscf:     -14.2207, -14.5422
+        "Be 0 0 0": [-14.2219, -14.5432][i],
+        # pyscf:     -127.4690, -128.4996
+        "Ne 0 0 0": [-127.4718, -128.5023][i],
     }
     basis = "6-311++G**"
-    eks_model = "lda,"
     runtest_molsystem_energy(systems, basis, eks_model)
 
 def test_mol2():

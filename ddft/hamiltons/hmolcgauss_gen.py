@@ -112,22 +112,65 @@ class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
         self.kin_coul_mat = (self.kin_coul_mat + self.kin_coul_mat.transpose(-2,-1)) * 0.5
         self.olp_mat = (self.olp_mat + self.olp_mat.transpose(-2,-1)) * 0.5
 
-        # get the basis
+        # basis
+        self.basis = None
+        self.grad_basis = None
+
+        # parameters for set_basis
+        self.centres = centres  # (nelmtstot, 3)
+        self.ijks = ijks  # (nelmtstot, 3)
+        self.coeffs = coeffs  # (nelmtstot,)
+        self.alphas = alphas  # (nelmtstot,)
+        self.norm = norm  # (nbasis,)
+
+    def set_basis(self, gradlevel=0):
+        assert gradlevel >= 0 and gradlevel <= 2
+        eps = 1e-15
+        dtype = self.norm.dtype
+        device = self.norm.device
+
+        # setup the basis
         self.rgrid = self.grid.rgrid_in_xyz # (nr, 3)
-        rab = self.rgrid - centres.unsqueeze(1) # (nbasis*nelmts, nr, 3)
+        rab = self.rgrid - self.centres.unsqueeze(1) # (nbasis*nelmts, nr, 3)
         dist_sq = (rab*rab).sum(dim=-1) # (nbasis*nelmts, nr)
-        rab_power = ((rab+1e-15)**ijks.unsqueeze(1)).prod(dim=-1) # (nbasis*nelmts, nr)
-        basis_all = rab_power * torch.exp(-alphas.unsqueeze(-1) * dist_sq) # (nbasis*nelmts, nr)
-        basis_all_coeff = basis_all * coeffs.unsqueeze(-1) # (nelmtstot, nr)
+        rab_power = ((rab + eps)**self.ijks.unsqueeze(1)).prod(dim=-1) # (nbasis*nelmts, nr)
+        exp_factor = torch.exp(-self.alphas.unsqueeze(-1) * dist_sq)  # (nelmtstot, nr)
+        basis_all = rab_power * exp_factor  # (nbasis*nelmts, nr)
+        basis_all_coeff = basis_all * self.coeffs.unsqueeze(-1) # (nelmtstot, nr)
         # contract the basis
-        if isinstance(self.nelmts, torch.Tensor):
-            basis = basis_all_coeff.cumsum(dim=0)[self.csnelmts,:] # (nbasis, nr)
-            basis = torch.cat((basis[:1,:], basis[1:,:]-basis[:-1,:]), dim=0) # (nbasis, nr)
-        else:
-            basis = basis_all_coeff.view(self.nbasis, self.nelmts, -1).sum(dim=1) # (nbasis, nr)
-        norm_basis = basis * norm.squeeze(0).unsqueeze(-1)
+        basis = self._contract_basis(basis_all_coeff)  # (nbasis, nr)
+        norm_basis = basis * self.norm.squeeze(0).unsqueeze(-1)
         self.basis = norm_basis # (nbasis, nr)
         self.basis_dvolume = self.basis * self.grid.get_dvolume() # (nbasis, nr)
+
+        if gradlevel == 0:
+            return
+
+        # setup the gradient of the basis
+        grad_basis = (basis_all * (-2 * self.alphas.unsqueeze(-1))).unsqueeze(-1)
+        grad_basis = grad_basis * rab  # (nelmtstot, nr, 3)
+        # (nelmtstot, 3, 3)
+        ijks_min_1 = self.ijks.unsqueeze(-1) - torch.eye(3, dtype=dtype, device=device)
+        grad_basis2 = ((rab.unsqueeze(-1) + eps)**(ijks_min_1.unsqueeze(1))).prod(dim=-2)  # (nelmtstot, nr, 3)
+        grad_basis2 *= self.ijks.unsqueeze(1)
+        grad_basis2 *= exp_factor.unsqueeze(-1)
+        grad_basis += grad_basis2  # (nelmtstot, nr, 3)
+        grad_basis *= self.coeffs.unsqueeze(-1).unsqueeze(-1)  # (nelmtstot, nr, 3)
+        grad_basis = self._contract_basis(grad_basis)  # (nbasis, nr, 3)
+        grad_basis_norm = grad_basis * self.norm.unsqueeze(-1).unsqueeze(-1)
+        self.grad_basis = grad_basis_norm  # (nbasis, nr, 3)
+
+    def _contract_basis(self, basis_inp):
+        basis_shape = basis_inp.shape[1:]
+        basis_inp = basis_inp.view(basis_inp.shape[0], -1)
+
+        if isinstance(self.nelmts, torch.Tensor):
+            basis = basis_inp.cumsum(dim=0)[self.csnelmts,:] # (nbasis, nr)
+            basis = torch.cat((basis[:1,:], basis[1:,:]-basis[:-1,:]), dim=0) # (nbasis, nr)
+        else:
+            basis = basis_inp.view(self.nbasis, self.nelmts, -1).sum(dim=1) # (nbasis, nr)
+
+        return basis.view(-1, *basis_shape)
 
     def get_kincoul(self):
         # kin_coul_mat: (nbasis, nbasis)
@@ -135,19 +178,39 @@ class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
 
     def get_vext(self, vext):
         # vext: (..., nr)
+        if self.basis is None:
+            raise RuntimeError("Please call `set_basis(gradlevel>=0)` to call this function")
         mat = torch.einsum("...r,br,cr->...bc", vext, self.basis_dvolume, self.basis)
         mat = (mat + mat.transpose(-2,-1)) * 0.5 # ensure the symmetricity
+        return xt.LinearOperator.m(mat, is_hermitian=True)
+
+    def get_grad_vext(self, grad_vext):
+        # grad_vext: (..., nr, 3)
+        if self.grad_basis is None:
+            raise RuntimeError("Please call `set_basis(gradlevel>=1)` to call this function")
+        mat = torch.einsum("...rd,br,crd->...bc", grad_vext, self.basis_dvolume, self.grad_basis)
+        mat = mat + mat.transpose(-2, -1)  # Martin, et. al., eq. (8.14)
         return xt.LinearOperator.m(mat, is_hermitian=True)
 
     def get_overlap(self):
         return xt.LinearOperator.m(self.olp_mat, is_hermitian=True)
 
-    def dm2dens(self, dm, calc_gradn=False): # batchified
+    def dm2dens(self, dm, calc_gradn=False):
         # dm: (*BD, nbasis, nbasis)
-        # self.basis: (*BB, nbasis, nr)
-        # return: (*BDM, nr)
-        dens = (torch.matmul(dm, self.basis) * self.basis).sum(dim=-2) # (*BDM, nr)
-        res = DensityInfo(density=dens, gradn=None)
+        # self.basis: (nbasis, nr)
+        # return: (*BD, nr), (*BD, nr, 3)
+        # dens = torch.einsum("...ij,ir,jr->...r", dm, self.basis, self.basis)
+        dens = (torch.matmul(dm, self.basis) * self.basis).sum(dim=-2) # (*BD, nr)
+
+        # calculate the density gradient
+        gdens = None
+        if calc_gradn:
+            if self.grad_basis is None:
+                raise RuntimeError("Please call `set_basis(gradlevel>=1)` to calculate the density gradient")
+            # (*BD, nr, 3)
+            gdens = torch.einsum("...ij,ird,jr->...rd", 2 * dm, self.grad_basis, self.basis)
+
+        res = DensityInfo(density=dens, gradn=gdens)
         return res
 
     def getparamnames(self, methodname, prefix=""):

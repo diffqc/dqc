@@ -6,7 +6,7 @@ __all__ = ["DensityInfo"]
 _density_info_fields = [
     "density",  # torch.Tensor of density in the grid
     "gradn",  # torch.Tensor representing (gradx_n, grady_n, gradz_n) with shape
-              # ``(3, ...)``
+              # ``(..., 3)``
     "laplacen",  # torch.Tensor of the laplace of the density
 ]
 DensityInfo = namedtuple(

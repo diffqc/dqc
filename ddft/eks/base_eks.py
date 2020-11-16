@@ -326,20 +326,24 @@ class BaseGGA(BaseEKS):
     def getfwdparamnames(self, prefix=""):
         pass
 
+    @property
+    def need_gradn(self):
+        return True
+
     def forward(self, densinfo_u, densinfo_d):
         if id(densinfo_u) == id(densinfo_d):  # unpolarized
             rho = densinfo_u.density + densinfo_d.density
-            gradn = densinfo_u.gradn + densinfo_d.gradn  # (3, ...)
-            sigma = torch.sum(gradn * gradn, dim=0)  # (...)
+            gradn = densinfo_u.gradn + densinfo_d.gradn  # (..., 3)
+            sigma = torch.sum(gradn * gradn, dim=-1)  # (...)
             ev = self.energy_unpol(rho, sigma)
         else:
             rho_u = densinfo_u.density
             rho_d = densinfo_d.density
             grad_u = densinfo_u.gradn
             grad_d = densinfo_d.gradn
-            sigma_uu = torch.sum(grad_u * grad_u, dim=0)
-            sigma_ud = torch.sum(grad_u * grad_d, dim=0)
-            sigma_dd = torch.sum(grad_d * grad_d, dim=0)
+            sigma_uu = torch.sum(grad_u * grad_u, dim=-1)
+            sigma_ud = torch.sum(grad_u * grad_d, dim=-1)
+            sigma_dd = torch.sum(grad_d * grad_d, dim=-1)
             ev = self.energy_pol(rho_u, rho_d, sigma_uu, sigma_ud, sigma_dd)
         return ev
 
@@ -347,11 +351,11 @@ class BaseGGA(BaseEKS):
         # obtain the potential and grad potential as a function of space
         if id(densinfo_u) == id(densinfo_d):  # unpolarized
             rho = densinfo_u.density + densinfo_d.density
-            gradn = densinfo_u.gradn + densinfo_d.gradn  # (3, ...)
-            sigma = torch.sum(gradn * gradn, dim=0)  # (...)
+            gradn = densinfo_u.gradn + densinfo_d.gradn  # (..., 3)
+            sigma = torch.sum(gradn * gradn, dim=-1)  # (...)
             vrho, vsigma = self.potential_unpol(rho, sigma)
             vxc_u = vrho
-            grad_vxc_u = 2 * vsigma * gradn
+            grad_vxc_u = 2 * vsigma.unsqueeze(-1) * gradn  # (..., 3)
 
             vxc_ulinop = self.hmodel.get_vext(vxc_u) + \
                          self.hmodel.get_grad_vext(grad_vxc_u)
@@ -361,15 +365,17 @@ class BaseGGA(BaseEKS):
             rho_d = densinfo_d.density
             grad_u = densinfo_u.gradn
             grad_d = densinfo_d.gradn
-            sigma_uu = torch.sum(grad_u * grad_u, dim=0)
-            sigma_ud = torch.sum(grad_u * grad_d, dim=0)
-            sigma_dd = torch.sum(grad_d * grad_d, dim=0)
+            sigma_uu = torch.sum(grad_u * grad_u, dim=-1)
+            sigma_ud = torch.sum(grad_u * grad_d, dim=-1)
+            sigma_dd = torch.sum(grad_d * grad_d, dim=-1)
 
             # calculate the potential and grad potential
             vrho, vsigma = self.potential_pol(rho_u, rho_d, sigma_uu, sigma_ud, sigma_dd)
             vxc_u, vxc_d = vrho
-            grad_vxc_u = 2 * vsigma[0] * grad_u + vsigma[1] * grad_d
-            grad_vxc_d = 2 * vsigma[2] * grad_d + vsigma[1] * grad_u
+            grad_vxc_u = 2 * vsigma[0].unsqueeze(-1) * grad_u + \
+                         vsigma[1].unsqueeze(-1) * grad_d  # (..., 3)
+            grad_vxc_d = 2 * vsigma[2].unsqueeze(-1) * grad_d + \
+                         vsigma[1].unsqueeze(-1) * grad_u
 
             vxc_ulinop = self.hmodel.get_vext(vxc_u) + \
                          self.hmodel.get_grad_vext(grad_vxc_u)

@@ -16,6 +16,23 @@ class BaseHamiltonGenerator(xt.EditableModule):
         self.dtype = dtype
         self.device = device
 
+    def set_basis(self, gradlevel=0):
+        """
+        Set the basis for external potential conversion to linear operator.
+
+        Arguments
+        ---------
+        gradlevel: int
+            Gradient level (0, 1, or 2) for the basis to be set up.
+            If 0, only the basis as a function of grid points in the space are
+            calculated (can calculate `get_vext`)
+            If 1, basis and the grad_(x,y,z) are calculated. It allows for the
+            calculation of ``get_vext`` and ``get_grad_vext``.
+            If 2, basis, grad_(x,y,z), and grad^2 are calculated, enabling the
+            computation of ``get_vext``, ``get_grad_vext``, and ``get_lapl_vext``.
+        """
+        pass
+
     @property
     def grid(self):
         return self._grid
@@ -34,6 +51,26 @@ class BaseHamiltonGenerator(xt.EditableModule):
         """
         pass
 
+    @abstractmethod
+    def get_overlap(self, *sparams) -> xt.LinearOperator:
+        """
+        Return the overlap matrix as LinearOperator given the parameters.
+
+        Arguments
+        ---------
+        *sparams
+            Additional parameters to specify the overlap matrix.
+
+        Returns
+        -------
+        xt.LinearOperator
+            The overlap matrix as LinearOperator with shape
+            ``(..., nbasis, nbasis)`` (the batch dimension depends on
+            ``sparams``)
+        """
+        pass
+
+    ##################### grid-dependant linear operators #####################
     @abstractmethod
     def get_vext(self, vext:torch.Tensor) -> xt.LinearOperator:
         """
@@ -54,21 +91,23 @@ class BaseHamiltonGenerator(xt.EditableModule):
         pass
 
     @abstractmethod
-    def get_overlap(self, *sparams) -> xt.LinearOperator:
+    def get_grad_vext(self, grad_vext:torch.Tensor) -> xt.LinearOperator:
         """
-        Return the overlap matrix as LinearOperator given the parameters.
+        Return the Hamiltonian LinearOperator of the external potential gradient.
 
         Arguments
         ---------
-        *sparams
-            Additional parameters to specify the overlap matrix.
+        grad_vext: torch.Tensor
+            The external potential gradient with the shape of ``(..., nr, 3)``
+            where ``nr`` is the number of points in the grid.
+            The last dimension corresponds to grad_x, grad_y, and grad_y,
+            respectively.
 
         Returns
         -------
         xt.LinearOperator
-            The overlap matrix as LinearOperator with shape
-            ``(..., nbasis, nbasis)`` (the batch dimension depends on
-            ``sparams``)
+            External potential gradient operator as Hermitian LinearOperator
+            with shape ``(..., nbasis, nbasis)``
         """
         pass
 

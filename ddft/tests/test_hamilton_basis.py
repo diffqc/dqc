@@ -32,6 +32,7 @@ def test_hamilton_molecule_cartesian_gauss():
         coeffs = torch.ones((nbasis*nelmts_val,))
         ijks = torch.zeros((nbasis*nelmts_val, 3), dtype=torch.int32)
         h = HamiltonMoleculeCGaussGenerator(grid, ijks, alphas, centres, coeffs, nelmts, atompos, atomzs)
+        h.set_basis(gradlevel=0)
 
         # compare the eigenvalues (no degeneracy because the basis is all radial)
         nevals = 5
@@ -65,6 +66,7 @@ def test_hamilton_molecule_cartesian_gauss1():
         ijks[3,:,2] = 1
         ijks = ijks.view(4*nbasis, 3)
         h = HamiltonMoleculeCGaussGenerator(grid, ijks, alphas, centres, coeffs, nelmts, atompos, atomzs)
+        h.set_basis(gradlevel=0)
 
         # compare the eigenvalues (there is degeneracy in p-orbitals)
         nevals = 6
@@ -89,6 +91,7 @@ def test_hamilton_molecule_cgto():
         bases_list = [CartCGTOBasis(atomz, basisname, dtype=dtype) for atomz in atomzs]
         # basis.construct_basis(atomzs, atompos)
         h = bases_list[0].construct_hamiltonian(grid, bases_list, atompos)
+        h.set_basis(gradlevel=0)
 
         # compare the eigenvalues (there is degeneracy in p-orbitals)
         nevals = 1
