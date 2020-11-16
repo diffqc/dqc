@@ -40,54 +40,13 @@ class BaseEKS(xt.EditableModule):
         """
         pass
 
-    # to be deprecated
-    def potential(self, densinfo_u, densinfo_d):
-        """
-        Returns the potential at each point in the grid.
-        """
-        gradn_up = densinfo_u.gradn
-        gradn_dn = densinfo_d.gradn
-
-        assert (gradn_up is None) == (gradn_dn is None)
-        if gradn_up is not None:
-            raise RuntimeError("Automatic potential finder with gradn is not "
-                               "available yet. Please implement it manually in "
-                               "class %s" % self.__class__.__name__)
-
-        if densinfo_u.density.requires_grad:
-            densinfo_u0 = densinfo_u
-        else:
-            newdens = densinfo_u.density.detach().requires_grad_()
-            densinfo_u0 = densinfo_u._replace(density=newdens)
-
-        if densinfo_d.density.requires_grad:
-            densinfo_d0 = densinfo_d
-        else:
-            newdens = densinfo_d.density.detach().requires_grad_()
-            densinfo_d0 = densinfo_u._replace(density=newdens)
-
-        with torch.enable_grad():
-            y = self.forward(densinfo_u0, densinfo_d0)
-
-        dx_u, dx_d = torch.autograd.grad(
-            outputs=y,
-            inputs=(densinfo_u0.density, densinfo_d0.density),
-            grad_outputs=torch.ones_like(y),
-            create_graph=torch.is_grad_enabled())
-
-        return dx_u, dx_d
-
-    # to be made abstract
+    @abstractmethod
     def potential_linop(self, densinfo_u, densinfo_d):
-        if densinfo_u is densinfo_d:
-            potu, potd = self.potential(densinfo_u, densinfo_d)
-            u = self.hmodel.get_vext(potu)
-            return u, u
-        else:
-            potu, potd = self.potential(densinfo_u, densinfo_d)
-            u = self.hmodel.get_vext(potu)
-            d = self.hmodel.get_vext(potd)
-        return u, d
+        """
+        Returns the linear operator of the potential for the basis for spin-up
+        and spin-down electrons.
+        """
+        pass
 
     # properties
     @property
@@ -137,11 +96,6 @@ class AddEKS(BaseEKS):
     def forward(self, densinfo_u, densinfo_d):
         return self.a(densinfo_u, densinfo_d) + \
                self.b(densinfo_u, densinfo_d)
-
-    def potential(self, densinfo_u, densinfo_d):
-        apot = self.a.potential(densinfo_u, densinfo_d)
-        bpot = self.b.potential(densinfo_u, densinfo_d)
-        return (apot[0] + bpot[0]), (apot[1] + bpot[1])
 
     def potential_linop(self, densinfo_u, densinfo_d):
         vau, vad = self.a.potential_linop(densinfo_u, densinfo_d)

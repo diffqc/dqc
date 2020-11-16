@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import torch
 import xitorch as xt
 from torch.autograd import gradcheck, gradgradcheck
-from ddft.eks import BaseEKS
+from ddft.eks.base_eks import BaseLDA, BaseEKS
 from ddft.utils.safeops import safepow
 from ddft.systems import mol
 from ddft.qccalcs import dft
@@ -17,20 +17,18 @@ Test various configurations using the molecule API.
 dtype = torch.float64
 device = torch.device("cpu")
 
-class PseudoLDA(BaseEKS):
+class PseudoLDA(BaseLDA):
+# class PseudoLDA(BaseEKS):
     def __init__(self, a, p):
         super(PseudoLDA, self).__init__()
         self.a = a
         self.p = p
 
-    def forward(self, densinfo_u, densinfo_d):
-        density = densinfo_u.density + densinfo_d.density
-        return self.a * safepow(density.abs(), self.p)
+    def energy_unpol(self, rho):
+        return self.a * safepow(rho.abs(), self.p)
 
-    def potential(self, densinfo_u, densinfo_d):
-        density = densinfo_u.density + densinfo_u.density
-        pot = self.a * self.p * safepow(density.abs(), self.p - 1)
-        return pot, pot
+    def potential_unpol(self, rho):
+        return self.a * self.p * safepow(rho.abs(), self.p - 1)
 
     def getfwdparamnames(self, prefix=""):
         return [prefix+"a", prefix+"p"]
