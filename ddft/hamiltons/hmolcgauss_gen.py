@@ -295,6 +295,7 @@ class Ecoeff(object):
 
         # the key is: "i,j,t,xyz"
         self.key_format = "{},{},{},{}"
+        self.rkey_format = "{},{},{},{}"
         # the value's shape is: (nbasis*nelmts, nbasis*nelmts)
         self.e_memory = {
             "0,0,0,0": self.mab[:,:,0],
@@ -318,6 +319,19 @@ class Ecoeff(object):
                 self.max_basis, self.ndim, self.ijk_pairs,
                 self.alphas, self.betas, self.gamma, self.kappa, self.qab,
                 self.e_memory, self.key_format)
+
+            # # python code for profiling with pprofile
+            # overlap_dim = torch.empty_like(self.qab); # (nbasis_tot, nbasis_tot, ndim)
+            # for i in range(self.ijk_left_max + 1):
+            #     for j in range(self.ijk_right_max + 1):
+            #         idx = (self.ijk_pairs == (i * self.max_basis + j)); # (nbasis_tot, nbasis_tot, ndim)
+            #         for xyz in range(self.ndim):
+            #             idxx = idx[..., xyz]
+            #             coeff = self.get_ecoeff(i, j, 0, xyz)
+            #             overlap_dim[..., xyz][idxx] = coeff[idxx]
+            # res = overlap_dim.prod(dim=-1) * torch.pow(np.pi / self.gamma, 1.5); # (nbasis_tot, nbasis_tot)
+            # self.overlap = res
+
         return self.overlap
 
     def get_kinetics(self):
@@ -326,6 +340,38 @@ class Ecoeff(object):
                 self.max_basis, self.ndim, self.ijk_pairs,
                 self.alphas, self.betas, self.gamma, self.kappa, self.qab,
                 self.e_memory, self.key_format)
+
+            # # python code for profiling with pprofile
+            # kinetics_dim0 = torch.empty_like(self.qab) # (nbasis_tot, nbasis_tot, ndim)
+            # kinetics_dim1 = torch.empty_like(self.qab) # (nbasis_tot, nbasis_tot, ndim)
+            # kinetics_dim2 = torch.empty_like(self.qab) # (nbasis_tot, nbasis_tot, ndim)
+            # for i in range(self.ijk_left_max + 1):
+            #     for j in range(self.ijk_right_max + 1):
+            #         idx = (self.ijk_pairs == (i * self.max_basis + j))
+            #         for xyz in range(self.ndim):
+            #             idxx = idx[..., xyz]
+            #             sij = self.get_ecoeff(i, j  , 0, xyz)
+            #             d1  = self.get_ecoeff(i, j-2, 0, xyz)
+            #             d2  = self.get_ecoeff(i, j+2, 0, xyz)
+            #             dij = j*(j-1)*d1 - 2*(2*j+1)*self.betas*sij + 4*self.betas*self.betas*d2;
+            #             sij_idxx = sij[idxx]
+            #             dij_idxx = dij[idxx]
+            #             if xyz == 0:
+            #                 kinetics_dim0[..., xyz][idxx] = dij_idxx
+            #                 kinetics_dim1[..., xyz][idxx] = sij_idxx
+            #                 kinetics_dim2[..., xyz][idxx] = sij_idxx
+            #             elif xyz == 1:
+            #                 kinetics_dim0[..., xyz][idxx] = sij_idxx
+            #                 kinetics_dim1[..., xyz][idxx] = dij_idxx
+            #                 kinetics_dim2[..., xyz][idxx] = sij_idxx
+            #             else:
+            #                 kinetics_dim0[..., xyz][idxx] = sij_idxx
+            #                 kinetics_dim1[..., xyz][idxx] = sij_idxx
+            #                 kinetics_dim2[..., xyz][idxx] = dij_idxx
+            # kinetics = kinetics_dim0.prod(dim=-1) + kinetics_dim1.prod(dim=-1) + kinetics_dim2.prod(dim=-1)
+            # res = -0.5 * torch.pow(np.pi / self.gamma, 1.5) * kinetics
+            # self.kinetics = res
+
         return self.kinetics
 
     def get_coulomb(self):
@@ -338,5 +384,94 @@ class Ecoeff(object):
                 self.ijk_pairs2_unique,
                 self.alphas, self.betas, self.gamma, self.kappa, self.qab,
                 self.e_memory, self.key_format,
-                self.rcd, self.r_memory, self.key_format)
+                self.rcd, self.r_memory, self.rkey_format)
+
+            # # python code for profiling with pprofile
+            # coulomb = torch.zeros_like(self.rcd_sq)
+            # numel = self.ijk_pairs2_unique.numel()
+            # max_ijkflat = self.max_ijkflat
+            # max_basis = self.max_basis
+            # for i in range(numel):
+            #     ijk_flat_value = int(self.ijk_pairs2_unique[i])
+            #     idx = self.idx_ijk[i]
+            #     rcd2 = self.rcd
+            #     rcd_sq2 = self.rcd_sq
+            #     gamma2 = self.gamma
+            #
+            #     ijk_pair2 = ijk_flat_value % max_ijkflat
+            #     ijk_pair1 = (ijk_flat_value // max_ijkflat) % max_ijkflat
+            #     ijk_pair0 = (ijk_flat_value // max_ijkflat) // max_ijkflat
+            #     k = ijk_pair0 // max_basis
+            #     l = ijk_pair1 // max_basis
+            #     m = ijk_pair2 // max_basis
+            #     u = ijk_pair0 % max_basis
+            #     v = ijk_pair1 % max_basis
+            #     w = ijk_pair2 % max_basis
+            #
+            #     for r in range(k + u + 1):
+            #         Erku = self.get_ecoeff(k, u, r, 0)[idx]
+            #         for s in range(l + v + 1):
+            #             Eslv = self.get_ecoeff(l, v, s, 1)[idx]
+            #             for t in range(m + w + 1):
+            #                 Etmw = self.get_ecoeff(m, w, t, 2)[idx]
+            #                 Rrst = self.get_rcoeff(r, s, t, 0,
+            #                     rcd2, rcd_sq2, gamma2)[:,idx]
+            #                 coulomb[:,idx] += (Erku * Eslv * Etmw) * Rrst
+            #
+            # coulomb *= -(2 * np.pi / self.gamma)
+            # self.coulomb = coulomb
         return self.coulomb
+
+    # python code for profiling only
+    def get_ecoeff(self, i, j, t, xyz):
+        if (t < 0) or (t > (i + j)) or (i < 0) or (j < 0):
+            return torch.zeros_like(self.qab[..., 0])
+        key = self.key_format.format(i, j, t, xyz)
+        if key in self.e_memory:
+            return self.e_memory[key]
+
+        if (i == 0) and (j > 0):
+            c1 = self.get_ecoeff(i, j-1, t-1, xyz)
+            c2 = self.get_ecoeff(i, j-1, t  , xyz)
+            c3 = self.get_ecoeff(i, j-1, t+1, xyz)
+            coeff = 1. / (2 * self.gamma) * c1 + self.kappa * self.qab[..., xyz] / self.betas * c2 + (t + 1) * c3
+        else:
+            c1 = self.get_ecoeff(i-1, j, t-1, xyz)
+            c2 = self.get_ecoeff(i-1, j, t  , xyz)
+            c3 = self.get_ecoeff(i-1, j, t+1, xyz)
+            coeff = 1. / (2 * self.gamma) * c1 - self.kappa * self.qab[..., xyz] / self.alphas * c2 + (t + 1) * c3
+        self.e_memory[key] = coeff
+        return coeff
+
+    # python code for profiling only
+    def get_rcoeff(self, r, s, t, n, rcd, rcd_sq, gamma):
+        if r < 0 or s < 0 or t < 0:
+            return 0
+
+        key = self.rkey_format.format(r, s, t, n)
+        if key in self.r_memory:
+            return self.r_memory[key]
+
+        if r == 0 and s == 0 and t == 0:
+            gamma_rcd = gamma * rcd_sq
+            coeff = (-2 * gamma)**n * self.boys(n, gamma_rcd)
+        elif r > 0:
+            c1 = self.get_rcoeff(r-2, s, t, n+1, rcd, rcd_sq, gamma)
+            c2 = self.get_rcoeff(r-1, s, t, n+1, rcd, rcd_sq, gamma)
+            coeff = (r-1) * c1 + rcd[..., 0] * c2
+        elif s > 0:
+            c1 = self.get_rcoeff(r, s-2, t, n+1, rcd, rcd_sq, gamma)
+            c2 = self.get_rcoeff(r, s-1, t, n+1, rcd, rcd_sq, gamma)
+            coeff = (s-1) * c1 + rcd[..., 1] * c2
+        else:
+            c1 = self.get_rcoeff(r, s, t-2, n+1, rcd, rcd_sq, gamma)
+            c2 = self.get_rcoeff(r, s, t-1, n+1, rcd, rcd_sq, gamma)
+            coeff = (t-1) * c1 + rcd[..., 2] * c2
+        self.r_memory[key] = coeff
+        return coeff
+
+    def boys(self, n, t):
+        nhalf = torch.tensor(n + 0.5, dtype=t.dtype, device=t.device)
+        t2 = t + 1e-12
+        exp_part = -nhalf * torch.log(t2) + torch.lgamma(nhalf)
+        return 0.5 * torch.igamma(nhalf, t2) * torch.exp(exp_part)
