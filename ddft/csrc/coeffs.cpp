@@ -148,6 +148,14 @@ torch::Tensor get_ecoeff(int i, int j, int t, int xyz,
     torch::Tensor& kappa, torch::Tensor& qab,
     py::dict& e_memory, py::str& key_format) {
 
+  /*
+  alpha: (1, nbasis*nelmts)
+  beta: (nbasis*nelmts, 1)
+  gamma: (nbasis*nelmts, nbasis*nelmts)
+  kappa: (nbasis*nelmts, nbasis*nelmts)
+  qab: (nbasis*nelmts, nbasis*nelmts, 3)
+  */
+
   if ((t < 0) || (t > i+j) || (i < 0) || (j < 0)) {
     return torch::zeros_like(qab.select(/*dim=*/2,/*index=*/0));
   }
@@ -179,6 +187,11 @@ torch::Tensor get_ecoeff(int i, int j, int t, int xyz,
 torch::Tensor get_rcoeff(int r, int s, int t, int n,
     torch::Tensor& rcd, torch::Tensor& rcd_sq, torch::Tensor& gamma,
     py::dict& r_memory, py::str& rkey_format) {
+  /*
+  rcd: natoms, nbasis*nelmts, nbasis*nelmts, 3
+  rcd_sq: natoms, nbasis*nelmts, nbasis*nelmts
+  gamma: nbasis*nelmts, nbasis*nelmts
+  */
 
   auto all = Slice(None,None,None);
   if ((r < 0) || (s < 0) || (t < 0)) {
