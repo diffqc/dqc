@@ -90,12 +90,6 @@ class RadialGrid(BaseGrid):
     def boxshape(self):
         return self._boxshape
 
-    def grad(self, p, dim=-1, idim=0):
-        pass # ???
-
-    def laplace(self, p, dim=-1):
-        pass # ???
-
     def cumsum_integrate(self, f): # batchified
         # f: (*BF, nr, nr) in r-space
         dvol = (self._scaling * self._vol_elmt * self.dxdz).unsqueeze(-2) # (1, nr)
@@ -259,14 +253,6 @@ class BaseFixedIntervalGrid(object):
         dxdz = torch.ones_like(z)
         return z, dxdz
 
-    @abstractmethod
-    def grad(self, p, dim=-1, idim=0):
-        pass # ???
-
-    @abstractmethod
-    def laplace(self, p, dim=-1):
-        pass # ???
-
 class GaussChebyshevGrid(BaseFixedIntervalGrid):
     def __init__(self, n, dtype=torch.float, device=torch.device('cpu')):
         # generate the x and w from chebyshev polynomial
@@ -289,12 +275,6 @@ class GaussChebyshevGrid(BaseFixedIntervalGrid):
     def get_z_dxdz(self):
         return self.z, self.dxdz
 
-    def grad(self, p, dim=-1, idim=0):
-        pass # ???
-
-    def laplace(self, p, dim=-1):
-        pass # ???
-
 class LegendreGrid(BaseFixedIntervalGrid):
     def __init__(self, nx, dtype=torch.float, device=torch.device('cpu')):
         xleggauss, wleggauss = leggauss(nx)
@@ -307,26 +287,6 @@ class LegendreGrid(BaseFixedIntervalGrid):
 
     def get_xw(self):
         return self.xleggauss, self.wleggauss
-
-    def grad(self, p, dim=-1, idim=0):
-        if dim != -1:
-            p = p.transpose(dim, -1) # (..., nr)
-
-        # get the derivative w.r.t. the legendre basis
-        coeff = torch.matmul(p, self.inv_basis) # (..., nr)
-        dcoeff = legder(coeff) # (..., nr)
-        dpdq = torch.matmul(dcoeff, self.basis) # (..., nr)
-        # # multiply with the differentiation matrix to get dp/dq
-        # dpdq = torch.matmul(p, self.diff_matrix)
-
-        # get the derivative w.r.t. r
-        dpdr = dpdq / self.transformobj.get_scaling(self.rgrid[:,0])
-        if dim != -1:
-            dpdr = dpdr.transpose(dim, -1)
-        return dpdr
-
-    def laplace(self, p, dim=-1):
-        pass # ???
 
 ############################# grid transformation #############################
 class BaseGridTransformation(object):

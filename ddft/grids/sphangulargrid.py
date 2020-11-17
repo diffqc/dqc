@@ -155,57 +155,6 @@ class Lebedev(BaseRadialAngularGrid):
 
         return frq
 
-    def grad(self, p, idim, dim=-1):
-        raise RuntimeError("Invalidated")
-        if dim != -1:
-            p = p.transpose(dim, -1) # (..., nr)
-
-        batch_size = p.shape[:-1]
-        p = p.view(*batch_size, self.nrad, -1) # (..., nrad, nphitheta)
-        if idim == 0:
-            # radial derivative
-            pres = self.radgrid.grad(p, idim=0, dim=-2).reshape(*batch_size, -1) # (..., nr)
-
-        else:
-            # phi (azimuth) or theta derivative
-            basis_integrate = self._get_basis(basis_integrate=True) # (nsh, nphitheta)
-            deriv_basis = self._get_deriv_basis(idim-1) # (nsh, nphitheta)
-            psh = torch.matmul(p, basis_integrate.transpose(-2,-1)) # (..., nrad, nsh)
-            pres = torch.matmul(psh, deriv_basis) / (self.radgrid.rgrid[:,:1] + 1e-15) # (..., nrad, nphitheta)
-
-            pres = pres.view(*batch_size, -1) # (..., nr)
-
-        if dim != -1:
-            pres = pres.transpose(dim, -1)
-        return pres
-
-    def laplace(self, p, dim=-1):
-        raise RuntimeError("Invalidated")
-        if dim != -1:
-            p = p.transpose(dim, -1)
-
-        batch_size = p.shape[:-1]
-        p = p.view(*batch_size, self.nrad, -1) # (..., nrad, nphitheta)
-        basis = self._get_basis() # (nsh, nphitheta)
-        basis_integrate = self._get_basis(basis_integrate=True) # (nsh, nphitheta)
-
-        # get the spherical harmonics components
-        rs = self.radgrid.rgrid[:,:1] # (nrad, 1)
-        psh = torch.matmul(p, basis_integrate.transpose(-2,-1)) # (..., nrad, nsh)
-        angmoms = self._get_angmoms() # (nsh,)
-        pang = -angmoms * (angmoms+1) * psh / (rs*rs + 1e-12) # (..., nrad, nsh)
-        pphitheta = torch.matmul(pang, basis) # (..., nrad, nphitheta)
-
-        # get the contribution from the radial direction
-        prad = self.radgrid.laplace(p, dim=-2) # (..., nrad, nphitheta)
-
-        # add all contributions
-        res = (prad + pphitheta).reshape(*batch_size, -1)
-
-        if dim != -1:
-            res = res.transpose(dim, -1)
-        return res
-
     @property
     def radial_grid(self):
         return self.radgrid
