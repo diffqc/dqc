@@ -272,8 +272,6 @@ class Ecoeff(object):
         rcd = rc - atompos.unsqueeze(1).unsqueeze(1) # (natoms, nbasis*nelmts, nbasis*neltms, 3)
         rcd_sq = (rcd*rcd).sum(dim=-1) # (natoms, nbasis*nelmts, nbasis*neltms)
 
-        self.ijk_left = ijk_left
-        self.ijk_right = ijk_right
         self.ijk_pairs = ijk_pairs
         self.ijk_pairs2 = ijk_pairs2
         self.alphas = alphas.unsqueeze(0)
@@ -288,8 +286,8 @@ class Ecoeff(object):
         self.rcd = rcd
         self.rcd_sq = rcd_sq
 
-        self.ijk_left_max = self.ijk_left.max()
-        self.ijk_right_max = self.ijk_right.max()
+        self.ijk_left_max = ijk_left.max()
+        self.ijk_right_max = ijk_right.max()
         self.ijk_pairs2_unique = torch.unique(self.ijk_pairs2)
         self.idx_ijk = [(self.ijk_pairs2 == ijk_flat_value) for ijk_flat_value in self.ijk_pairs2_unique]
 
