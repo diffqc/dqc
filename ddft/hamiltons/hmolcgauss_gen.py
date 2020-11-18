@@ -260,6 +260,8 @@ class Ecoeff(object):
         # The poewr pairs (ijk and lmn) are encoded with a number and arranged
         # in a matrix of size (nbasis*nelmts, nbasis*neltms)
 
+        self.atompos = atompos
+
         # encode the power pairs
         self.max_basis = 8
         self.max_ijkflat = 64
@@ -271,14 +273,10 @@ class Ecoeff(object):
                      ijk_pairs[:,:,1] * self.max_ijkflat + ijk_pairs[:,:,2] # (nbasis*nelmts, nbasis*nelmts)
 
         qab = centres - centres.unsqueeze(1) # (nbasis*nelmts, nbasis*nelmts, 3)
-        qab_sq = qab**2 # (nbasis*nelmts, nbasis*nelmts, 3)
         gamma = (alphas + alphas.unsqueeze(1)) # (nbasis*nelmts, nbasis*nelmts)
         kappa = (alphas * alphas.unsqueeze(1)) / gamma # (nbasis*nelmts, nbasis*nelmts)
-        mab = torch.exp(-kappa.unsqueeze(-1) * qab_sq) # (nbasis*nelmts, nbasis*nelmts, 3)
         ra = alphas.unsqueeze(-1) * centres # (nbasis*nelmts, 3)
         rc = (ra + ra.unsqueeze(1)) / gamma.unsqueeze(-1) # (nbasis*nelmts, nbasis*nelmts, 3)
-        rcd = rc - atompos.unsqueeze(1).unsqueeze(1) # (natoms, nbasis*nelmts, nbasis*neltms, 3)
-        rcd_sq = (rcd*rcd).sum(dim=-1) # (natoms, nbasis*nelmts, nbasis*neltms)
 
         # original shape
         self.allbasis_shape = gamma.shape
@@ -302,17 +300,14 @@ class Ecoeff(object):
         self.triu_idx1 = triu_idx1
 
         # sort the basis matrix
-        self.ijk_pairs = self.sort_basis(ijk_pairs)
         self.ijk_pairs2 = ijk_pairs2
-        self.alphas = self.sort_basis(alphas.unsqueeze(0) + 0 * gamma)
-        self.betas  = self.sort_basis(alphas.unsqueeze(1) + 0 * gamma)
-        self.qab = self.sort_basis(qab)
-        self.qab_sq = self.sort_basis(qab_sq)
-        self.gamma = self.sort_basis(gamma)
-        self.kappa = self.sort_basis(kappa)
-        self.mab = self.sort_basis(mab)
-        self.rcd = self.sort_basis(rcd, dim0=1)
-        self.rcd_sq = self.sort_basis(rcd_sq, dim0=1)
+        self.ijk_pairs  = self.sort_basis(ijk_pairs)  # (nbasiscut,)
+        self.alphas     = self.sort_basis(alphas.unsqueeze(0) + 0 * gamma)  # (nbasiscut,)
+        self.betas      = self.sort_basis(alphas.unsqueeze(1) + 0 * gamma)  # (nbasiscut,)
+        self.qab        = self.sort_basis(qab)  # (nbasiscut, 3)
+        self.gamma      = self.sort_basis(gamma)  # (nbasiscut,)
+        self.kappa      = self.sort_basis(kappa)  # (nbasiscut,)
+        self.rc         = self.sort_basis(rc)  # (nbasiscut, 3)
 
         self.ijk_left_max = ijk_left.max()
         self.ijk_right_max = ijk_right.max()
@@ -325,14 +320,17 @@ class Ecoeff(object):
         # the key is: "i,j,t,xyz"
         self.key_format = "{},{},{},{}"
         self.rkey_format = "{},{},{},{}"
-        # the value's shape is: (nbasis*nelmts, nbasis*nelmts)
+        # the value's shape is: (nbasiscut,)
+        # get the initial values of the cache
+        qab_sq = self.qab * self.qab  # (nbasiscut, 3)
+        mab = torch.exp(-self.kappa.unsqueeze(-1) * qab_sq)  # (nbasiscut, 3)
         self.e_memory = {
-            "0,0,0,0": self.mab[..., 0],
-            "0,0,0,1": self.mab[..., 1],
-            "0,0,0,2": self.mab[..., 2],
+            "0,0,0,0": mab[..., 0],
+            "0,0,0,1": mab[..., 1],
+            "0,0,0,2": mab[..., 2],
         }
         # the key format is: r,s,t,n
-        # the value's shape is: (natoms, nbasis*nelmts, nbasis*nelmts)
+        # the value's shape is: (natoms, nbasiscut)
         self.r_memory = {}
 
         # cache
@@ -428,14 +426,18 @@ class Ecoeff(object):
     def get_coulomb(self):
         # returns (natoms, nbasis*nelmts, nbasis*nelmts)
         if self.coulomb is None:
+            # self.rc: (nbasiscut, 3)
+            rcd = self.rc - self.atompos.unsqueeze(1) # (natoms, nbasiscut, 3)
+            rcd_sq = torch.einsum("...d,...d->...", rcd, rcd)
+
             self.coulomb = get_coulomb_mat(
                 self.max_ijkflat, self.max_basis,
                 self.idx_ijk,
-                self.rcd_sq,
+                rcd_sq,
                 self.ijk_pairs2_unique,
                 self.alphas, self.betas, self.gamma, self.kappa, self.qab,
                 self.e_memory, self.key_format,
-                self.rcd, self.r_memory, self.rkey_format)
+                rcd, self.r_memory, self.rkey_format)
 
             # # python code for profiling with pprofile
             # coulomb = torch.zeros_like(self.rcd_sq)
