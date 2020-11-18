@@ -254,6 +254,13 @@ class Ecoeff(object):
         # centres: (nbasis*nelmts, 3)
         # alphas: (nbasis*nelmts)
         # atompos: (natoms, 3)
+
+        # Computing the integrals are done with vectorization using cache
+        # (so no double computation for the same coefficients).
+        # The poewr pairs (ijk and lmn) are encoded with a number and arranged
+        # in a matrix of size (nbasis*nelmts, nbasis*neltms)
+
+        # encode the power pairs
         self.max_basis = 8
         self.max_ijkflat = 64
         ijk_left = ijks.unsqueeze(0) # (1, nbasis*nelmts, 3)
@@ -262,6 +269,7 @@ class Ecoeff(object):
         ijk_pairs = ijk_left * self.max_basis + ijk_right # (nbasis*nelmts, nbasis*nelmts, 3)
         ijk_pairs2 = ijk_pairs[:,:,0] * self.max_ijkflat*self.max_ijkflat + \
                      ijk_pairs[:,:,1] * self.max_ijkflat + ijk_pairs[:,:,2] # (nbasis*nelmts, nbasis*nelmts)
+
         qab = centres - centres.unsqueeze(1) # (nbasis*nelmts, nbasis*nelmts, 3)
         qab_sq = qab**2 # (nbasis*nelmts, nbasis*nelmts, 3)
         gamma = (alphas + alphas.unsqueeze(1)) # (nbasis*nelmts, nbasis*nelmts)
@@ -272,33 +280,42 @@ class Ecoeff(object):
         rcd = rc - atompos.unsqueeze(1).unsqueeze(1) # (natoms, nbasis*nelmts, nbasis*neltms, 3)
         rcd_sq = (rcd*rcd).sum(dim=-1) # (natoms, nbasis*nelmts, nbasis*neltms)
 
-        self.ijk_pairs = ijk_pairs
+        # original shape
+        self.allbasis_shape = gamma.shape
+
+        # get the index of the basis matrix for calculation efficiency
+        ijk_pairs2 = ijk_pairs2.view(-1)  # (nbasis*nelmts * nbasis*nelmts)
+        ijk_pairs2, idx_ijkpairs = torch.sort(ijk_pairs2)
+        self.idx_ijkpairs = idx_ijkpairs
+
+        self.ijk_pairs = self.sort_basis(ijk_pairs)
         self.ijk_pairs2 = ijk_pairs2
-        self.alphas = alphas.unsqueeze(0)
-        self.betas = alphas.unsqueeze(1)
-        self.qab = qab
-        self.qab_sq = qab_sq
-        self.gamma = gamma
-        self.kappa = kappa
-        self.mab = mab
-        self.ra = ra
-        self.rc = rc
-        self.rcd = rcd
-        self.rcd_sq = rcd_sq
+        self.alphas = self.sort_basis(alphas.unsqueeze(0) + 0 * gamma)
+        self.betas  = self.sort_basis(alphas.unsqueeze(1) + 0 * gamma)
+        self.qab = self.sort_basis(qab)
+        self.qab_sq = self.sort_basis(qab_sq)
+        self.gamma = self.sort_basis(gamma)
+        self.kappa = self.sort_basis(kappa)
+        self.mab = self.sort_basis(mab)
+        self.rcd = self.sort_basis(rcd, dim0=1)
+        self.rcd_sq = self.sort_basis(rcd_sq, dim0=1)
 
         self.ijk_left_max = ijk_left.max()
         self.ijk_right_max = ijk_right.max()
-        self.ijk_pairs2_unique = torch.unique(self.ijk_pairs2)
-        self.idx_ijk = [(self.ijk_pairs2 == ijk_flat_value) for ijk_flat_value in self.ijk_pairs2_unique]
+        self.ijk_pairs2_unique, ijkpairs2_count = torch.unique(
+            self.ijk_pairs2, return_counts=True, sorted=True)
+        self.idx_ijk = torch.cat(
+            (torch.tensor([0], dtype=ijkpairs2_count.dtype, device=ijkpairs2_count.device),
+             torch.cumsum(ijkpairs2_count, dim=0)), dim=0)
 
         # the key is: "i,j,t,xyz"
         self.key_format = "{},{},{},{}"
         self.rkey_format = "{},{},{},{}"
         # the value's shape is: (nbasis*nelmts, nbasis*nelmts)
         self.e_memory = {
-            "0,0,0,0": self.mab[:,:,0],
-            "0,0,0,1": self.mab[:,:,1],
-            "0,0,0,2": self.mab[:,:,2],
+            "0,0,0,0": self.mab[..., 0],
+            "0,0,0,1": self.mab[..., 1],
+            "0,0,0,2": self.mab[..., 2],
         }
         # the key format is: r,s,t,n
         # the value's shape is: (natoms, nbasis*nelmts, nbasis*nelmts)
@@ -309,6 +326,16 @@ class Ecoeff(object):
         self.kinetics = None
         self.coulomb = None
 
+    def sort_basis(self, a, dim0=0):
+        a2 = a.reshape(*a.shape[:dim0], -1, *a.shape[dim0 + 2:])
+        return a2.index_select(dim0, self.idx_ijkpairs)
+
+    def reshape_basis(self, a, dim0=0):
+        outshape = (*a.shape[:dim0], *self.allbasis_shape, *a.shape[dim0 + 1:])
+        res = torch.empty(a.shape, dtype=a.dtype, device=a.device)
+        res.scatter_(dim0, self.idx_ijkpairs.expand(*a.shape[:-1], -1), a)
+        return res.view(outshape)
+
     def get_overlap(self):
         if self.overlap is None:
             # NOTE: using this makes test_grad_intermediate.py::test_grad_dft_cgto produces nan in gradgradcheck energy
@@ -317,6 +344,8 @@ class Ecoeff(object):
                 self.max_basis, self.ndim, self.ijk_pairs,
                 self.alphas, self.betas, self.gamma, self.kappa, self.qab,
                 self.e_memory, self.key_format)
+
+            self.overlap = self.reshape_basis(self.overlap)
 
             # # python code for profiling with pprofile
             # overlap_dim = torch.empty_like(self.qab); # (nbasis_tot, nbasis_tot, ndim)
@@ -338,6 +367,8 @@ class Ecoeff(object):
                 self.max_basis, self.ndim, self.ijk_pairs,
                 self.alphas, self.betas, self.gamma, self.kappa, self.qab,
                 self.e_memory, self.key_format)
+
+            self.kinetics = self.reshape_basis(self.kinetics)
 
             # # python code for profiling with pprofile
             # kinetics_dim0 = torch.empty_like(self.qab) # (nbasis_tot, nbasis_tot, ndim)
@@ -391,7 +422,7 @@ class Ecoeff(object):
             # max_basis = self.max_basis
             # for i in range(numel):
             #     ijk_flat_value = int(self.ijk_pairs2_unique[i])
-            #     idx = self.idx_ijk[i]
+            #     idx = slice(self.idx_ijk[i], self.idx_ijk[i + 1], None)
             #     rcd2 = self.rcd
             #     rcd_sq2 = self.rcd_sq
             #     gamma2 = self.gamma
@@ -418,6 +449,10 @@ class Ecoeff(object):
             #
             # coulomb *= -(2 * np.pi / self.gamma)
             # self.coulomb = coulomb
+
+            # reshape
+            self.coulomb = self.reshape_basis(self.coulomb, dim0=1)
+
         return self.coulomb
 
     # python code for profiling only

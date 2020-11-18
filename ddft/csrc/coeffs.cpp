@@ -30,10 +30,10 @@ torch::Tensor get_overlap_mat(int ijk_left_max, int ijk_right_max, int max_basis
       auto idx = (ijk_pairs == (i*max_basis + j)); // (nbasis_tot, nbasis_tot, ndim)
       for (int xyz = 0; xyz < ndim; ++xyz) {
 
-        auto idxx = idx.select(/*dim=*/2,/*index=*/xyz);
+        auto idxx = idx.select(/*dim=*/-1,/*index=*/xyz);
         auto coeff = get_ecoeff(i, j, 0, xyz, alpha, betas, gamma, kappa, qab, e_memory, key_format);
         // overlap_dim[:,:,xyz][idxx] = coeff[idxx]
-        overlap_dim.select(/*dim=*/2, /*index=*/xyz).masked_scatter_(idxx, coeff.index({idxx}));
+        overlap_dim.select(/*dim=*/-1, /*index=*/xyz).masked_scatter_(idxx, coeff.index({idxx}));
 
       }
 
@@ -58,7 +58,7 @@ torch::Tensor get_kinetics_mat(int ijk_left_max, int ijk_right_max, int max_basi
       auto idx = (ijk_pairs == (i * max_basis + j)); // (nbasis_tot, nbasis_tot, ndim)
 
       for (int xyz = 0; xyz < ndim; ++xyz) {
-        auto idxx = idx.select(2, xyz); // (nbasis_tot, nbasis_tot)
+        auto idxx = idx.select(-1, xyz); // (nbasis_tot, nbasis_tot)
         auto sij = get_ecoeff(i, j  , 0, xyz, alpha, betas, gamma, kappa, qab, e_memory, key_format); // (nbasis_tot, nbasis_tot)
         auto  d1 = get_ecoeff(i, j-2, 0, xyz, alpha, betas, gamma, kappa, qab, e_memory, key_format);
         auto  d2 = get_ecoeff(i, j+2, 0, xyz, alpha, betas, gamma, kappa, qab, e_memory, key_format);
@@ -66,19 +66,19 @@ torch::Tensor get_kinetics_mat(int ijk_left_max, int ijk_right_max, int max_basi
         auto sij_idxx = sij.index({idxx});
         auto dij_idxx = dij.index({idxx});
         if (xyz == 0) {
-          kinetics_dim0.select(2,xyz).masked_scatter_(idxx, dij_idxx);
-          kinetics_dim1.select(2,xyz).masked_scatter_(idxx, sij_idxx);
-          kinetics_dim2.select(2,xyz).masked_scatter_(idxx, sij_idxx);
+          kinetics_dim0.select(-1, xyz).masked_scatter_(idxx, dij_idxx);
+          kinetics_dim1.select(-1, xyz).masked_scatter_(idxx, sij_idxx);
+          kinetics_dim2.select(-1, xyz).masked_scatter_(idxx, sij_idxx);
         }
         else if (xyz == 1) {
-          kinetics_dim0.select(2,xyz).masked_scatter_(idxx, sij_idxx);
-          kinetics_dim1.select(2,xyz).masked_scatter_(idxx, dij_idxx);
-          kinetics_dim2.select(2,xyz).masked_scatter_(idxx, sij_idxx);
+          kinetics_dim0.select(-1, xyz).masked_scatter_(idxx, sij_idxx);
+          kinetics_dim1.select(-1, xyz).masked_scatter_(idxx, dij_idxx);
+          kinetics_dim2.select(-1, xyz).masked_scatter_(idxx, sij_idxx);
         }
         else {
-          kinetics_dim0.select(2,xyz).masked_scatter_(idxx, sij_idxx);
-          kinetics_dim1.select(2,xyz).masked_scatter_(idxx, sij_idxx);
-          kinetics_dim2.select(2,xyz).masked_scatter_(idxx, dij_idxx);
+          kinetics_dim0.select(-1, xyz).masked_scatter_(idxx, sij_idxx);
+          kinetics_dim1.select(-1, xyz).masked_scatter_(idxx, sij_idxx);
+          kinetics_dim2.select(-1, xyz).masked_scatter_(idxx, dij_idxx);
         }
       }
     }
@@ -89,7 +89,7 @@ torch::Tensor get_kinetics_mat(int ijk_left_max, int ijk_right_max, int max_basi
 }
 
 torch::Tensor get_coulomb_mat(int max_ijkflat, int max_basis,
-    py::list& idx_ijk,
+    torch::Tensor& idx_ijk,
     torch::Tensor& rcd_sq,
     torch::Tensor& ijk_pairs2_unique,
     // arguments for get_ecoeff (return: (nbasis_tot, nbasis_tot))
@@ -103,12 +103,13 @@ torch::Tensor get_coulomb_mat(int max_ijkflat, int max_basis,
   // coulomb: (natoms, nbasis*nelmts, nbasis*nelmts)
   auto coulomb = torch::zeros_like(rcd_sq);
   auto numel = ijk_pairs2_unique.numel();
+  auto all = Slice(None, None, None);
   for (int i = 0; i < numel; ++i) {
     auto ijk_flat_value = ijk_pairs2_unique.select(/*dim=*/0, /*index=*/i).item<int>();
-    // auto idx = idx_ijk.select(/*dim=*/0, /*index=*/i);
-    auto idx = py::cast<torch::Tensor>(idx_ijk[i]);
-    auto slice0 = {idx};
-    std::initializer_list<at::indexing::TensorIndex> slice1 = {Slice(None, None, None), idx};
+
+    auto i0 = idx_ijk[i].item<int>();
+    auto i1 = idx_ijk[i + 1].item<int>();
+    auto i01 = Slice(i0, i1, None);
 
     // unpack ijk_flat_value
     auto ijk_pair2 = ijk_flat_value % max_ijkflat;
@@ -123,17 +124,17 @@ torch::Tensor get_coulomb_mat(int max_ijkflat, int max_basis,
 
     for (int r = 0; r < k + u + 1; ++r) {
       auto Erku = get_ecoeff(k, u, r, 0, alpha, betas, gamma, kappa, qab,
-          e_memory, key_format).index(slice0);
+          e_memory, key_format).index({i01});
       for (int s = 0; s < l + v + 1; ++s) {
         auto Eslv = get_ecoeff(l, v, s, 1, alpha, betas, gamma, kappa, qab,
-            e_memory, key_format).index(slice0);
+            e_memory, key_format).index({i01});
         for (int t = 0; t < m + w + 1; ++t) {
           auto Etmw = get_ecoeff(m, w, t, 2, alpha, betas, gamma, kappa, qab,
-              e_memory, key_format).index(slice0);
+              e_memory, key_format).index({i01});
           auto Rrst = get_rcoeff(r, s, t, 0, rcd, rcd_sq, gamma,
-              r_memory, rkey_format).index(slice1);
-          auto val = coulomb.index(slice1) + Erku * Eslv * Etmw * Rrst;
-          coulomb.index_put_(slice1, val);
+              r_memory, rkey_format).index({all, i01});
+          auto val = coulomb.index({all, i01}) + Erku * Eslv * Etmw * Rrst;
+          coulomb.index_put_({all, i01}, val);
         }
       }
     }
@@ -157,7 +158,7 @@ torch::Tensor get_ecoeff(int i, int j, int t, int xyz,
   */
 
   if ((t < 0) || (t > i+j) || (i < 0) || (j < 0)) {
-    return torch::zeros_like(qab.select(/*dim=*/2,/*index=*/0));
+    return torch::zeros_like(gamma);
   }
 
   // access the coefficients
@@ -172,13 +173,13 @@ torch::Tensor get_ecoeff(int i, int j, int t, int xyz,
     c1 = get_ecoeff(i, j-1, t-1, xyz, alpha, betas, gamma, kappa, qab, e_memory, key_format);
     c2 = get_ecoeff(i, j-1, t  , xyz, alpha, betas, gamma, kappa, qab, e_memory, key_format);
     c3 = get_ecoeff(i, j-1, t+1, xyz, alpha, betas, gamma, kappa, qab, e_memory, key_format);
-    coeff = 1./(2*gamma) * c1 + kappa * qab.select(/*dim=*/2,/*index=*/xyz) / betas * c2 + (t + 1) * c3;
+    coeff = 1./(2*gamma) * c1 + kappa * qab.select(/*dim=*/-1,/*index=*/xyz) / betas * c2 + (t + 1) * c3;
   }
   else {
     c1 = get_ecoeff(i-1, j, t-1, xyz, alpha, betas, gamma, kappa, qab, e_memory, key_format);
     c2 = get_ecoeff(i-1, j, t  , xyz, alpha, betas, gamma, kappa, qab, e_memory, key_format);
     c3 = get_ecoeff(i-1, j, t+1, xyz, alpha, betas, gamma, kappa, qab, e_memory, key_format);
-    coeff = 1./(2*gamma) * c1 - kappa * qab.select(/*dim=*/2,/*index=*/xyz) / alpha * c2 + (t + 1) * c3;
+    coeff = 1./(2*gamma) * c1 - kappa * qab.select(/*dim=*/-1,/*index=*/xyz) / alpha * c2 + (t + 1) * c3;
   }
   e_memory[key] = coeff;
   return coeff;
@@ -195,7 +196,7 @@ torch::Tensor get_rcoeff(int r, int s, int t, int n,
 
   auto all = Slice(None,None,None);
   if ((r < 0) || (s < 0) || (t < 0)) {
-    return torch::zeros_like(rcd.select(/*dim=*/3, /*index=*/0));
+    return torch::zeros_like(rcd_sq);
   }
 
   // access the coefficients
@@ -213,17 +214,17 @@ torch::Tensor get_rcoeff(int r, int s, int t, int n,
   else if (r > 0) {
     c1 = get_rcoeff(r-2, s, t, n+1, rcd, rcd_sq, gamma, r_memory, rkey_format);
     c2 = get_rcoeff(r-1, s, t, n+1, rcd, rcd_sq, gamma, r_memory, rkey_format);
-    coeff = (r-1) * c1 + rcd.select(/*dim=*/3, /*index=*/0) * c2;
+    coeff = (r-1) * c1 + rcd.select(/*dim=*/-1, /*index=*/0) * c2;
   }
   else if (s > 0) {
     c1 = get_rcoeff(r, s-2, t, n+1, rcd, rcd_sq, gamma, r_memory, rkey_format);
     c2 = get_rcoeff(r, s-1, t, n+1, rcd, rcd_sq, gamma, r_memory, rkey_format);
-    coeff = (s-1) * c1 + rcd.select(/*dim=*/3, /*index=*/1) * c2;
+    coeff = (s-1) * c1 + rcd.select(/*dim=*/-1, /*index=*/1) * c2;
   }
   else {
     c1 = get_rcoeff(r, s, t-2, n+1, rcd, rcd_sq, gamma, r_memory, rkey_format);
     c2 = get_rcoeff(r, s, t-1, n+1, rcd, rcd_sq, gamma, r_memory, rkey_format);
-    coeff = (t-1) * c1 + rcd.select(/*dim=*/3, /*index=*/2) * c2;
+    coeff = (t-1) * c1 + rcd.select(/*dim=*/-1, /*index=*/2) * c2;
   }
   r_memory[key] = coeff;
   return coeff;

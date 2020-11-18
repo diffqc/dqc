@@ -22,7 +22,7 @@ torch::Tensor get_kinetics_mat(int ijk_left_max, int ijk_right_max, int max_basi
     py::dict& e_memory, py::str& key_format);
 
 torch::Tensor get_coulomb_mat(int max_ijkflat, int max_basis,
-    py::list& idx_ijk, torch::Tensor& rcd_sq,
+    torch::Tensor& idx_ijk, torch::Tensor& rcd_sq,
     torch::Tensor& ijk_pairs2_unique,
     // arguments for get_ecoeff (return: (nbasis_tot, nbasis_tot))
     torch::Tensor& alpha, torch::Tensor& betas, torch::Tensor& gamma,
