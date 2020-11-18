@@ -282,12 +282,26 @@ class Ecoeff(object):
 
         # original shape
         self.allbasis_shape = gamma.shape
+        self.allbasis_numel = gamma.numel()
 
         # get the index of the basis matrix for calculation efficiency
-        ijk_pairs2 = ijk_pairs2.view(-1)  # (nbasis*nelmts * nbasis*nelmts)
+        triu_idx0 = torch.triu_indices(self.allbasis_shape[0], self.allbasis_shape[1],
+                                       offset=0)
+        triu_idx0 = triu_idx0[0] + triu_idx0[1] * self.allbasis_shape[1]
+        ijk_pairs2 = ijk_pairs2.view(-1)[triu_idx0]
         ijk_pairs2, idx_ijkpairs = torch.sort(ijk_pairs2)
-        self.idx_ijkpairs = idx_ijkpairs
+        self.idx_ijkpairs = triu_idx0[idx_ijkpairs]
 
+        # get the triangular indices for reshaping basis
+        triu_idx1_raw = torch.triu_indices(self.allbasis_shape[0], self.allbasis_shape[1],
+                                           offset=0)
+        triu_idx1 = triu_idx1_raw[0] + triu_idx1_raw[1] * self.allbasis_shape[1]
+        # calculate tril in this way to make it go through column first then row
+        tril_idx1 = triu_idx1_raw[1] + triu_idx1_raw[0] * self.allbasis_shape[1]
+        self.tril_idx1 = tril_idx1
+        self.triu_idx1 = triu_idx1
+
+        # sort the basis matrix
         self.ijk_pairs = self.sort_basis(ijk_pairs)
         self.ijk_pairs2 = ijk_pairs2
         self.alphas = self.sort_basis(alphas.unsqueeze(0) + 0 * gamma)
@@ -327,13 +341,21 @@ class Ecoeff(object):
         self.coulomb = None
 
     def sort_basis(self, a, dim0=0):
+        # select the upper triangular and sort according to the ijk pairs
         a2 = a.reshape(*a.shape[:dim0], -1, *a.shape[dim0 + 2:])
         return a2.index_select(dim0, self.idx_ijkpairs)
 
     def reshape_basis(self, a, dim0=0):
         outshape = (*a.shape[:dim0], *self.allbasis_shape, *a.shape[dim0 + 1:])
-        res = torch.empty(a.shape, dtype=a.dtype, device=a.device)
+        resshape = (*a.shape[:dim0],  self.allbasis_numel, *a.shape[dim0 + 1:])
+        res = torch.empty(resshape, dtype=a.dtype, device=a.device)
+
+        # fill in the upper triangular part
         res.scatter_(dim0, self.idx_ijkpairs.expand(*a.shape[:-1], -1), a)
+
+        # fill in the lower triangular part with the upper triangular one
+        uval = res.index_select(dim0, self.triu_idx1)
+        res.scatter_(dim0, self.tril_idx1.expand(*uval.shape[:-1], -1), uval)
         return res.view(outshape)
 
     def get_overlap(self):
