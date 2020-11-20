@@ -12,16 +12,41 @@ https://github.com/jjgoings/McMurchie-Davidson (BSD-3-clause)
 For the license, see NOTICE
 */
 
+#define MAX_IJK 8 // the space to allocate for cache
+#define WITH_ECACHE // comment this if you don't want to store the cache for ecoeff
+
 template <typename scalar_t>
 struct ecoeff_params {
   scalar_t expUQx2;
   scalar_t uQxa;
   scalar_t uQxb;
+
+  #ifdef WITH_ECACHE
+  // caches
+  scalar_t values[MAX_IJK][MAX_IJK][MAX_IJK];
+  bool valid[MAX_IJK][MAX_IJK][MAX_IJK] = {false};
+  #endif
+
   ecoeff_params(scalar_t Qx, scalar_t u, scalar_t a1, scalar_t a2) {
     expUQx2 = std::exp(-u * Qx * Qx);
     uQxa = u * Qx / a1;
     uQxb = u * Qx / a2;
   }
+
+  #ifdef WITH_ECACHE
+  inline int hasval(int i, int j, int t) {
+    return valid[i][j][t];
+  }
+
+  inline scalar_t getval(int i, int j, int t) {
+    return values[i][j][t];
+  }
+
+  inline void setval(int i, int j, int t, scalar_t val) {
+    values[i][j][t] = val;
+    valid[i][j][t] = true;
+  }
+  #endif
 };
 
 template <typename scalar_t>
@@ -50,15 +75,32 @@ scalar_t calc_ecoeff(int i, int j, int t,
     else if ((i == 0) && (j == 0) && (t == 0)) {
       return ecx.expUQx2;
     }
-    else if (j == 0) {
-      return half_over_p * calc_ecoeff(i - 1, j, t - 1, half_over_p, ecx) -
-             ecx.uQxa    * calc_ecoeff(i - 1, j, t    , half_over_p, ecx) +
-             (t + 1)     * calc_ecoeff(i - 1, j, t + 1, half_over_p, ecx);
-    }
     else {
-      return half_over_p * calc_ecoeff(i, j - 1, t - 1, half_over_p, ecx) +
-             ecx.uQxb    * calc_ecoeff(i, j - 1, t    , half_over_p, ecx) +
-             (t + 1)     * calc_ecoeff(i, j - 1, t + 1, half_over_p, ecx);
+      #ifdef WITH_ECACHE
+      // cache
+      if (ecx.hasval(i, j, t)) {
+        return ecx.getval(i, j, t);
+      }
+      #endif
+
+      scalar_t res;
+      if (j == 0) {
+        res = half_over_p * calc_ecoeff(i - 1, j, t - 1, half_over_p, ecx) -
+              ecx.uQxa    * calc_ecoeff(i - 1, j, t    , half_over_p, ecx) +
+              (t + 1)     * calc_ecoeff(i - 1, j, t + 1, half_over_p, ecx);
+      }
+      else {
+        res = half_over_p * calc_ecoeff(i, j - 1, t - 1, half_over_p, ecx) +
+              ecx.uQxb    * calc_ecoeff(i, j - 1, t    , half_over_p, ecx) +
+              (t + 1)     * calc_ecoeff(i, j - 1, t + 1, half_over_p, ecx);
+      }
+
+      #ifdef WITH_ECACHE
+      // store cache
+      ecx.setval(i, j, t, res);
+      #endif
+
+      return res;
     }
   }
   else {
