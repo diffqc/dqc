@@ -16,11 +16,13 @@ For the license, see NOTICE
 DDFT modifications:
 * nuclear attraction is normalized for atoms at (0, 0, 0)
 * use of struct of params for ecoeff and rcoeff
-* use of caches
+* use of caches for ecoeff and rcoeff
 */
 
+// TODO: find the maximum size of cache to make it memory-efficient
 #define MAX_IJK 8 // the space to allocate for cache
 #define WITH_ECACHE // comment this if you don't want to store the cache for ecoeff
+#define WITH_RCACHE // comment this if you don't want to store the cache for rcoeff
 
 template <typename scalar_t>
 struct ecoeff_params {
@@ -63,6 +65,13 @@ struct rcoeff_params {
   scalar_t Py;
   scalar_t Pz;
   scalar_t mp2;
+
+  #ifdef WITH_RCACHE
+  // caches
+  scalar_t values[MAX_IJK][MAX_IJK][MAX_IJK][MAX_IJK];
+  bool valid[MAX_IJK][MAX_IJK][MAX_IJK][MAX_IJK] = {false};
+  #endif
+
   rcoeff_params(scalar_t p_, scalar_t Px_, scalar_t Py_, scalar_t Pz_) {
     Px = Px_;
     Py = Py_;
@@ -70,6 +79,21 @@ struct rcoeff_params {
     T = p_ * (Px * Px + Py * Py + Pz * Pz);
     mp2 = -p_ * 2;
   }
+
+  #ifdef WITH_RCACHE
+  inline int hasval(int t, int u, int v, int n) {
+    return valid[t][u][v][n];
+  }
+
+  inline scalar_t getval(int t, int u, int v, int n) {
+    return values[t][u][v][n];
+  }
+
+  inline void setval(int t, int u, int v, int n, scalar_t val) {
+    values[t][u][v][n] = val;
+    valid[t][u][v][n] = true;
+  }
+  #endif
 };
 
 template <typename scalar_t>
@@ -139,6 +163,13 @@ scalar_t calc_rcoeff(int t, int u, int v, int n,
   if ((t < 0) || (u < 0) || (v < 0) || (n < 0)) {
     return 0.0; // undefined
   }
+
+  #ifdef WITH_RCACHE
+  if (rp.hasval(t, u, v, n)) {
+    return rp.getval(t, u, v, n);
+  }
+  #endif
+
   if ((t == 0) && (u == 0) && (v == 0)) {
     val += std::pow(rp.mp2, n) * boys(n, rp.T);
   }
@@ -160,6 +191,11 @@ scalar_t calc_rcoeff(int t, int u, int v, int n,
     }
     val += rp.Px * calc_rcoeff(t - 1, u, v, n + 1, rp);
   }
+
+  #ifdef WITH_RCACHE
+  rp.setval(t, u, v, n, val);
+  #endif
+
   return val;
 }
 
