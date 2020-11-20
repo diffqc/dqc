@@ -13,6 +13,18 @@ For the license, see NOTICE
 */
 
 template <typename scalar_t>
+struct ecoeff_params {
+  scalar_t expUQx2;
+  scalar_t uQxa;
+  scalar_t uQxb;
+  ecoeff_params(scalar_t Qx, scalar_t u, scalar_t a1, scalar_t a2) {
+    expUQx2 = std::exp(-u * Qx * Qx);
+    uQxa = u * Qx / a1;
+    uQxb = u * Qx / a2;
+  }
+};
+
+template <typename scalar_t>
 scalar_t gaussian_product_center(scalar_t a1, scalar_t a2, scalar_t x1, scalar_t x2) {
   return (a1 * x1 + a2 * x2) / (a1 + a2);
 }
@@ -26,60 +38,63 @@ scalar_t boys(int n, scalar_t T) {
 
 template <typename scalar_t>
 scalar_t calc_ecoeff(int i, int j, int t,
-                     scalar_t Qx, scalar_t a, scalar_t b,
+                     scalar_t half_over_p, ecoeff_params<scalar_t>& ecx,
                      int n = 0, scalar_t Ax = 0.0) {
-  auto p = a + b;
-  auto u = a * b / p;
+  if ((i < 0) || (j < 0) || (t < 0)) {
+    return (scalar_t) 0.0; // undefined
+  }
   if (n == 0) {
     if ((t < 0) || (t > i + j)) {
-      return (scalar_t)0.0;
+      return (scalar_t) 0.0;
     }
     else if ((i == 0) && (j == 0) && (t == 0)) {
-      return std::exp(-u * Qx * Qx);
+      return ecx.expUQx2;
     }
     else if (j == 0) {
-      return (0.5 / p)    * calc_ecoeff(i - 1, j, t - 1, Qx, a, b) -
-             (u * Qx / a) * calc_ecoeff(i - 1, j, t    , Qx, a, b) +
-             (t + 1)      * calc_ecoeff(i - 1, j, t + 1, Qx, a, b);
+      return half_over_p * calc_ecoeff(i - 1, j, t - 1, half_over_p, ecx) -
+             ecx.uQxa    * calc_ecoeff(i - 1, j, t    , half_over_p, ecx) +
+             (t + 1)     * calc_ecoeff(i - 1, j, t + 1, half_over_p, ecx);
     }
     else {
-      return (0.5 / p)    * calc_ecoeff(i, j - 1, t - 1, Qx, a, b) +
-             (u * Qx / b) * calc_ecoeff(i, j - 1, t    , Qx, a, b) +
-             (t + 1)      * calc_ecoeff(i, j - 1, t + 1, Qx, a, b);
+      return half_over_p * calc_ecoeff(i, j - 1, t - 1, half_over_p, ecx) +
+             ecx.uQxb    * calc_ecoeff(i, j - 1, t    , half_over_p, ecx) +
+             (t + 1)     * calc_ecoeff(i, j - 1, t + 1, half_over_p, ecx);
     }
   }
   else {
-    return calc_ecoeff(i + 1, j, t, Qx, a, b, n - 1, Ax) +
-           Ax * calc_ecoeff(i, j, t, Qx, a, b, n - 1, Ax);
+    return calc_ecoeff(i + 1, j, t, half_over_p, ecx, n - 1, Ax) +
+           Ax * calc_ecoeff(i, j, t, half_over_p, ecx, n - 1, Ax);
   }
 }
 
 template <typename scalar_t>
 scalar_t calc_rcoeff(int t, int u, int v, int n,
                      scalar_t p, scalar_t PCx, scalar_t PCy, scalar_t PCz,
-                     scalar_t RPC) {
+                     scalar_t T) {
   scalar_t val = 0.0;
+  if ((t < 0) || (u < 0) || (v < 0) || (n < 0)) {
+    return 0.0; // undefined
+  }
   if ((t == 0) && (u == 0) && (v == 0)) {
-    scalar_t T = p * RPC * RPC;
     val += std::pow(-2 * p, n) * boys(n, T);
   }
   else if ((t == 0) && (u == 0)) {
     if (v > 1) {
-      val += (v - 1) * calc_rcoeff(t, u, v - 2, n + 1, p, PCx, PCy, PCz, RPC);
+      val += (v - 1) * calc_rcoeff(t, u, v - 2, n + 1, p, PCx, PCy, PCz, T);
     }
-    val += PCz * calc_rcoeff(t, u, v - 1, n + 1, p, PCx, PCy, PCz, RPC);
+    val += PCz * calc_rcoeff(t, u, v - 1, n + 1, p, PCx, PCy, PCz, T);
   }
   else if (t == 0) {
     if (u > 1) {
-      val += (u - 1) * calc_rcoeff(t, u - 2, v, n + 1, p, PCx, PCy, PCz, RPC);
+      val += (u - 1) * calc_rcoeff(t, u - 2, v, n + 1, p, PCx, PCy, PCz, T);
     }
-    val += PCy * calc_rcoeff(t, u - 1, v, n + 1, p, PCx, PCy, PCz, RPC);
+    val += PCy * calc_rcoeff(t, u - 1, v, n + 1, p, PCx, PCy, PCz, T);
   }
   else {
     if (t > 1) {
-      val += (t - 1) * calc_rcoeff(t - 2, u, v, n + 1, p, PCx, PCy, PCz, RPC);
+      val += (t - 1) * calc_rcoeff(t - 2, u, v, n + 1, p, PCx, PCy, PCz, T);
     }
-    val += PCx * calc_rcoeff(t - 1, u, v, n + 1, p, PCx, PCy, PCz, RPC);
+    val += PCx * calc_rcoeff(t - 1, u, v, n + 1, p, PCx, PCy, PCz, T);
   }
   return val;
 }
@@ -90,9 +105,15 @@ scalar_t calc_overlap(scalar_t a1, scalar_t x1, scalar_t y1, scalar_t z1,
                       int l1, int m1, int n1,
                       scalar_t a2, scalar_t x2, scalar_t y2, scalar_t z2,
                       int l2, int m2, int n2) {
-  auto sx = calc_ecoeff(l1, l2, 0, x1 - x2, a1, a2);
-  auto sy = calc_ecoeff(m1, m2, 0, y1 - y2, a1, a2);
-  auto sz = calc_ecoeff(n1, n2, 0, z1 - z2, a1, a2);
+  scalar_t p = a1 + a2;
+  scalar_t u = a1 * a2 / p;
+  scalar_t half_over_p = 0.5 / p;
+  auto ecx = ecoeff_params<scalar_t>(x1 - x2, u, a1, a2);
+  auto ecy = ecoeff_params<scalar_t>(y1 - y2, u, a1, a2);
+  auto ecz = ecoeff_params<scalar_t>(z1 - z2, u, a1, a2);
+  auto sx = calc_ecoeff(l1, l2, 0, half_over_p, ecx);
+  auto sy = calc_ecoeff(m1, m2, 0, half_over_p, ecy);
+  auto sz = calc_ecoeff(n1, n2, 0, half_over_p, ecz);
   return sx * sy * sz * std::pow(M_PI / (a1 + a2), 1.5);
 }
 
@@ -114,23 +135,31 @@ scalar_t calc_kinetic(scalar_t a1, scalar_t x1, scalar_t y1, scalar_t z1,
   scalar_t dy = y1 - y2;
   scalar_t dz = z1 - z2;
 
-  scalar_t Tx = Ax * calc_ecoeff(l1, l2    , 0, dx, a1, a2) +
-                Bx * calc_ecoeff(l1, l2 + 2, 0, dx, a1, a2) +
-                Cx * calc_ecoeff(l1, l2 - 2, 0, dx, a1, a2);
-  Tx *= calc_ecoeff(m1, m2, 0, dy, a1, a2);
-  Tx *= calc_ecoeff(n1, n2, 0, dz, a1, a2);
+  // prep for ecoeff
+  scalar_t p = a1 + a2;
+  scalar_t u = a1 * a2 / p;
+  scalar_t half_over_p = 0.5 / p;
+  auto ecx = ecoeff_params<scalar_t>(dx, u, a1, a2);
+  auto ecy = ecoeff_params<scalar_t>(dy, u, a1, a2);
+  auto ecz = ecoeff_params<scalar_t>(dz, u, a1, a2);
 
-  scalar_t Ty = Ay * calc_ecoeff(m1, m2    , 0, dy, a1, a2) +
-                Bx * calc_ecoeff(m1, m2 + 2, 0, dy, a1, a2) +
-                Cy * calc_ecoeff(m1, m2 - 2, 0, dy, a1, a2);
-  Ty *= calc_ecoeff(l1, l2, 0, dx, a1, a2);
-  Ty *= calc_ecoeff(n1, n2, 0, dz, a1, a2);
+  scalar_t Tx = Ax * calc_ecoeff(l1, l2    , 0, half_over_p, ecx) +
+                Bx * calc_ecoeff(l1, l2 + 2, 0, half_over_p, ecx) +
+                Cx * calc_ecoeff(l1, l2 - 2, 0, half_over_p, ecx);
+  Tx *= calc_ecoeff(m1, m2, 0, half_over_p, ecy);
+  Tx *= calc_ecoeff(n1, n2, 0, half_over_p, ecz);
 
-  scalar_t Tz = Az * calc_ecoeff(n1, n2    , 0, dz, a1, a2) +
-                Bx * calc_ecoeff(n1, n2 + 2, 0, dz, a1, a2) +
-                Cz * calc_ecoeff(n1, n2 - 2, 0, dz, a1, a2);
-  Tz *= calc_ecoeff(l1, l2, 0, dx, a1, a2);
-  Tz *= calc_ecoeff(m1, m2, 0, dy, a1, a2);
+  scalar_t Ty = Ay * calc_ecoeff(m1, m2    , 0, half_over_p, ecy) +
+                Bx * calc_ecoeff(m1, m2 + 2, 0, half_over_p, ecy) +
+                Cy * calc_ecoeff(m1, m2 - 2, 0, half_over_p, ecy);
+  Ty *= calc_ecoeff(l1, l2, 0, half_over_p, ecx);
+  Ty *= calc_ecoeff(n1, n2, 0, half_over_p, ecz);
+
+  scalar_t Tz = Az * calc_ecoeff(n1, n2    , 0, half_over_p, ecz) +
+                Bx * calc_ecoeff(n1, n2 + 2, 0, half_over_p, ecz) +
+                Cz * calc_ecoeff(n1, n2 - 2, 0, half_over_p, ecz);
+  Tz *= calc_ecoeff(l1, l2, 0, half_over_p, ecx);
+  Tz *= calc_ecoeff(m1, m2, 0, half_over_p, ecy);
 
   return (Tx + Ty + Tz) * std::pow(M_PI / (a1 + a2), 1.5);
 }
@@ -141,20 +170,31 @@ scalar_t calc_nuclattr(scalar_t a1, scalar_t x1, scalar_t y1, scalar_t z1,
                       int l1, int m1, int n1,
                       scalar_t a2, scalar_t x2, scalar_t y2, scalar_t z2,
                       int l2, int m2, int n2) {
-  scalar_t p = a1 + a2;
   scalar_t Px = gaussian_product_center(a1, a2, x1, x2);
   scalar_t Py = gaussian_product_center(a1, a2, y1, y2);
   scalar_t Pz = gaussian_product_center(a1, a2, z1, z2);
 
-  scalar_t RPC = std::sqrt(Px * Px + Py * Py + Pz * Pz);
+  // prep for ecoeff
+  scalar_t p = a1 + a2;
+  scalar_t uu = a1 * a2 / p;
+  scalar_t half_over_p = 0.5 / p;
+  auto ecx = ecoeff_params<scalar_t>(x1 - x2, uu, a1, a2);
+  auto ecy = ecoeff_params<scalar_t>(y1 - y2, uu, a1, a2);
+  auto ecz = ecoeff_params<scalar_t>(z1 - z2, uu, a1, a2);
+
+  // params for rcoeff
+  scalar_t T = p * (Px * Px + Py * Py + Pz * Pz);
+
   scalar_t val = 0.0;
   for (int t = 0; t < l1 + l2 + 1; ++t) {
+    scalar_t el = calc_ecoeff(l1, l2, t, half_over_p, ecx);
+
     for (int u = 0; u < m1 + m2 + 1; ++u) {
+      scalar_t em = calc_ecoeff(m1, m2, u, half_over_p, ecy);
+
       for (int v = 0; v < n1 + n2 + 1; ++v) {
-        val += calc_ecoeff(l1, l2, t, x1 - x2, a1, a2) *
-               calc_ecoeff(m1, m2, t, y1 - y2, a1, a2) *
-               calc_ecoeff(n1, n2, t, z1 - z2, a1, a2) *
-               calc_rcoeff(t, u, v, 0, p, Px, Py, Pz, RPC);
+        scalar_t ev = calc_ecoeff(n1, n2, v, half_over_p, ecz);
+        val += (el * em * ev) * calc_rcoeff(t, u, v, 0, p, Px, Py, Pz, T);
       }
     }
   }
