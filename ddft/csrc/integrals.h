@@ -12,6 +12,13 @@ https://github.com/jjgoings/McMurchie-Davidson (BSD-3-clause)
 For the license, see NOTICE
 */
 
+/*
+DDFT modifications:
+* nuclear attraction is normalized for atoms at (0, 0, 0)
+* use of struct of params for ecoeff and rcoeff
+* use of caches
+*/
+
 #define MAX_IJK 8 // the space to allocate for cache
 #define WITH_ECACHE // comment this if you don't want to store the cache for ecoeff
 
@@ -47,6 +54,22 @@ struct ecoeff_params {
     valid[i][j][t] = true;
   }
   #endif
+};
+
+template <typename scalar_t>
+struct rcoeff_params {
+  scalar_t T;
+  scalar_t Px;
+  scalar_t Py;
+  scalar_t Pz;
+  scalar_t mp2;
+  rcoeff_params(scalar_t p_, scalar_t Px_, scalar_t Py_, scalar_t Pz_) {
+    Px = Px_;
+    Py = Py_;
+    Pz = Pz_;
+    T = p_ * (Px * Px + Py * Py + Pz * Pz);
+    mp2 = -p_ * 2;
+  }
 };
 
 template <typename scalar_t>
@@ -111,32 +134,31 @@ scalar_t calc_ecoeff(int i, int j, int t,
 
 template <typename scalar_t>
 scalar_t calc_rcoeff(int t, int u, int v, int n,
-                     scalar_t p, scalar_t PCx, scalar_t PCy, scalar_t PCz,
-                     scalar_t T) {
+                     rcoeff_params<scalar_t>& rp) {
   scalar_t val = 0.0;
   if ((t < 0) || (u < 0) || (v < 0) || (n < 0)) {
     return 0.0; // undefined
   }
   if ((t == 0) && (u == 0) && (v == 0)) {
-    val += std::pow(-2 * p, n) * boys(n, T);
+    val += std::pow(rp.mp2, n) * boys(n, rp.T);
   }
   else if ((t == 0) && (u == 0)) {
     if (v > 1) {
-      val += (v - 1) * calc_rcoeff(t, u, v - 2, n + 1, p, PCx, PCy, PCz, T);
+      val += (v - 1) * calc_rcoeff(t, u, v - 2, n + 1, rp);
     }
-    val += PCz * calc_rcoeff(t, u, v - 1, n + 1, p, PCx, PCy, PCz, T);
+    val += rp.Pz * calc_rcoeff(t, u, v - 1, n + 1, rp);
   }
   else if (t == 0) {
     if (u > 1) {
-      val += (u - 1) * calc_rcoeff(t, u - 2, v, n + 1, p, PCx, PCy, PCz, T);
+      val += (u - 1) * calc_rcoeff(t, u - 2, v, n + 1, rp);
     }
-    val += PCy * calc_rcoeff(t, u - 1, v, n + 1, p, PCx, PCy, PCz, T);
+    val += rp.Py * calc_rcoeff(t, u - 1, v, n + 1, rp);
   }
   else {
     if (t > 1) {
-      val += (t - 1) * calc_rcoeff(t - 2, u, v, n + 1, p, PCx, PCy, PCz, T);
+      val += (t - 1) * calc_rcoeff(t - 2, u, v, n + 1, rp);
     }
-    val += PCx * calc_rcoeff(t - 1, u, v, n + 1, p, PCx, PCy, PCz, T);
+    val += rp.Px * calc_rcoeff(t - 1, u, v, n + 1, rp);
   }
   return val;
 }
@@ -225,7 +247,7 @@ scalar_t calc_nuclattr(scalar_t a1, scalar_t x1, scalar_t y1, scalar_t z1,
   auto ecz = ecoeff_params<scalar_t>(z1 - z2, uu, a1, a2);
 
   // params for rcoeff
-  scalar_t T = p * (Px * Px + Py * Py + Pz * Pz);
+  auto rp = rcoeff_params<scalar_t>(p, Px, Py, Pz);
 
   scalar_t val = 0.0;
   for (int t = 0; t < l1 + l2 + 1; ++t) {
@@ -236,7 +258,7 @@ scalar_t calc_nuclattr(scalar_t a1, scalar_t x1, scalar_t y1, scalar_t z1,
 
       for (int v = 0; v < n1 + n2 + 1; ++v) {
         scalar_t ev = calc_ecoeff(n1, n2, v, half_over_p, ecz);
-        val += (el * em * ev) * calc_rcoeff(t, u, v, 0, p, Px, Py, Pz, T);
+        val += (el * em * ev) * calc_rcoeff(t, u, v, 0, rp);
       }
     }
   }
