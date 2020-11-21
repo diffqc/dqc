@@ -17,6 +17,7 @@ def nuclattr(a1, pos1, lmn1, a2, pos2, lmn2, posc):
 
 # TODO: is there a more efficient way to calculate the backward instead of
 # using 12 and 18 calls to itself?
+# or maybe use cache to save previously calculated coefficients?
 
 class OverlapFunction(torch.autograd.Function):
     @staticmethod
@@ -148,8 +149,8 @@ if __name__ == "__main__":
     pos1 = (torch.randn((3, n), dtype=dtype) * 0.3).requires_grad_()
     pos2 = (torch.randn((3, n), dtype=dtype) * 0.3).requires_grad_()
     posc = (torch.randn((3, n), dtype=dtype) + 1)#.requires_grad_()
-    lmn1 = torch.ones((3, n))
-    lmn2 = torch.ones((3, n))
+    lmn1 = torch.ones((3, n)) * 2
+    lmn2 = torch.ones((3, n)) * 2
     t0 = time.time()
     # s = overlap(a1, pos1, lmn1, a2, pos2, lmn2)
     # s = kinetic(a1, pos1, lmn1, a2, pos2, lmn2)

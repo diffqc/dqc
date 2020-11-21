@@ -3,6 +3,7 @@
 #include <iostream>
 #include <cmath>
 #include <cstdlib>
+#include <memory>
 #include <torch/torch.h>
 #include "igamma.h"
 
@@ -19,10 +20,9 @@ DDFT modifications:
 * use of caches for ecoeff and rcoeff
 */
 
-// TODO: find the maximum size of cache to make it memory-efficient
-#define MAX_IJK 8 // the space to allocate for cache
-#define WITH_ECACHE // comment this if you don't want to store the cache for ecoeff
-#define WITH_RCACHE // comment this if you don't want to store the cache for rcoeff
+// comment the lines below if you don't want to store the cache
+#define WITH_ECACHE
+#define WITH_RCACHE
 
 template <typename scalar_t>
 struct ecoeff_params {
@@ -31,29 +31,44 @@ struct ecoeff_params {
   scalar_t uQxb;
 
   #ifdef WITH_ECACHE
+  private:
   // caches
-  scalar_t values[MAX_IJK][MAX_IJK][MAX_IJK];
-  bool valid[MAX_IJK][MAX_IJK][MAX_IJK] = {false};
+  std::unique_ptr<scalar_t[]> values_;
+  std::unique_ptr<bool[]> valid_;
+  int max_tn_;
+
+  public:
   #endif
 
-  ecoeff_params(scalar_t Qx, scalar_t u, scalar_t a1, scalar_t a2) {
+  ecoeff_params(scalar_t Qx, scalar_t u, scalar_t a1, scalar_t a2,
+                int max_i, int max_j, bool fullt = false) {
     expUQx2 = std::exp(-u * Qx * Qx);
     uQxa = u * Qx / a1;
     uQxb = u * Qx / a2;
+
+    #ifdef WITH_ECACHE
+    int max_ij = (max_i + max_j);
+    max_tn_ = 1 + (fullt ? max_ij : (max_ij / 2));
+    int size = (1 + max_ij) * max_tn_;
+
+    values_.reset(new scalar_t[size]);
+    valid_.reset(new bool[size]()); // initialize with all false
+    #endif
   }
 
   #ifdef WITH_ECACHE
   inline int hasval(int i, int j, int t) {
-    return valid[i][j][t];
+    return valid_[(i + j) * max_tn_ + t];
   }
 
   inline scalar_t getval(int i, int j, int t) {
-    return values[i][j][t];
+    return values_[(i + j) * max_tn_ + t];
   }
 
   inline void setval(int i, int j, int t, scalar_t val) {
-    values[i][j][t] = val;
-    valid[i][j][t] = true;
+    int idx = (i + j) * max_tn_ + t;
+    values_[idx] = val;
+    valid_[idx] = true;
   }
   #endif
 };
@@ -65,33 +80,54 @@ struct rcoeff_params {
   scalar_t Py;
   scalar_t Pz;
   scalar_t mp2;
+  int tmax = 0;
+  int umax = 0;
+  int vmax = 0;
+  int nmax = 0;
 
   #ifdef WITH_RCACHE
   // caches
-  scalar_t values[MAX_IJK][MAX_IJK][MAX_IJK][MAX_IJK];
-  bool valid[MAX_IJK][MAX_IJK][MAX_IJK][MAX_IJK] = {false};
+  std::unique_ptr<scalar_t[]> values_;
+  std::unique_ptr<bool[]> valid_;
+  int v_offset_;
+  int u_offset_;
+  int t_offset_;
   #endif
 
-  rcoeff_params(scalar_t p_, scalar_t Px_, scalar_t Py_, scalar_t Pz_) {
+  rcoeff_params(scalar_t p_, scalar_t Px_, scalar_t Py_, scalar_t Pz_,
+                int max_tn, int max_un, int max_vn) {
     Px = Px_;
     Py = Py_;
     Pz = Pz_;
     T = p_ * (Px * Px + Py * Py + Pz * Pz);
-    mp2 = -p_ * 2;
+    mp2 = -2 * p_;
+
+    #ifdef WITH_RCACHE
+    int max_nn = max_tn + max_un + max_vn;
+    v_offset_ = (max_nn + 1);
+    u_offset_ = (max_vn + 1) * v_offset_;
+    t_offset_ = (max_un + 1) * u_offset_;
+    int size  = (max_tn + 1) * t_offset_;
+    values_.reset(new scalar_t[size]);
+    valid_.reset(new bool[size]()); // initialize with false
+    #endif
   }
 
   #ifdef WITH_RCACHE
   inline int hasval(int t, int u, int v, int n) {
-    return valid[t][u][v][n];
+    int idx = t * t_offset_ + u * u_offset_ + v * v_offset_ + n;
+    return valid_[idx];
   }
 
   inline scalar_t getval(int t, int u, int v, int n) {
-    return values[t][u][v][n];
+    int idx = t * t_offset_ + u * u_offset_ + v * v_offset_ + n;
+    return values_[idx];
   }
 
   inline void setval(int t, int u, int v, int n, scalar_t val) {
-    values[t][u][v][n] = val;
-    valid[t][u][v][n] = true;
+    int idx = t * t_offset_ + u * u_offset_ + v * v_offset_ + n;
+    values_[idx] = val;
+    valid_[idx] = true;
   }
   #endif
 };
@@ -208,9 +244,9 @@ scalar_t calc_overlap(scalar_t a1, scalar_t x1, scalar_t y1, scalar_t z1,
   scalar_t p = a1 + a2;
   scalar_t u = a1 * a2 / p;
   scalar_t half_over_p = 0.5 / p;
-  auto ecx = ecoeff_params<scalar_t>(x1 - x2, u, a1, a2);
-  auto ecy = ecoeff_params<scalar_t>(y1 - y2, u, a1, a2);
-  auto ecz = ecoeff_params<scalar_t>(z1 - z2, u, a1, a2);
+  auto ecx = ecoeff_params<scalar_t>(x1 - x2, u, a1, a2, l1, l2);
+  auto ecy = ecoeff_params<scalar_t>(y1 - y2, u, a1, a2, m1, m2);
+  auto ecz = ecoeff_params<scalar_t>(z1 - z2, u, a1, a2, n1, n2);
   auto sx = calc_ecoeff(l1, l2, 0, half_over_p, ecx);
   auto sy = calc_ecoeff(m1, m2, 0, half_over_p, ecy);
   auto sz = calc_ecoeff(n1, n2, 0, half_over_p, ecz);
@@ -239,9 +275,9 @@ scalar_t calc_kinetic(scalar_t a1, scalar_t x1, scalar_t y1, scalar_t z1,
   scalar_t p = a1 + a2;
   scalar_t u = a1 * a2 / p;
   scalar_t half_over_p = 0.5 / p;
-  auto ecx = ecoeff_params<scalar_t>(dx, u, a1, a2);
-  auto ecy = ecoeff_params<scalar_t>(dy, u, a1, a2);
-  auto ecz = ecoeff_params<scalar_t>(dz, u, a1, a2);
+  auto ecx = ecoeff_params<scalar_t>(dx, u, a1, a2, l1, l2 + 2);
+  auto ecy = ecoeff_params<scalar_t>(dy, u, a1, a2, m1, m2 + 2);
+  auto ecz = ecoeff_params<scalar_t>(dz, u, a1, a2, n1, n2 + 2);
 
   scalar_t Tx = Ax * calc_ecoeff(l1, l2    , 0, half_over_p, ecx) +
                 Bx * calc_ecoeff(l1, l2 + 2, 0, half_over_p, ecx) +
@@ -278,12 +314,16 @@ scalar_t calc_nuclattr(scalar_t a1, scalar_t x1, scalar_t y1, scalar_t z1,
   scalar_t p = a1 + a2;
   scalar_t uu = a1 * a2 / p;
   scalar_t half_over_p = 0.5 / p;
-  auto ecx = ecoeff_params<scalar_t>(x1 - x2, uu, a1, a2);
-  auto ecy = ecoeff_params<scalar_t>(y1 - y2, uu, a1, a2);
-  auto ecz = ecoeff_params<scalar_t>(z1 - z2, uu, a1, a2);
+  auto ecx = ecoeff_params<scalar_t>(x1 - x2, uu, a1, a2,
+                                     l1, l2, /*fullt*/true);
+  auto ecy = ecoeff_params<scalar_t>(y1 - y2, uu, a1, a2,
+                                     m1, m2, /*fullt*/true);
+  auto ecz = ecoeff_params<scalar_t>(z1 - z2, uu, a1, a2,
+                                     n1, n2, /*fullt*/true);
 
   // params for rcoeff
-  auto rp = rcoeff_params<scalar_t>(p, Px, Py, Pz);
+  auto rp = rcoeff_params<scalar_t>(p, Px, Py, Pz,
+                                    l1 + l2, m1 + m2, n1 + n2);
 
   scalar_t val = 0.0;
   for (int t = 0; t < l1 + l2 + 1; ++t) {
