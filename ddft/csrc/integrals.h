@@ -246,6 +246,12 @@ scalar_t calc_overlap(scalar_t a1, scalar_t x1, scalar_t y1, scalar_t z1,
                       int l1, int m1, int n1,
                       scalar_t a2, scalar_t x2, scalar_t y2, scalar_t z2,
                       int l2, int m2, int n2) {
+  // bound check
+  if ((l1 < 0) || (m1 < 0) || (n1 < 0) ||
+      (l2 < 0) || (m2 < 0) || (n2 < 0)) {
+    return (scalar_t)0.0;
+  }
+
   scalar_t p = a1 + a2;
   scalar_t u = a1 * a2 / p;
   scalar_t half_over_p = 0.5 / p;
@@ -264,7 +270,12 @@ scalar_t calc_kinetic(scalar_t a1, scalar_t x1, scalar_t y1, scalar_t z1,
                       int l1, int m1, int n1,
                       scalar_t a2, scalar_t x2, scalar_t y2, scalar_t z2,
                       int l2, int m2, int n2) {
-  // pass
+  // bound check
+  if ((l1 < 0) || (m1 < 0) || (n1 < 0) ||
+      (l2 < 0) || (m2 < 0) || (n2 < 0)) {
+    return (scalar_t)0.0;
+  }
+
   scalar_t Ax = (2 * l2 + 1) * a2;
   scalar_t Ay = (2 * m2 + 1) * a2;
   scalar_t Az = (2 * n2 + 1) * a2;
@@ -311,6 +322,12 @@ scalar_t calc_nuclattr(scalar_t a1, scalar_t x1, scalar_t y1, scalar_t z1,
                       int l1, int m1, int n1,
                       scalar_t a2, scalar_t x2, scalar_t y2, scalar_t z2,
                       int l2, int m2, int n2) {
+  // bound check
+  if ((l1 < 0) || (m1 < 0) || (n1 < 0) ||
+      (l2 < 0) || (m2 < 0) || (n2 < 0)) {
+    return (scalar_t)0.0;
+  }
+
   scalar_t Px = gaussian_product_center(a1, a2, x1, x2);
   scalar_t Py = gaussian_product_center(a1, a2, y1, y2);
   scalar_t Pz = gaussian_product_center(a1, a2, z1, z2);

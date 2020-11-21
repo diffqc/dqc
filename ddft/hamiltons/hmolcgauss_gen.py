@@ -7,8 +7,9 @@ import xitorch as xt
 from ddft.hamiltons.base_hamilton_gen import BaseHamiltonGenerator, DensityInfo
 from ddft.utils.spharmonics import spharmonics
 from ddft.utils.gamma import incgamma
-from ddft.csrc import get_ecoeff, get_overlap_mat, get_kinetics_mat, \
-    get_coulomb_mat
+# from ddft.csrc import get_ecoeff, get_overlap_mat, get_kinetics_mat, \
+#     get_coulomb_mat
+from ddft.integrals.cgauss import overlap, kinetic, nuclattr
 
 class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
     """
@@ -78,7 +79,7 @@ class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
             device = device)
 
         # get the matrices before contraction
-        ecoeff_obj = Ecoeff(ijks, centres, alphas, atompos)
+        ecoeff_obj = Ecoeff2(ijks, centres, alphas, atompos)
         self.olp_elmts = ecoeff_obj.get_overlap() # (nelmtstot, nelmtstot)
         self.kin_elmts = ecoeff_obj.get_kinetics() # (nelmtstot, nelmtstot)
         self.coul_elmts = ecoeff_obj.get_coulomb() * atomzs.unsqueeze(-1).unsqueeze(-1) # (natoms, nelmtstot, nelmtstot)
@@ -246,289 +247,43 @@ class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
         cmat = cmat.view(*batch_size, self.nbasis, self.nbasis)
         return cmat
 
-class Ecoeff(object):
-    # ref: https://joshuagoings.com/2017/04/28/integrals/ and
-    # Helgaker, Trygve, and Peter R. Taylor. “Gaussian basis sets and molecular integrals.” Modern Electronic Structure (1995).
+class Ecoeff2(object):
     def __init__(self, ijks, centres, alphas, atompos):
         # ijks: (nbasis*nelmts, 3)
         # centres: (nbasis*nelmts, 3)
         # alphas: (nbasis*nelmts)
         # atompos: (natoms, 3)
 
-        # Computing the integrals are done with vectorization using cache
-        # (so no double computation for the same coefficients).
-        # The poewr pairs (ijk and lmn) are encoded with a number and arranged
-        # in a matrix of size (nbasis*nelmts, nbasis*neltms)
+        nelmtstot = alphas.shape[0]
+        natoms = atompos.shape[0]
+        ijks = ijks.transpose(-2, -1)  # (3, nelmtstot)
+        centres = centres.transpose(-2, -1)  # (3, nelmtstot)
+        atompos = atompos.transpose(-2, -1)  # (3, natoms)
 
+        zeros = torch.zeros((nelmtstot, nelmtstot), dtype=alphas.dtype, device=alphas.device)
+        zeros_natoms = torch.zeros((natoms, nelmtstot, nelmtstot), dtype=alphas.dtype, device=alphas.device)
+
+        self.lmn1 = ijks.unsqueeze(-1) + zeros.to(ijks.dtype)  # (3, nelmtstot, nelmtstot)
+        self.lmn2 = ijks.unsqueeze(-2) + zeros.to(ijks.dtype)  # (3, nelmtstot, nelmtstot)
+        self.pos1 = centres.unsqueeze(-1) + zeros  # (3, nelmtstot, nelmtstot)
+        self.pos2 = centres.unsqueeze(-2) + zeros  # (3, nelmtstot, nelmtstot)
+        self.a1 = alphas.unsqueeze(-1) + zeros  # (nelmtstot, nelmtstot)
+        self.a2 = alphas.unsqueeze(-2) + zeros  # (nelmtstot, nelmtstot)
+        self.zeros_natoms = zeros_natoms  # (natoms, nelmtstot, nelmtstot)
         self.atompos = atompos
 
-        # encode the power pairs
-        self.max_basis = 8
-        self.max_ijkflat = 64
-        ijk_left = ijks.unsqueeze(0) # (1, nbasis*nelmts, 3)
-        ijk_right = ijks.unsqueeze(1) # (nbasis*nelmts, 1, 3)
-        self.ndim = ijk_left.shape[-1]
-        ijk_pairs = ijk_left * self.max_basis + ijk_right # (nbasis*nelmts, nbasis*nelmts, 3)
-        ijk_pairs2 = ijk_pairs[:,:,0] * self.max_ijkflat*self.max_ijkflat + \
-                     ijk_pairs[:,:,1] * self.max_ijkflat + ijk_pairs[:,:,2] # (nbasis*nelmts, nbasis*nelmts)
-
-        qab = centres - centres.unsqueeze(1) # (nbasis*nelmts, nbasis*nelmts, 3)
-        gamma = (alphas + alphas.unsqueeze(1)) # (nbasis*nelmts, nbasis*nelmts)
-        kappa = (alphas * alphas.unsqueeze(1)) / gamma # (nbasis*nelmts, nbasis*nelmts)
-        ra = alphas.unsqueeze(-1) * centres # (nbasis*nelmts, 3)
-        rc = (ra + ra.unsqueeze(1)) / gamma.unsqueeze(-1) # (nbasis*nelmts, nbasis*nelmts, 3)
-
-        # original shape
-        self.allbasis_shape = gamma.shape
-        self.allbasis_numel = gamma.numel()
-
-        # get the index of the basis matrix for calculation efficiency
-        triu_idx0 = torch.triu_indices(self.allbasis_shape[0], self.allbasis_shape[1],
-                                       offset=0)
-        triu_idx0 = triu_idx0[0] + triu_idx0[1] * self.allbasis_shape[1]
-        ijk_pairs2 = ijk_pairs2.view(-1)[triu_idx0]
-        ijk_pairs2, idx_ijkpairs = torch.sort(ijk_pairs2)
-        self.idx_ijkpairs = triu_idx0[idx_ijkpairs]
-
-        # get the triangular indices for reshaping basis
-        triu_idx1_raw = torch.triu_indices(self.allbasis_shape[0], self.allbasis_shape[1],
-                                           offset=0)
-        triu_idx1 = triu_idx1_raw[0] + triu_idx1_raw[1] * self.allbasis_shape[1]
-        # calculate tril in this way to make it go through column first then row
-        tril_idx1 = triu_idx1_raw[1] + triu_idx1_raw[0] * self.allbasis_shape[1]
-        self.tril_idx1 = tril_idx1
-        self.triu_idx1 = triu_idx1
-
-        # sort the basis matrix
-        self.ijk_pairs2 = ijk_pairs2
-        self.ijk_pairs  = self.sort_basis(ijk_pairs)  # (nbasiscut,)
-        self.alphas     = self.sort_basis(alphas.unsqueeze(0) + 0 * gamma)  # (nbasiscut,)
-        self.betas      = self.sort_basis(alphas.unsqueeze(1) + 0 * gamma)  # (nbasiscut,)
-        self.qab        = self.sort_basis(qab)  # (nbasiscut, 3)
-        self.gamma      = self.sort_basis(gamma)  # (nbasiscut,)
-        self.kappa      = self.sort_basis(kappa)  # (nbasiscut,)
-        self.rc         = self.sort_basis(rc)  # (nbasiscut, 3)
-
-        self.ijk_left_max = ijk_left.max()
-        self.ijk_right_max = ijk_right.max()
-        self.ijk_pairs2_unique, ijkpairs2_count = torch.unique(
-            self.ijk_pairs2, return_counts=True, sorted=True)
-        self.idx_ijk = torch.cat(
-            (torch.tensor([0], dtype=ijkpairs2_count.dtype, device=ijkpairs2_count.device),
-             torch.cumsum(ijkpairs2_count, dim=0)), dim=0)
-
-        # the key is: "i,j,t,xyz"
-        self.key_format = "{},{},{},{}"
-        self.rkey_format = "{},{},{},{}"
-        # the value's shape is: (nbasiscut,)
-        # get the initial values of the cache
-        qab_sq = self.qab * self.qab  # (nbasiscut, 3)
-        mab = torch.exp(-self.kappa.unsqueeze(-1) * qab_sq)  # (nbasiscut, 3)
-        self.e_memory = {
-            "0,0,0,0": mab[..., 0],
-            "0,0,0,1": mab[..., 1],
-            "0,0,0,2": mab[..., 2],
-        }
-        # the key format is: r,s,t,n
-        # the value's shape is: (natoms, nbasiscut)
-        self.r_memory = {}
-
-        # cache
-        self.overlap = None
-        self.kinetics = None
-        self.coulomb = None
-
-    def sort_basis(self, a, dim0=0):
-        # select the upper triangular and sort according to the ijk pairs
-        a2 = a.reshape(*a.shape[:dim0], -1, *a.shape[dim0 + 2:])
-        return a2.index_select(dim0, self.idx_ijkpairs)
-
-    def reshape_basis(self, a, dim0=0):
-        outshape = (*a.shape[:dim0], *self.allbasis_shape, *a.shape[dim0 + 1:])
-        resshape = (*a.shape[:dim0],  self.allbasis_numel, *a.shape[dim0 + 1:])
-        res = torch.empty(resshape, dtype=a.dtype, device=a.device)
-
-        # fill in the upper triangular part
-        res.scatter_(dim0, self.idx_ijkpairs.expand(*a.shape[:-1], -1), a)
-
-        # fill in the lower triangular part with the upper triangular one
-        uval = res.index_select(dim0, self.triu_idx1)
-        res.scatter_(dim0, self.tril_idx1.expand(*uval.shape[:-1], -1), uval)
-        return res.view(outshape)
-
     def get_overlap(self):
-        if self.overlap is None:
-            # NOTE: using this makes test_grad_intermediate.py::test_grad_dft_cgto produces nan in gradgradcheck energy
-            # (nans are in the numerical, not in the analytic one)
-            self.overlap = get_overlap_mat(self.ijk_left_max, self.ijk_right_max,
-                self.max_basis, self.ndim, self.ijk_pairs,
-                self.alphas, self.betas, self.gamma, self.kappa, self.qab,
-                self.e_memory, self.key_format)
-
-            self.overlap = self.reshape_basis(self.overlap)
-
-            # # python code for profiling with pprofile
-            # overlap_dim = torch.empty_like(self.qab); # (nbasis_tot, nbasis_tot, ndim)
-            # for i in range(self.ijk_left_max + 1):
-            #     for j in range(self.ijk_right_max + 1):
-            #         idx = (self.ijk_pairs == (i * self.max_basis + j)); # (nbasis_tot, nbasis_tot, ndim)
-            #         for xyz in range(self.ndim):
-            #             idxx = idx[..., xyz]
-            #             coeff = self.get_ecoeff(i, j, 0, xyz)
-            #             overlap_dim[..., xyz][idxx] = coeff[idxx]
-            # res = overlap_dim.prod(dim=-1) * torch.pow(np.pi / self.gamma, 1.5); # (nbasis_tot, nbasis_tot)
-            # self.overlap = res
-
-        return self.overlap
+        return overlap(self.a1, self.pos1, self.lmn1, self.a2, self.pos2, self.lmn2)
 
     def get_kinetics(self):
-        if self.kinetics is None:
-            self.kinetics = get_kinetics_mat(self.ijk_left_max, self.ijk_right_max,
-                self.max_basis, self.ndim, self.ijk_pairs,
-                self.alphas, self.betas, self.gamma, self.kappa, self.qab,
-                self.e_memory, self.key_format)
-
-            self.kinetics = self.reshape_basis(self.kinetics)
-
-            # # python code for profiling with pprofile
-            # kinetics_dim0 = torch.empty_like(self.qab) # (nbasis_tot, nbasis_tot, ndim)
-            # kinetics_dim1 = torch.empty_like(self.qab) # (nbasis_tot, nbasis_tot, ndim)
-            # kinetics_dim2 = torch.empty_like(self.qab) # (nbasis_tot, nbasis_tot, ndim)
-            # for i in range(self.ijk_left_max + 1):
-            #     for j in range(self.ijk_right_max + 1):
-            #         idx = (self.ijk_pairs == (i * self.max_basis + j))
-            #         for xyz in range(self.ndim):
-            #             idxx = idx[..., xyz]
-            #             sij = self.get_ecoeff(i, j  , 0, xyz)
-            #             d1  = self.get_ecoeff(i, j-2, 0, xyz)
-            #             d2  = self.get_ecoeff(i, j+2, 0, xyz)
-            #             dij = j*(j-1)*d1 - 2*(2*j+1)*self.betas*sij + 4*self.betas*self.betas*d2;
-            #             sij_idxx = sij[idxx]
-            #             dij_idxx = dij[idxx]
-            #             if xyz == 0:
-            #                 kinetics_dim0[..., xyz][idxx] = dij_idxx
-            #                 kinetics_dim1[..., xyz][idxx] = sij_idxx
-            #                 kinetics_dim2[..., xyz][idxx] = sij_idxx
-            #             elif xyz == 1:
-            #                 kinetics_dim0[..., xyz][idxx] = sij_idxx
-            #                 kinetics_dim1[..., xyz][idxx] = dij_idxx
-            #                 kinetics_dim2[..., xyz][idxx] = sij_idxx
-            #             else:
-            #                 kinetics_dim0[..., xyz][idxx] = sij_idxx
-            #                 kinetics_dim1[..., xyz][idxx] = sij_idxx
-            #                 kinetics_dim2[..., xyz][idxx] = dij_idxx
-            # kinetics = kinetics_dim0.prod(dim=-1) + kinetics_dim1.prod(dim=-1) + kinetics_dim2.prod(dim=-1)
-            # res = -0.5 * torch.pow(np.pi / self.gamma, 1.5) * kinetics
-            # self.kinetics = res
-
-        return self.kinetics
+        return kinetic(self.a1, self.pos1, self.lmn1, self.a2, self.pos2, self.lmn2)
 
     def get_coulomb(self):
-        # returns (natoms, nbasis*nelmts, nbasis*nelmts)
-        if self.coulomb is None:
-            # self.rc: (nbasiscut, 3)
-            rcd = self.rc - self.atompos.unsqueeze(1) # (natoms, nbasiscut, 3)
-            rcd_sq = torch.einsum("...d,...d->...", rcd, rcd)
-
-            self.coulomb = get_coulomb_mat(
-                self.max_ijkflat, self.max_basis,
-                self.idx_ijk,
-                rcd_sq,
-                self.ijk_pairs2_unique,
-                self.alphas, self.betas, self.gamma, self.kappa, self.qab,
-                self.e_memory, self.key_format,
-                rcd, self.r_memory, self.rkey_format)
-
-            # # python code for profiling with pprofile
-            # coulomb = torch.zeros_like(self.rcd_sq)
-            # numel = self.ijk_pairs2_unique.numel()
-            # max_ijkflat = self.max_ijkflat
-            # max_basis = self.max_basis
-            # for i in range(numel):
-            #     ijk_flat_value = int(self.ijk_pairs2_unique[i])
-            #     idx = slice(self.idx_ijk[i], self.idx_ijk[i + 1], None)
-            #     rcd2 = self.rcd
-            #     rcd_sq2 = self.rcd_sq
-            #     gamma2 = self.gamma
-            #
-            #     ijk_pair2 = ijk_flat_value % max_ijkflat
-            #     ijk_pair1 = (ijk_flat_value // max_ijkflat) % max_ijkflat
-            #     ijk_pair0 = (ijk_flat_value // max_ijkflat) // max_ijkflat
-            #     k = ijk_pair0 // max_basis
-            #     l = ijk_pair1 // max_basis
-            #     m = ijk_pair2 // max_basis
-            #     u = ijk_pair0 % max_basis
-            #     v = ijk_pair1 % max_basis
-            #     w = ijk_pair2 % max_basis
-            #
-            #     for r in range(k + u + 1):
-            #         Erku = self.get_ecoeff(k, u, r, 0)[idx]
-            #         for s in range(l + v + 1):
-            #             Eslv = self.get_ecoeff(l, v, s, 1)[idx]
-            #             for t in range(m + w + 1):
-            #                 Etmw = self.get_ecoeff(m, w, t, 2)[idx]
-            #                 Rrst = self.get_rcoeff(r, s, t, 0,
-            #                     rcd2, rcd_sq2, gamma2)[:,idx]
-            #                 coulomb[:,idx] += (Erku * Eslv * Etmw) * Rrst
-            #
-            # coulomb *= -(2 * np.pi / self.gamma)
-            # self.coulomb = coulomb
-
-            # reshape
-            self.coulomb = self.reshape_basis(self.coulomb, dim0=1)
-
-        return self.coulomb
-
-    # python code for profiling only
-    def get_ecoeff(self, i, j, t, xyz):
-        if (t < 0) or (t > (i + j)) or (i < 0) or (j < 0):
-            return torch.zeros_like(self.qab[..., 0])
-        key = self.key_format.format(i, j, t, xyz)
-        if key in self.e_memory:
-            return self.e_memory[key]
-
-        if (i == 0) and (j > 0):
-            c1 = self.get_ecoeff(i, j-1, t-1, xyz)
-            c2 = self.get_ecoeff(i, j-1, t  , xyz)
-            c3 = self.get_ecoeff(i, j-1, t+1, xyz)
-            coeff = 1. / (2 * self.gamma) * c1 + self.kappa * self.qab[..., xyz] / self.betas * c2 + (t + 1) * c3
-        else:
-            c1 = self.get_ecoeff(i-1, j, t-1, xyz)
-            c2 = self.get_ecoeff(i-1, j, t  , xyz)
-            c3 = self.get_ecoeff(i-1, j, t+1, xyz)
-            coeff = 1. / (2 * self.gamma) * c1 - self.kappa * self.qab[..., xyz] / self.alphas * c2 + (t + 1) * c3
-        self.e_memory[key] = coeff
-        return coeff
-
-    # python code for profiling only
-    def get_rcoeff(self, r, s, t, n, rcd, rcd_sq, gamma):
-        if r < 0 or s < 0 or t < 0:
-            return 0
-
-        key = self.rkey_format.format(r, s, t, n)
-        if key in self.r_memory:
-            return self.r_memory[key]
-
-        if r == 0 and s == 0 and t == 0:
-            gamma_rcd = gamma * rcd_sq
-            coeff = (-2 * gamma)**n * self.boys(n, gamma_rcd)
-        elif r > 0:
-            c1 = self.get_rcoeff(r-2, s, t, n+1, rcd, rcd_sq, gamma)
-            c2 = self.get_rcoeff(r-1, s, t, n+1, rcd, rcd_sq, gamma)
-            coeff = (r-1) * c1 + rcd[..., 0] * c2
-        elif s > 0:
-            c1 = self.get_rcoeff(r, s-2, t, n+1, rcd, rcd_sq, gamma)
-            c2 = self.get_rcoeff(r, s-1, t, n+1, rcd, rcd_sq, gamma)
-            coeff = (s-1) * c1 + rcd[..., 1] * c2
-        else:
-            c1 = self.get_rcoeff(r, s, t-2, n+1, rcd, rcd_sq, gamma)
-            c2 = self.get_rcoeff(r, s, t-1, n+1, rcd, rcd_sq, gamma)
-            coeff = (t-1) * c1 + rcd[..., 2] * c2
-        self.r_memory[key] = coeff
-        return coeff
-
-    def boys(self, n, t):
-        nhalf = torch.tensor(n + 0.5, dtype=t.dtype, device=t.device)
-        t2 = t + 1e-12
-        exp_part = -nhalf * torch.log(t2) + torch.lgamma(nhalf)
-        return 0.5 * torch.igamma(nhalf, t2) * torch.exp(exp_part)
+        a1 = self.a1 + self.zeros_natoms
+        a2 = self.a2 + self.zeros_natoms
+        pos1 = self.pos1.unsqueeze(1) + self.zeros_natoms
+        pos2 = self.pos2.unsqueeze(1) + self.zeros_natoms
+        lmn1 = self.lmn1.unsqueeze(1) + self.zeros_natoms.to(self.lmn1.dtype)
+        lmn2 = self.lmn2.unsqueeze(1) + self.zeros_natoms.to(self.lmn2.dtype)
+        posc = self.atompos.unsqueeze(-1).unsqueeze(-1) + self.zeros_natoms
+        return nuclattr(a1, pos1, lmn1, a2, pos2, lmn2, posc)

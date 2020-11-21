@@ -18,6 +18,7 @@ def test_integral_grad(int_type):
     pos1 = (torch.randn((3, n), **kwargs) * 0.3).requires_grad_()
     pos2 = (torch.randn((3, n), **kwargs) * 0.3).requires_grad_()
     posc = (torch.randn((3, n), **kwargs) + 1).requires_grad_()
+    # angular momentum: 3
     lmn1 = torch.ones((3, n))
     lmn2 = torch.ones((3, n))
 

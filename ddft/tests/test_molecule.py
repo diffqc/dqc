@@ -208,8 +208,16 @@ def calc_molsystem_energy_grad(atomzs, dist_central, eps=1e-2):
 if __name__ == "__main__":
     # run_test_mol_grad((1., 1.), 1.5)
     run_test_mol_grad((6., 8.), 2.0)
+    # runtest_molsystem_energy("Be 0 0 0", "6-311++G**", "lda,")
     # run_test_mol_grad((9., 9.), 3.0)
     # calc_molsystem_energy_grad([6., 8.], 2.0)
+
+    # # uncomment to use pprofile
+    # import pprofile
+    # prof = pprofile.Profile()
+    # with prof():
+    #     runtest_molsystem_energy("Be 0 0 0", "6-311++G**", "lda,")
+    # prof.print_stats()
 
     # (1, 1), 1.5: 6.967e-3, 2.872e-1
     # (3, 3), 5.0: -6.292e-3, 1.900e-2
