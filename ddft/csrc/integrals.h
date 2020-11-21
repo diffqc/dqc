@@ -140,8 +140,13 @@ scalar_t gaussian_product_center(scalar_t a1, scalar_t a2, scalar_t x1, scalar_t
 template <typename scalar_t>
 scalar_t boys(int n, scalar_t T) {
   scalar_t nhalf = n + 0.5;
-  scalar_t exp_part = -nhalf * std::log(T) + std::lgamma(nhalf);
-  return 0.5 * calc_igamma(nhalf, T) * std::exp(exp_part);
+  if (T == 0) {
+    return (scalar_t)1.0 / (2 * n + (scalar_t)1.0);
+  }
+  else {
+    scalar_t exp_part = -nhalf * std::log(T) + std::lgamma(nhalf);
+    return 0.5 * calc_igamma(nhalf, T) * std::exp(exp_part);
+  }
 }
 
 template <typename scalar_t>
@@ -338,7 +343,7 @@ scalar_t calc_nuclattr(scalar_t a1, scalar_t x1, scalar_t y1, scalar_t z1,
       }
     }
   }
-  val *= (2 * M_PI) / p;
+  val *= -(2 * M_PI) / p;
   return val;
 }
 
