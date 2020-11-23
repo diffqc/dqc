@@ -54,8 +54,7 @@ class NuclattrFunction(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_res):
-        return _calc_backward(ctx.saved_tensors, grad_res, NuclattrFunction.apply,
-                              explicit_gradpos2=True)
+        return _calc_backward(ctx.saved_tensors, grad_res, NuclattrFunction.apply)
 
 class ElrepFunction(torch.autograd.Function):
     @staticmethod
@@ -69,17 +68,20 @@ class ElrepFunction(torch.autograd.Function):
         return _calc_backward_el(ctx.saved_tensors, grad_res, ElrepFunction.apply)
 
 def _apply_fcn(fcn, alphas, poss, lmns):
-    assert all(a.shape == alphas[0].shape for a in alphas) and \
-           all(pos.shape == poss[0].shape for pos in poss) and \
-           all(lmn.shape == lmns[0].shape for lmn in lmns) and \
-           poss[0].shape[1:] == alphas[0].shape and \
-           poss[0].shape == lmns[0].shape
-    alphas = [a.contiguous() for a in alphas]
-    poss = [pos.contiguous() for pos in poss]
-    lmns = [lmn.to(torch.int).contiguous() for lmn in lmns]
+    n = len(alphas)
+    assert n > 0
+    assert all((a.shape == pos.shape[1:] == lmn.shape[1:]) \
+           for (a, pos, lmn) in zip(alphas, poss, lmns))
+
+    alphas = [a.contiguous().view(-1) for a in alphas]
+    poss = [pos.contiguous().view(3, -1) for pos in poss]
+    lmns = [lmn.to(torch.int).contiguous().view(3, -1) for lmn in lmns]
     inps = [(a, pos, lmn) for (a, pos, lmn) in zip(alphas, poss, lmns)]
     flat_inps = [item for sublist in inps for item in sublist]
-    return fcn(*flat_inps)
+    res = fcn(*flat_inps)  # (numel(a)^n)
+
+    flat_shape = [item for sublist in ([alphas[0].shape] * n) for item in sublist]
+    return res.view(*flat_shape)
 
 def _calc_forward(cfunc, a1, pos1, lmn1, a2, pos2, lmn2):
     x1, y1, z1 = pos1
@@ -91,7 +93,7 @@ def _calc_forward(cfunc, a1, pos1, lmn1, a2, pos2, lmn2):
         a2, x2, y2, z2, l2, m2, n2)
     return res
 
-def _calc_backward(saved_tensors, grad_res, fcn, explicit_gradpos2=False):
+def _calc_backward(saved_tensors, grad_res, fcn):
     a1, pos1, lmn1, a2, pos2, lmn2 = saved_tensors
     ndim = a1.ndim
     ix = torch.tensor([1, 0, 0], dtype=lmn1.dtype, device=lmn1.device)
@@ -106,43 +108,43 @@ def _calc_backward(saved_tensors, grad_res, fcn, explicit_gradpos2=False):
         dsda1 = fcn(a1, pos1, lmn1 + (ix * 2), a2, pos2, lmn2) + \
                 fcn(a1, pos1, lmn1 + (iy * 2), a2, pos2, lmn2) + \
                 fcn(a1, pos1, lmn1 + (iz * 2), a2, pos2, lmn2)
-        grad_a1 = -dsda1 * grad_res
+        grad_a1 = (-dsda1 * grad_res).sum(dim=-1)
 
     grad_a2 = None
     if a2.requires_grad:
         dsda2 = fcn(a1, pos1, lmn1, a2, pos2, lmn2 + (ix * 2)) + \
                 fcn(a1, pos1, lmn1, a2, pos2, lmn2 + (iy * 2)) + \
                 fcn(a1, pos1, lmn1, a2, pos2, lmn2 + (iz * 2))
-        grad_a2 = -dsda2 * grad_res
+        grad_a2 = (-dsda2 * grad_res).sum(dim=-2)
 
     grad_pos1 = None
     if pos1.requires_grad:
-        dsdx1 = -lmn1[0] * fcn(a1, pos1, lmn1 - ix, a2, pos2, lmn2) + \
-                 2 * a1  * fcn(a1, pos1, lmn1 + ix, a2, pos2, lmn2)
-        dsdy1 = -lmn1[1] * fcn(a1, pos1, lmn1 - iy, a2, pos2, lmn2) + \
-                 2 * a1  * fcn(a1, pos1, lmn1 + iy, a2, pos2, lmn2)
-        dsdz1 = -lmn1[2] * fcn(a1, pos1, lmn1 - iz, a2, pos2, lmn2) + \
-                 2 * a1  * fcn(a1, pos1, lmn1 + iz, a2, pos2, lmn2)
+        a1b = a1[:, None]  # (na, 1)
+        lmn1b = lmn1[..., None]  # (3, na, 1)
+
+        dsdx1 = -lmn1b[0] * fcn(a1, pos1, lmn1 - ix, a2, pos2, lmn2) + \
+                 2 * a1b  * fcn(a1, pos1, lmn1 + ix, a2, pos2, lmn2)
+        dsdy1 = -lmn1b[1] * fcn(a1, pos1, lmn1 - iy, a2, pos2, lmn2) + \
+                 2 * a1b  * fcn(a1, pos1, lmn1 + iy, a2, pos2, lmn2)
+        dsdz1 = -lmn1b[2] * fcn(a1, pos1, lmn1 - iz, a2, pos2, lmn2) + \
+                 2 * a1b  * fcn(a1, pos1, lmn1 + iz, a2, pos2, lmn2)
 
         dsdpos1 = torch.cat(
             (dsdx1.unsqueeze(0), dsdy1.unsqueeze(0), dsdz1.unsqueeze(0)), dim=0)
-        grad_pos1 = dsdpos1 * grad_res
+        grad_pos1 = (dsdpos1 * grad_res).sum(dim=-1)
 
     grad_pos2 = None
     if pos2.requires_grad:
-        if explicit_gradpos2 or (grad_pos1 is None):
-            dsdx2 = -lmn2[0] * fcn(a1, pos1, lmn1, a2, pos2, lmn2 - ix) + \
-                     2 * a2  * fcn(a1, pos1, lmn1, a2, pos2, lmn2 + ix)
-            dsdy2 = -lmn2[1] * fcn(a1, pos1, lmn1, a2, pos2, lmn2 - iy) + \
-                     2 * a2  * fcn(a1, pos1, lmn1, a2, pos2, lmn2 + iy)
-            dsdz2 = -lmn2[2] * fcn(a1, pos1, lmn1, a2, pos2, lmn2 - iz) + \
-                     2 * a2  * fcn(a1, pos1, lmn1, a2, pos2, lmn2 + iz)
+        dsdx2 = -lmn2[0] * fcn(a1, pos1, lmn1, a2, pos2, lmn2 - ix) + \
+                 2 * a2  * fcn(a1, pos1, lmn1, a2, pos2, lmn2 + ix)
+        dsdy2 = -lmn2[1] * fcn(a1, pos1, lmn1, a2, pos2, lmn2 - iy) + \
+                 2 * a2  * fcn(a1, pos1, lmn1, a2, pos2, lmn2 + iy)
+        dsdz2 = -lmn2[2] * fcn(a1, pos1, lmn1, a2, pos2, lmn2 - iz) + \
+                 2 * a2  * fcn(a1, pos1, lmn1, a2, pos2, lmn2 + iz)
 
-            dsdpos2 = torch.cat(
-                (dsdx2.unsqueeze(0), dsdy2.unsqueeze(0), dsdz2.unsqueeze(0)), dim=0)
-            grad_pos2 = dsdpos2 * grad_res
-        else:
-            grad_pos2 = -grad_pos1
+        dsdpos2 = torch.cat(
+            (dsdx2.unsqueeze(0), dsdy2.unsqueeze(0), dsdz2.unsqueeze(0)), dim=0)
+        grad_pos2 = (dsdpos2 * grad_res).sum(dim=-2)
 
     return grad_a1, grad_pos1, None, grad_a2, grad_pos2, None
 
@@ -177,67 +179,73 @@ def _calc_backward_el(saved_tensors, grad_res, fcn):
         dsda1 = fcn(a1, pos1, lmn1 + (ix * 2), a2, pos2, lmn2, a3, pos3, lmn3, a4, pos4, lmn4) + \
                 fcn(a1, pos1, lmn1 + (iy * 2), a2, pos2, lmn2, a3, pos3, lmn3, a4, pos4, lmn4) + \
                 fcn(a1, pos1, lmn1 + (iz * 2), a2, pos2, lmn2, a3, pos3, lmn3, a4, pos4, lmn4)
-        grad_a1 = -dsda1 * grad_res
+        grad_a1 = (-dsda1 * grad_res).sum(dim=-1).sum(dim=-1).sum(dim=-1)
 
     grad_a2 = None
     if a2.requires_grad:
         dsda2 = fcn(a1, pos1, lmn1, a2, pos2, lmn2 + (ix * 2), a3, pos3, lmn3, a4, pos4, lmn4) + \
                 fcn(a1, pos1, lmn1, a2, pos2, lmn2 + (iy * 2), a3, pos3, lmn3, a4, pos4, lmn4) + \
                 fcn(a1, pos1, lmn1, a2, pos2, lmn2 + (iz * 2), a3, pos3, lmn3, a4, pos4, lmn4)
-        grad_a2 = -dsda2 * grad_res
+        grad_a2 = (-dsda2 * grad_res).sum(dim=-1).sum(dim=-1).sum(dim=-2)
 
     grad_a3 = None
     if a3.requires_grad:
         dsda3 = fcn(a1, pos1, lmn1, a2, pos2, lmn2, a3, pos3, lmn3 + (ix * 2), a4, pos4, lmn4) + \
                 fcn(a1, pos1, lmn1, a2, pos2, lmn2, a3, pos3, lmn3 + (iy * 2), a4, pos4, lmn4) + \
                 fcn(a1, pos1, lmn1, a2, pos2, lmn2, a3, pos3, lmn3 + (iz * 2), a4, pos4, lmn4)
-        grad_a3 = -dsda3 * grad_res
+        grad_a3 = (-dsda3 * grad_res).sum(dim=-1).sum(dim=-2).sum(dim=-2)
 
     grad_a4 = None
     if a4.requires_grad:
         dsda4 = fcn(a1, pos1, lmn1, a2, pos2, lmn2, a3, pos3, lmn3, a4, pos4, lmn4 + (ix * 2)) + \
                 fcn(a1, pos1, lmn1, a2, pos2, lmn2, a3, pos3, lmn3, a4, pos4, lmn4 + (iy * 2)) + \
                 fcn(a1, pos1, lmn1, a2, pos2, lmn2, a3, pos3, lmn3, a4, pos4, lmn4 + (iz * 2))
-        grad_a4 = -dsda4 * grad_res
+        grad_a4 = (-dsda4 * grad_res).sum(dim=-2).sum(dim=-2).sum(dim=-2)
 
     grad_pos1 = None
     if pos1.requires_grad:
-        dsdx1 = -lmn1[0] * fcn(a1, pos1, lmn1 - ix, a2, pos2, lmn2, a3, pos3, lmn3, a4, pos4, lmn4) + \
-                 2 * a1  * fcn(a1, pos1, lmn1 + ix, a2, pos2, lmn2, a3, pos3, lmn3, a4, pos4, lmn4)
-        dsdy1 = -lmn1[1] * fcn(a1, pos1, lmn1 - iy, a2, pos2, lmn2, a3, pos3, lmn3, a4, pos4, lmn4) + \
-                 2 * a1  * fcn(a1, pos1, lmn1 + iy, a2, pos2, lmn2, a3, pos3, lmn3, a4, pos4, lmn4)
-        dsdz1 = -lmn1[2] * fcn(a1, pos1, lmn1 - iz, a2, pos2, lmn2, a3, pos3, lmn3, a4, pos4, lmn4) + \
-                 2 * a1  * fcn(a1, pos1, lmn1 + iz, a2, pos2, lmn2, a3, pos3, lmn3, a4, pos4, lmn4)
+        lmn1b = lmn1[..., None, None, None]
+        a1b = a1[..., None, None, None]
+        dsdx1 = -lmn1b[0] * fcn(a1, pos1, lmn1 - ix, a2, pos2, lmn2, a3, pos3, lmn3, a4, pos4, lmn4) + \
+                 2 * a1b  * fcn(a1, pos1, lmn1 + ix, a2, pos2, lmn2, a3, pos3, lmn3, a4, pos4, lmn4)
+        dsdy1 = -lmn1b[1] * fcn(a1, pos1, lmn1 - iy, a2, pos2, lmn2, a3, pos3, lmn3, a4, pos4, lmn4) + \
+                 2 * a1b  * fcn(a1, pos1, lmn1 + iy, a2, pos2, lmn2, a3, pos3, lmn3, a4, pos4, lmn4)
+        dsdz1 = -lmn1b[2] * fcn(a1, pos1, lmn1 - iz, a2, pos2, lmn2, a3, pos3, lmn3, a4, pos4, lmn4) + \
+                 2 * a1b  * fcn(a1, pos1, lmn1 + iz, a2, pos2, lmn2, a3, pos3, lmn3, a4, pos4, lmn4)
 
         dsdpos1 = torch.cat(
             (dsdx1.unsqueeze(0), dsdy1.unsqueeze(0), dsdz1.unsqueeze(0)), dim=0)
-        grad_pos1 = dsdpos1 * grad_res
+        grad_pos1 = (dsdpos1 * grad_res).sum(dim=-1).sum(dim=-1).sum(dim=-1)
 
     grad_pos2 = None
     if pos2.requires_grad:
-        dsdx2 = -lmn2[0] * fcn(a1, pos1, lmn1, a2, pos2, lmn2 - ix, a3, pos3, lmn3, a4, pos4, lmn4) + \
-                 2 * a2  * fcn(a1, pos1, lmn1, a2, pos2, lmn2 + ix, a3, pos3, lmn3, a4, pos4, lmn4)
-        dsdy2 = -lmn2[1] * fcn(a1, pos1, lmn1, a2, pos2, lmn2 - iy, a3, pos3, lmn3, a4, pos4, lmn4) + \
-                 2 * a2  * fcn(a1, pos1, lmn1, a2, pos2, lmn2 + iy, a3, pos3, lmn3, a4, pos4, lmn4)
-        dsdz2 = -lmn2[2] * fcn(a1, pos1, lmn1, a2, pos2, lmn2 - iz, a3, pos3, lmn3, a4, pos4, lmn4) + \
-                 2 * a2  * fcn(a1, pos1, lmn1, a2, pos2, lmn2 + iz, a3, pos3, lmn3, a4, pos4, lmn4)
+        lmn2b = lmn2[..., None, None]
+        a2b = a2[..., None, None]
+        dsdx2 = -lmn2b[0] * fcn(a1, pos1, lmn1, a2, pos2, lmn2 - ix, a3, pos3, lmn3, a4, pos4, lmn4) + \
+                 2 * a2b  * fcn(a1, pos1, lmn1, a2, pos2, lmn2 + ix, a3, pos3, lmn3, a4, pos4, lmn4)
+        dsdy2 = -lmn2b[1] * fcn(a1, pos1, lmn1, a2, pos2, lmn2 - iy, a3, pos3, lmn3, a4, pos4, lmn4) + \
+                 2 * a2b  * fcn(a1, pos1, lmn1, a2, pos2, lmn2 + iy, a3, pos3, lmn3, a4, pos4, lmn4)
+        dsdz2 = -lmn2b[2] * fcn(a1, pos1, lmn1, a2, pos2, lmn2 - iz, a3, pos3, lmn3, a4, pos4, lmn4) + \
+                 2 * a2b  * fcn(a1, pos1, lmn1, a2, pos2, lmn2 + iz, a3, pos3, lmn3, a4, pos4, lmn4)
 
         dsdpos2 = torch.cat(
             (dsdx2.unsqueeze(0), dsdy2.unsqueeze(0), dsdz2.unsqueeze(0)), dim=0)
-        grad_pos2 = dsdpos2 * grad_res
+        grad_pos2 = (dsdpos2 * grad_res).sum(dim=-1).sum(dim=-1).sum(dim=-2)
 
     grad_pos3 = None
     if pos3.requires_grad:
-        dsdx3 = -lmn3[0] * fcn(a1, pos1, lmn1, a2, pos2, lmn2, a3, pos3, lmn3 - ix, a4, pos4, lmn4) + \
-                 2 * a3  * fcn(a1, pos1, lmn1, a2, pos2, lmn2, a3, pos3, lmn3 + ix, a4, pos4, lmn4)
-        dsdy3 = -lmn3[1] * fcn(a1, pos1, lmn1, a2, pos2, lmn2, a3, pos3, lmn3 - iy, a4, pos4, lmn4) + \
-                 2 * a3  * fcn(a1, pos1, lmn1, a2, pos2, lmn2, a3, pos3, lmn3 + iy, a4, pos4, lmn4)
-        dsdz3 = -lmn3[2] * fcn(a1, pos1, lmn1, a2, pos2, lmn2, a3, pos3, lmn3 - iz, a4, pos4, lmn4) + \
-                 2 * a3  * fcn(a1, pos1, lmn1, a2, pos2, lmn2, a3, pos3, lmn3 + iz, a4, pos4, lmn4)
+        lmn3b = lmn3[..., None]
+        a3b = a3[..., None]
+        dsdx3 = -lmn3b[0] * fcn(a1, pos1, lmn1, a2, pos2, lmn2, a3, pos3, lmn3 - ix, a4, pos4, lmn4) + \
+                 2 * a3b  * fcn(a1, pos1, lmn1, a2, pos2, lmn2, a3, pos3, lmn3 + ix, a4, pos4, lmn4)
+        dsdy3 = -lmn3b[1] * fcn(a1, pos1, lmn1, a2, pos2, lmn2, a3, pos3, lmn3 - iy, a4, pos4, lmn4) + \
+                 2 * a3b  * fcn(a1, pos1, lmn1, a2, pos2, lmn2, a3, pos3, lmn3 + iy, a4, pos4, lmn4)
+        dsdz3 = -lmn3b[2] * fcn(a1, pos1, lmn1, a2, pos2, lmn2, a3, pos3, lmn3 - iz, a4, pos4, lmn4) + \
+                 2 * a3b  * fcn(a1, pos1, lmn1, a2, pos2, lmn2, a3, pos3, lmn3 + iz, a4, pos4, lmn4)
 
         dsdpos3 = torch.cat(
             (dsdx3.unsqueeze(0), dsdy3.unsqueeze(0), dsdz3.unsqueeze(0)), dim=0)
-        grad_pos3 = dsdpos3 * grad_res
+        grad_pos3 = (dsdpos3 * grad_res).sum(dim=-1).sum(dim=-2).sum(dim=-2)
 
     grad_pos4 = None
     if pos4.requires_grad:
@@ -250,7 +258,7 @@ def _calc_backward_el(saved_tensors, grad_res, fcn):
 
         dsdpos4 = torch.cat(
             (dsdx4.unsqueeze(0), dsdy4.unsqueeze(0), dsdz4.unsqueeze(0)), dim=0)
-        grad_pos4 = dsdpos4 * grad_res
+        grad_pos4 = (dsdpos4 * grad_res).sum(dim=-2).sum(dim=-2).sum(dim=-2)
 
     return grad_a1, grad_pos1, None, grad_a2, grad_pos2, None, grad_a3, grad_pos3, None, grad_a4, grad_pos4, None
 

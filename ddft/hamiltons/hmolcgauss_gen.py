@@ -317,54 +317,30 @@ class Ecoeff2(object):
         centres = centres.transpose(-2, -1)  # (3, nelmtstot)
         atompos = atompos.transpose(-2, -1)  # (3, natoms)
 
-        shape = (nelmtstot, nelmtstot)
         dtype = alphas.dtype
         device = alphas.device
-        zeros = torch.zeros(shape, dtype=dtype, device=device)
-        self.zeros_natoms = torch.zeros((natoms, *shape), dtype=dtype, device=device)
-        self.zeros_elrep = torch.zeros((*shape, *shape), dtype=dtype, device=device)
-
-        self.lmn1 = ijks.unsqueeze(-1) + zeros.to(ijks.dtype)  # (3, nelmtstot, nelmtstot)
-        self.lmn2 = ijks.unsqueeze(-2) + zeros.to(ijks.dtype)  # (3, nelmtstot, nelmtstot)
-        self.pos1 = centres.unsqueeze(-1) + zeros  # (3, nelmtstot, nelmtstot)
-        self.pos2 = centres.unsqueeze(-2) + zeros  # (3, nelmtstot, nelmtstot)
-        self.a1 = alphas.unsqueeze(-1) + zeros  # (nelmtstot, nelmtstot)
-        self.a2 = alphas.unsqueeze(-2) + zeros  # (nelmtstot, nelmtstot)
-        self.atompos = atompos
+        self.zeros_natoms = torch.zeros((natoms, nelmtstot), dtype=dtype, device=device)
 
         self.a = alphas  # (nelmtstot,)
         self.pos = centres  # (3, nelmtstot)
         self.lmn = ijks  # (3, nelmtstot)
+        self.atompos = atompos  # (3, natoms)
 
     def get_overlap(self):
-        return overlap(self.a1, self.pos1, self.lmn1, self.a2, self.pos2, self.lmn2)
+        return overlap(self.a, self.pos, self.lmn, self.a, self.pos, self.lmn)
 
     def get_kinetics(self):
-        return kinetic(self.a1, self.pos1, self.lmn1, self.a2, self.pos2, self.lmn2)
+        return kinetic(self.a, self.pos, self.lmn, self.a, self.pos, self.lmn)
 
     def get_nuclattr(self):
-        a1 = self.a1 + self.zeros_natoms
-        a2 = self.a2 + self.zeros_natoms
-        pos1 = self.pos1.unsqueeze(1) + self.zeros_natoms
-        pos2 = self.pos2.unsqueeze(1) + self.zeros_natoms
-        lmn1 = self.lmn1.unsqueeze(1) + self.zeros_natoms.to(self.lmn1.dtype)
-        lmn2 = self.lmn2.unsqueeze(1) + self.zeros_natoms.to(self.lmn2.dtype)
-        posc = self.atompos.unsqueeze(-1).unsqueeze(-1) + self.zeros_natoms
-        return nuclattr(a1, pos1, lmn1, a2, pos2, lmn2, posc)
+        a = self.a + self.zeros_natoms
+        pos = self.pos.unsqueeze(1) + self.zeros_natoms
+        lmn = self.lmn.unsqueeze(1) + self.zeros_natoms.to(self.lmn.dtype)
+        posc = self.atompos.unsqueeze(-1) + self.zeros_natoms
+        return nuclattr(a, pos, lmn, a, pos, lmn, posc)
 
     def get_elrep(self):
-        zeros = self.zeros_elrep
-        zeros_int = zeros.to(self.lmn.dtype)
-        a1 = self.a[:, None, None, None] + zeros
-        a2 = self.a[None, :, None, None] + zeros
-        a3 = self.a[None, None, :, None] + zeros
-        a4 = self.a[None, None, None, :] + zeros
-        pos1 = self.pos[:, :, None, None, None] + zeros
-        pos2 = self.pos[:, None, :, None, None] + zeros
-        pos3 = self.pos[:, None, None, :, None] + zeros
-        pos4 = self.pos[:, None, None, None, :] + zeros
-        lmn1 = self.lmn[:, :, None, None, None] + zeros_int
-        lmn2 = self.lmn[:, None, :, None, None] + zeros_int
-        lmn3 = self.lmn[:, None, None, :, None] + zeros_int
-        lmn4 = self.lmn[:, None, None, None, :] + zeros_int
-        return elrep(a1, pos1, lmn1, a2, pos2, lmn2, a3, pos3, lmn3, a4, pos4, lmn4)
+        return elrep(self.a, self.pos, self.lmn,
+                     self.a, self.pos, self.lmn,
+                     self.a, self.pos, self.lmn,
+                     self.a, self.pos, self.lmn)

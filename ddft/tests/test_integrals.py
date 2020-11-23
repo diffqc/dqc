@@ -12,7 +12,7 @@ def test_integral_grad(int_type):
         "device": torch.device("cpu"),
     }
     torch.manual_seed(123)
-    n = 2
+    n = 1
     a1 = (torch.rand(n, **kwargs) + 0.1).requires_grad_()
     a2 = (torch.rand(n, **kwargs) + 0.1).requires_grad_()
     if int_type == cint.elrep:

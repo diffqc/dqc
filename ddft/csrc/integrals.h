@@ -26,6 +26,8 @@ DDFT modifications:
 
 template <typename scalar_t>
 struct ecoeff_params {
+  // struct that contains the parameters for calculating E coef
+  // and cache
   scalar_t expUQx2;
   scalar_t uQxa;
   scalar_t uQxb;
@@ -75,6 +77,8 @@ struct ecoeff_params {
 
 template <typename scalar_t>
 struct rcoeff_params {
+  // struct that contains the parameters for calculating R coef
+  // and cache
   scalar_t T;
   scalar_t Px;
   scalar_t Py;
@@ -134,11 +138,13 @@ struct rcoeff_params {
 
 template <typename scalar_t>
 scalar_t gaussian_product_center(scalar_t a1, scalar_t a2, scalar_t x1, scalar_t x2) {
+  // the new gaussian centre of a product of two gaussians
   return (a1 * x1 + a2 * x2) / (a1 + a2);
 }
 
 template <typename scalar_t>
 scalar_t boys(int n, scalar_t T) {
+  // boys function
   scalar_t nhalf = n + 0.5;
   if (T == 0) {
     return (scalar_t)1.0 / (2 * n + (scalar_t)1.0);
@@ -151,6 +157,7 @@ scalar_t boys(int n, scalar_t T) {
 
 template <typename scalar_t>
 inline bool same_pos_and_odd_integral(scalar_t x1, scalar_t x2, int l1, int l2) {
+  // checks if the integral is an odd integral
   return ((x1 == x2) && ((l1 + l2) % 2 == 1));
 }
 
@@ -158,6 +165,7 @@ template <typename scalar_t>
 scalar_t calc_ecoeff(int i, int j, int t,
                      scalar_t half_over_p, ecoeff_params<scalar_t>& ecx,
                      int n = 0, scalar_t Ax = 0.0) {
+  // calculate the E coefficient recursively
   if ((i < 0) || (j < 0) || (t < 0)) {
     return (scalar_t) 0.0; // undefined
   }
@@ -205,6 +213,7 @@ scalar_t calc_ecoeff(int i, int j, int t,
 template <typename scalar_t>
 scalar_t calc_rcoeff(int t, int u, int v, int n,
                      rcoeff_params<scalar_t>& rp) {
+  // calculate the R coefficient recursively
   scalar_t val = 0.0;
   if ((t < 0) || (u < 0) || (v < 0) || (n < 0)) {
     return 0.0; // undefined
@@ -251,6 +260,8 @@ scalar_t calc_overlap(scalar_t a1, scalar_t x1, scalar_t y1, scalar_t z1,
                       int l1, int m1, int n1,
                       scalar_t a2, scalar_t x2, scalar_t y2, scalar_t z2,
                       int l2, int m2, int n2) {
+  // calculating the overlap integral of two gaussians
+
   // bound check
   if ((l1 < 0) || (m1 < 0) || (n1 < 0) ||
       (l2 < 0) || (m2 < 0) || (n2 < 0)) {
@@ -282,6 +293,8 @@ scalar_t calc_kinetic(scalar_t a1, scalar_t x1, scalar_t y1, scalar_t z1,
                       int l1, int m1, int n1,
                       scalar_t a2, scalar_t x2, scalar_t y2, scalar_t z2,
                       int l2, int m2, int n2) {
+  // calculating the kinetic integral of two gaussians
+
   // bound check
   if ((l1 < 0) || (m1 < 0) || (n1 < 0) ||
       (l2 < 0) || (m2 < 0) || (n2 < 0)) {
@@ -295,17 +308,14 @@ scalar_t calc_kinetic(scalar_t a1, scalar_t x1, scalar_t y1, scalar_t z1,
   scalar_t Cx = -0.5 * l2 * (l2 - 1);
   scalar_t Cy = -0.5 * m2 * (m2 - 1);
   scalar_t Cz = -0.5 * n2 * (n2 - 1);
-  scalar_t dx = x1 - x2;
-  scalar_t dy = y1 - y2;
-  scalar_t dz = z1 - z2;
 
   // prep for ecoeff
   scalar_t p = a1 + a2;
   scalar_t u = a1 * a2 / p;
   scalar_t half_over_p = 0.5 / p;
-  auto ecx = ecoeff_params<scalar_t>(dx, u, a1, a2, l1, l2 + 2);
-  auto ecy = ecoeff_params<scalar_t>(dy, u, a1, a2, m1, m2 + 2);
-  auto ecz = ecoeff_params<scalar_t>(dz, u, a1, a2, n1, n2 + 2);
+  auto ecx = ecoeff_params<scalar_t>(x1 - x2, u, a1, a2, l1, l2 + 2);
+  auto ecy = ecoeff_params<scalar_t>(y1 - y2, u, a1, a2, m1, m2 + 2);
+  auto ecz = ecoeff_params<scalar_t>(z1 - z2, u, a1, a2, n1, n2 + 2);
 
   scalar_t Tx = Ax * calc_ecoeff(l1, l2    , 0, half_over_p, ecx) +
                 Bx * calc_ecoeff(l1, l2 + 2, 0, half_over_p, ecx) +
@@ -334,6 +344,9 @@ scalar_t calc_nuclattr(scalar_t a1, scalar_t x1, scalar_t y1, scalar_t z1,
                       int l1, int m1, int n1,
                       scalar_t a2, scalar_t x2, scalar_t y2, scalar_t z2,
                       int l2, int m2, int n2) {
+  // calculating the nuclear attraction integral of two gaussians where the
+  // atom is located at (0, 0, 0)
+
   // bound check
   if ((l1 < 0) || (m1 < 0) || (n1 < 0) ||
       (l2 < 0) || (m2 < 0) || (n2 < 0)) {
@@ -393,6 +406,8 @@ scalar_t calc_elrep(scalar_t a1, scalar_t x1, scalar_t y1, scalar_t z1,
                     int l3, int m3, int n3,
                     scalar_t a4, scalar_t x4, scalar_t y4, scalar_t z4,
                     int l4, int m4, int n4) {
+  // calculating the electron repulsion integral from 4 gaussians
+
   // bound check
   if ((l1 < 0) || (m1 < 0) || (n1 < 0) ||
       (l2 < 0) || (m2 < 0) || (n2 < 0) ||
@@ -476,6 +491,7 @@ scalar_t calc_elrep(scalar_t a1, scalar_t x1, scalar_t y1, scalar_t z1,
   val *= 2 * std::pow(M_PI, 2.5) / (p * q * std::sqrt(p + q));
   return val;
 }
+
 /************************* kernels *************************/
 
 template <typename scalar_t>
@@ -496,6 +512,7 @@ static void overlap_kernel(
     const torch::Tensor& m2,
     const torch::Tensor& n2) {
 
+
   auto ret_data = ret.data_ptr<scalar_t>();
   auto a1_data = a1.data_ptr<scalar_t>();
   auto x1_data = x1.data_ptr<scalar_t>();
@@ -511,25 +528,27 @@ static void overlap_kernel(
   auto l2_data = l2.data_ptr<int>();
   auto m2_data = m2.data_ptr<int>();
   auto n2_data = n2.data_ptr<int>();
-  int numel = a1.numel();
 
-  for (int i = 0; i < numel; ++i) {
-    ret_data[i] = calc_overlap(
-      a1_data[i],
-      x1_data[i],
-      y1_data[i],
-      z1_data[i],
-      l1_data[i],
-      m1_data[i],
-      n1_data[i],
-      a2_data[i],
-      x2_data[i],
-      y2_data[i],
-      z2_data[i],
-      l2_data[i],
-      m2_data[i],
-      n2_data[i]
-    );
+  int i = 0;
+  for (int i1 = 0; i1 < a1.numel(); ++i1) {
+    for (int i2 = 0; i2 < a2.numel(); ++i2) {
+      ret_data[i++] = calc_overlap(
+        a1_data[i1],
+        x1_data[i1],
+        y1_data[i1],
+        z1_data[i1],
+        l1_data[i1],
+        m1_data[i1],
+        n1_data[i1],
+        a2_data[i2],
+        x2_data[i2],
+        y2_data[i2],
+        z2_data[i2],
+        l2_data[i2],
+        m2_data[i2],
+        n2_data[i2]
+      );
+    }
   }
 }
 
@@ -566,25 +585,27 @@ static void kinetic_kernel(
   auto l2_data = l2.data_ptr<int>();
   auto m2_data = m2.data_ptr<int>();
   auto n2_data = n2.data_ptr<int>();
-  int numel = a1.numel();
 
-  for (int i = 0; i < numel; ++i) {
-    ret_data[i] = calc_kinetic(
-      a1_data[i],
-      x1_data[i],
-      y1_data[i],
-      z1_data[i],
-      l1_data[i],
-      m1_data[i],
-      n1_data[i],
-      a2_data[i],
-      x2_data[i],
-      y2_data[i],
-      z2_data[i],
-      l2_data[i],
-      m2_data[i],
-      n2_data[i]
-    );
+  int i = 0;
+  for (int i1 = 0; i1 < a1.numel(); ++i1) {
+    for (int i2 = 0; i2 < a2.numel(); ++i2) {
+      ret_data[i++] = calc_kinetic(
+        a1_data[i1],
+        x1_data[i1],
+        y1_data[i1],
+        z1_data[i1],
+        l1_data[i1],
+        m1_data[i1],
+        n1_data[i1],
+        a2_data[i2],
+        x2_data[i2],
+        y2_data[i2],
+        z2_data[i2],
+        l2_data[i2],
+        m2_data[i2],
+        n2_data[i2]
+      );
+    }
   }
 }
 
@@ -621,25 +642,28 @@ static void nuclattr_kernel(
   auto l2_data = l2.data_ptr<int>();
   auto m2_data = m2.data_ptr<int>();
   auto n2_data = n2.data_ptr<int>();
-  int numel = a1.numel();
+  int n1 = a1.numel();
+  int n2 = a2.numel();
 
-  for (int i = 0; i < numel; ++i) {
-    ret_data[i] = calc_nuclattr(
-      a1_data[i],
-      x1_data[i],
-      y1_data[i],
-      z1_data[i],
-      l1_data[i],
-      m1_data[i],
-      n1_data[i],
-      a2_data[i],
-      x2_data[i],
-      y2_data[i],
-      z2_data[i],
-      l2_data[i],
-      m2_data[i],
-      n2_data[i]
-    );
+  for (int i1 = 0; i1 < a1.numel(); ++i1) {
+    for (int i2 = 0; i2 < a2.numel(); ++i2) {
+      ret_data[i++] = calc_nuclattr(
+        a1_data[i1],
+        x1_data[i1],
+        y1_data[i1],
+        z1_data[i1],
+        l1_data[i1],
+        m1_data[i1],
+        n1_data[i1],
+        a2_data[i2],
+        x2_data[i2],
+        y2_data[i2],
+        z2_data[i2],
+        l2_data[i2],
+        m2_data[i2],
+        n2_data[i2]
+      );
+    }
   }
 }
 
@@ -704,43 +728,62 @@ static void elrep_kernel(
   auto l4_data = l4.data_ptr<int>();
   auto m4_data = m4.data_ptr<int>();
   auto n4_data = n4.data_ptr<int>();
-  int numel = a1.numel();
 
-  for (int i = 0; i < numel; ++i) {
-    ret_data[i] = calc_elrep(
-      a1_data[i],
-      x1_data[i],
-      y1_data[i],
-      z1_data[i],
-      l1_data[i],
-      m1_data[i],
-      n1_data[i],
-      a2_data[i],
-      x2_data[i],
-      y2_data[i],
-      z2_data[i],
-      l2_data[i],
-      m2_data[i],
-      n2_data[i],
-      a3_data[i],
-      x3_data[i],
-      y3_data[i],
-      z3_data[i],
-      l3_data[i],
-      m3_data[i],
-      n3_data[i],
-      a4_data[i],
-      x4_data[i],
-      y4_data[i],
-      z4_data[i],
-      l4_data[i],
-      m4_data[i],
-      n4_data[i]
-    );
+  int i = 0;
+  for (int i1 = 0; i1 < a1.numel(); ++i1) {
+    for (int i2 = 0; i2 < a2.numel(); ++i2) {
+      for (int i3 = 0; i3 < a3.numel(); ++i3) {
+        for (int i4 = 0; i4 < a4.numel(); ++i4) {
+          ret_data[i++] = calc_elrep(
+            a1_data[i1],
+            x1_data[i1],
+            y1_data[i1],
+            z1_data[i1],
+            l1_data[i1],
+            m1_data[i1],
+            n1_data[i1],
+            a2_data[i2],
+            x2_data[i2],
+            y2_data[i2],
+            z2_data[i2],
+            l2_data[i2],
+            m2_data[i2],
+            n2_data[i2],
+            a3_data[i3],
+            x3_data[i3],
+            y3_data[i3],
+            z3_data[i3],
+            l3_data[i3],
+            m3_data[i3],
+            n3_data[i3],
+            a4_data[i4],
+            x4_data[i4],
+            y4_data[i4],
+            z4_data[i4],
+            l4_data[i4],
+            m4_data[i4],
+            n4_data[i4]
+          );
+        }
+      }
+    }
   }
 }
 
 /************************* dispatchers *************************/
+
+torch::Tensor empty_like_bcast(const torch::Tensor& a1, const torch::Tensor& a2) {
+  return a1.unsqueeze(-1) + a2;
+}
+
+torch::Tensor empty_like_bcast(
+    const torch::Tensor& a1, const torch::Tensor& a2,
+    const torch::Tensor& a3, const torch::Tensor& a4) {
+  return a1.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1) +
+         a2.unsqueeze(-1).unsqueeze(-1) +
+         a3.unsqueeze(-1) +
+         a4;
+}
 
 torch::Tensor _overlap(
     const torch::Tensor& a1,
@@ -758,7 +801,7 @@ torch::Tensor _overlap(
     const torch::Tensor& m2,
     const torch::Tensor& n2) {
 
-  torch::Tensor result = torch::empty_like(a1);
+  torch::Tensor result = empty_like_bcast(a1, a2);
   at::ScalarType the_type = a1.scalar_type();
   switch (the_type) {
     case at::ScalarType::Double: {
@@ -795,7 +838,7 @@ torch::Tensor _kinetic(
     const torch::Tensor& m2,
     const torch::Tensor& n2) {
   //
-  torch::Tensor result = torch::empty_like(a1);
+  auto result = empty_like_bcast(a1, a2);
   at::ScalarType the_type = a1.scalar_type();
   switch (the_type) {
     case at::ScalarType::Double: {
@@ -832,7 +875,7 @@ torch::Tensor _nuclattr(
     const torch::Tensor& m2,
     const torch::Tensor& n2) {
   //
-  torch::Tensor result = torch::empty_like(a1);
+  auto result = empty_like_bcast(a1, a2);
   at::ScalarType the_type = a1.scalar_type();
   switch (the_type) {
     case at::ScalarType::Double: {
@@ -883,7 +926,7 @@ torch::Tensor _elrep(
     const torch::Tensor& m4,
     const torch::Tensor& n4) {
   //
-  torch::Tensor result = torch::empty_like(a1);
+  auto result = empty_like_bcast(a1, a2, a3, a4);
   at::ScalarType the_type = a1.scalar_type();
   switch (the_type) {
     case at::ScalarType::Double: {
