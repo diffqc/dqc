@@ -9,6 +9,7 @@ PYBIND11_MODULE(csrc, m) {
   m.def("_overlap", &_overlap, "");
   m.def("_kinetic", &_kinetic, "");
   m.def("_nuclattr", &_nuclattr, "");
+  m.def("_elrep", &_elrep, "");
 }
 
 #endif
