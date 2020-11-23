@@ -59,7 +59,8 @@ class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
 
     def __init__(self, grid,
                  ijks, alphas, centres, coeffs, nelmts,
-                 atompos, atomzs, normalize_elmts=True):
+                 atompos, atomzs, normalize_elmts=True,
+                 with_elrep=False):
         # self.nbasis, self.nelmts, ndim = centres.shape
         self.nelmtstot, ndim = centres.shape
         assert ndim == 3, "The centres must be 3 dimensions"
@@ -82,7 +83,9 @@ class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
         ecoeff_obj = Ecoeff2(ijks, centres, alphas, atompos)
         self.olp_elmts = ecoeff_obj.get_overlap() # (nelmtstot, nelmtstot)
         self.kin_elmts = ecoeff_obj.get_kinetics() # (nelmtstot, nelmtstot)
-        self.coul_elmts = ecoeff_obj.get_coulomb() * atomzs.unsqueeze(-1).unsqueeze(-1) # (natoms, nelmtstot, nelmtstot)
+        self.coul_elmts = ecoeff_obj.get_nuclattr() * atomzs.unsqueeze(-1).unsqueeze(-1) # (natoms, nelmtstot, nelmtstot)
+        if with_elrep:
+            self.elrep_elmts = ecoeff_obj.get_elrep()  # (nelmtstot, nelmtstot, nelmtstot, nelmtstot)
 
         # normalize each gaussian elements
         if normalize_elmts:
@@ -94,12 +97,16 @@ class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
 
         # prepare the contracted coefficients and indices
         self.coeffs2 = coeffs * coeffs.unsqueeze(1) # (nelmtstot, nelmtstot)
+        if with_elrep:
+            self.coeffs4 = self.coeffs2[:, :, None, None] * self.coeffs2  # (nelmtstot^4)
         if isinstance(self.nelmts, torch.Tensor):
-            self.csnelmts = torch.cumsum(self.nelmts, dim=0)-1
+            self.csnelmts = torch.cumsum(self.nelmts, dim=0) - 1
 
         # get the contracted part
         self.kin_coul_mat = self._contract(self.kin_coul_elmts) # (nbasis, nbasis)
         self.olp_mat = self._contract(self.olp_elmts) # (nbasis, nbasis)
+        if with_elrep:
+            self.elrep_mat = self._contract_elrep(self.elrep_elmts)  # (nbasis^4)
 
         # get the normalization constant
         norm = 1. / torch.sqrt(self.olp_mat.diagonal(dim1=-2, dim2=-1)) # (nbasis)
@@ -108,6 +115,8 @@ class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
         # normalize the contracted matrix
         self.kin_coul_mat = self.kin_coul_mat * norm_mat
         self.olp_mat = self.olp_mat * norm_mat
+        if with_elrep:
+            self.elrep_mat = self.elrep_mat * (norm_mat[:, :, None, None] * norm_mat)
 
         # make sure the matrix is symmetric
         self.kin_coul_mat = (self.kin_coul_mat + self.kin_coul_mat.transpose(-2,-1)) * 0.5
@@ -177,6 +186,12 @@ class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
         # kin_coul_mat: (nbasis, nbasis)
         return xt.LinearOperator.m(self.kin_coul_mat, is_hermitian=True)
 
+    def get_elrep(self, dm):
+        # dm: (*BD, nbasis, nbasis)
+        # elrep_mat: (nbasis, nbasis, nbasis, nbasis)
+        mat = torch.einsum("...ij,ijkl->...kl", dm, self.elrep_mat)
+        return xt.LinearOperator.m(mat, is_hermitian=True)
+
     def get_vext(self, vext):
         # vext: (..., nr)
         if self.basis is None:
@@ -227,6 +242,7 @@ class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
 
     ############################# helper functions #############################
     def _contract(self, mat):
+        # mat: (*BM, nelmtstot^2)
         # multiply the matrix with the contracted coefficients
         mat = mat * self.coeffs2
 
@@ -240,12 +256,51 @@ class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
             csmat2 = torch.cumsum(mat1, dim=2)[:,:,self.csnelmts] # (-1, nbasis, nbasis)
             cmat = torch.cat((csmat2[:,:,:1], csmat2[:,:,1:]-csmat2[:,:,:-1]), dim=2) # (-1, nbasis, nbasis)
         else:
+            # resize mat to have shape of (-1, nbasis, nelmts, nbasis, nelmts)
             mat = mat.view(-1, self.nbasis, self.nelmts, self.nbasis, self.nelmts)
 
             # sum the nelmts to get the basis
             cmat = mat.sum(dim=-1).sum(dim=-2) # (-1, nbasis, nbasis)
         cmat = cmat.view(*batch_size, self.nbasis, self.nbasis)
         return cmat
+
+    def _contract_elrep(self, mat):
+        # mat: (*BM, nelmtstot^4)
+        # multiply the matrix with the contracted coefficients
+        mat = mat * self.coeffs4
+
+        batch_size = mat.shape[:-4]
+        mat_size = mat.shape[-4:]
+        if isinstance(self.nelmts, torch.Tensor):
+            cmat = mat.view(-1, *mat_size) # (-1, nelmtstot^4)
+            cmat = contract_dim(cmat, dim=1, csnelmts=csnelmts)
+            cmat = contract_dim(cmat, dim=2, csnelmts=csnelmts)
+            cmat = contract_dim(cmat, dim=3, csnelmts=csnelmts)
+            cmat = contract_dim(cmat, dim=4, csnelmts=csnelmts)  # (-1, nbasis^4)
+        else:
+            # resize mat to have shape of (-1, nbasis, nelmts, nbasis, nelmts, nbasis, nelmts, nbasis, nelmts)
+            mat = mat.view(-1, self.nbasis, self.nelmts, self.nbasis, self.nelmts,
+                               self.nbasis, self.nelmts, self.nbasis, self.nelmts)
+
+            # sum the nelmts to get the basis
+            cmat = mat.sum(dim=-1).sum(dim=-2).sum(dim=-3).sum(dim=-4) # (-1, nbasis^4)
+
+        cmat = cmat.view(*batch_size, self.nbasis, self.nbasis, self.nbasis, self.nbasis)
+        return cmat
+
+def contract_dim(mat, dim, csnelmts):
+    # contracting the matrix at the dimension dim
+    # mat: (..., nelmtstot, ...)
+    # res: (..., nbasis, ...)
+    if dim < 0:
+        dim = dim + mat.ndim
+    index = (slice(None, None, None), ) * dim
+    csmat = torch.cumsum(mat, dim=dim)[index + (csnelmts,)]
+    resmat = torch.cat(
+        (csmat[index + slice(None, 1, None)],
+         csmat[index + slice(1, None, None)] - csmat[index + slice(None, -1, None)]),
+        dim=dim)
+    return resmat
 
 class Ecoeff2(object):
     def __init__(self, ijks, centres, alphas, atompos):
@@ -260,8 +315,12 @@ class Ecoeff2(object):
         centres = centres.transpose(-2, -1)  # (3, nelmtstot)
         atompos = atompos.transpose(-2, -1)  # (3, natoms)
 
-        zeros = torch.zeros((nelmtstot, nelmtstot), dtype=alphas.dtype, device=alphas.device)
-        zeros_natoms = torch.zeros((natoms, nelmtstot, nelmtstot), dtype=alphas.dtype, device=alphas.device)
+        shape = (nelmtstot, nelmtstot)
+        dtype = alphas.dtype
+        device = alphas.device
+        zeros = torch.zeros(shape, dtype=dtype, device=device)
+        self.zeros_natoms = torch.zeros((natoms, *shape), dtype=dtype, device=device)
+        self.zeros_elrep = torch.zeros((*shape, *shape), dtype=dtype, device=device)
 
         self.lmn1 = ijks.unsqueeze(-1) + zeros.to(ijks.dtype)  # (3, nelmtstot, nelmtstot)
         self.lmn2 = ijks.unsqueeze(-2) + zeros.to(ijks.dtype)  # (3, nelmtstot, nelmtstot)
@@ -269,8 +328,11 @@ class Ecoeff2(object):
         self.pos2 = centres.unsqueeze(-2) + zeros  # (3, nelmtstot, nelmtstot)
         self.a1 = alphas.unsqueeze(-1) + zeros  # (nelmtstot, nelmtstot)
         self.a2 = alphas.unsqueeze(-2) + zeros  # (nelmtstot, nelmtstot)
-        self.zeros_natoms = zeros_natoms  # (natoms, nelmtstot, nelmtstot)
         self.atompos = atompos
+
+        self.a = alphas  # (nelmtstot,)
+        self.pos = centres  # (3, nelmtstot)
+        self.lmn = ijks  # (3, nelmtstot)
 
     def get_overlap(self):
         return overlap(self.a1, self.pos1, self.lmn1, self.a2, self.pos2, self.lmn2)
@@ -278,7 +340,7 @@ class Ecoeff2(object):
     def get_kinetics(self):
         return kinetic(self.a1, self.pos1, self.lmn1, self.a2, self.pos2, self.lmn2)
 
-    def get_coulomb(self):
+    def get_nuclattr(self):
         a1 = self.a1 + self.zeros_natoms
         a2 = self.a2 + self.zeros_natoms
         pos1 = self.pos1.unsqueeze(1) + self.zeros_natoms
@@ -287,3 +349,20 @@ class Ecoeff2(object):
         lmn2 = self.lmn2.unsqueeze(1) + self.zeros_natoms.to(self.lmn2.dtype)
         posc = self.atompos.unsqueeze(-1).unsqueeze(-1) + self.zeros_natoms
         return nuclattr(a1, pos1, lmn1, a2, pos2, lmn2, posc)
+
+    def get_elrep(self):
+        zeros = self.zeros_elrep
+        zeros_int = zeros.to(self.lmn.dtype)
+        a1 = self.a[:, None, None, None] + zeros
+        a2 = self.a[None, :, None, None] + zeros
+        a3 = self.a[None, None, :, None] + zeros
+        a4 = self.a[None, None, None, :] + zeros
+        pos1 = self.pos[:, :, None, None, None] + zeros
+        pos2 = self.pos[:, None, :, None, None] + zeros
+        pos3 = self.pos[:, None, None, :, None] + zeros
+        pos4 = self.pos[:, None, None, None, :] + zeros
+        lmn1 = self.lmn[:, :, None, None, None] + zeros_int
+        lmn2 = self.lmn[:, None, :, None, None] + zeros_int
+        lmn3 = self.lmn[:, None, None, :, None] + zeros_int
+        lmn4 = self.lmn[:, None, None, None, :] + zeros_int
+        return elrep(a1, pos1, lmn1, a2, pos2, lmn2, a3, pos3, lmn3, a4, pos4, lmn4)
