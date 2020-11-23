@@ -268,12 +268,12 @@ scalar_t calc_overlap(scalar_t a1, scalar_t x1, scalar_t y1, scalar_t z1,
     return (scalar_t)0.0;
   }
 
-  // it returns zero if it has the same position and the integral is an odd integral
-  if (same_pos_and_odd_integral(x1, x2, l1, l2) ||
-      same_pos_and_odd_integral(y1, y2, m1, m2) ||
-      same_pos_and_odd_integral(z1, z2, n1, n2)) {
-    return (scalar_t) 0.0;
-  }
+  // // it returns zero if it has the same position and the integral is an odd integral
+  // if (same_pos_and_odd_integral(x1, x2, l1, l2) ||
+  //     same_pos_and_odd_integral(y1, y2, m1, m2) ||
+  //     same_pos_and_odd_integral(z1, z2, n1, n2)) {
+  //   return (scalar_t) 0.0;
+  // }
 
   scalar_t p = a1 + a2;
   scalar_t u = a1 * a2 / p;
@@ -353,12 +353,12 @@ scalar_t calc_nuclattr(scalar_t a1, scalar_t x1, scalar_t y1, scalar_t z1,
     return (scalar_t)0.0;
   }
 
-  // it returns zero if it has the same position and the integral is an odd integral
-  if (same_pos_and_odd_integral(x1, x2, l1, l2) ||
-      same_pos_and_odd_integral(y1, y2, m1, m2) ||
-      same_pos_and_odd_integral(z1, z2, n1, n2)) {
-    return (scalar_t) 0.0;
-  }
+  // // it returns zero if it has the same position and the integral is an odd integral
+  // if (same_pos_and_odd_integral(x1, x2, l1, l2) ||
+  //     same_pos_and_odd_integral(y1, y2, m1, m2) ||
+  //     same_pos_and_odd_integral(z1, z2, n1, n2)) {
+  //   return (scalar_t) 0.0;
+  // }
 
   scalar_t Px = gaussian_product_center(a1, a2, x1, x2);
   scalar_t Py = gaussian_product_center(a1, a2, y1, y2);
@@ -417,14 +417,14 @@ scalar_t calc_elrep(scalar_t a1, scalar_t x1, scalar_t y1, scalar_t z1,
   }
 
   // it returns zero if it has the same position and the integral is an odd integral
-  if (same_pos_and_odd_integral(x1, x2, l1, l2) ||
-      same_pos_and_odd_integral(y1, y2, m1, m2) ||
-      same_pos_and_odd_integral(z1, z2, n1, n2) ||
-      same_pos_and_odd_integral(x3, x4, l3, l4) ||
-      same_pos_and_odd_integral(y3, y4, m3, m4) ||
-      same_pos_and_odd_integral(z3, z4, n3, n4)) {
-    return (scalar_t) 0.0;
-  }
+  // if (same_pos_and_odd_integral(x1, x2, l1, l2) ||
+  //     same_pos_and_odd_integral(y1, y2, m1, m2) ||
+  //     same_pos_and_odd_integral(z1, z2, n1, n2) ||
+  //     same_pos_and_odd_integral(x3, x4, l3, l4) ||
+  //     same_pos_and_odd_integral(y3, y4, m3, m4) ||
+  //     same_pos_and_odd_integral(z3, z4, n3, n4)) {
+  //   return (scalar_t) 0.0;
+  // }
 
   scalar_t p = a1 + a2;
   scalar_t q = a3 + a4;
@@ -642,9 +642,8 @@ static void nuclattr_kernel(
   auto l2_data = l2.data_ptr<int>();
   auto m2_data = m2.data_ptr<int>();
   auto n2_data = n2.data_ptr<int>();
-  int n1 = a1.numel();
-  int n2 = a2.numel();
 
+  int i = 0;
   for (int i1 = 0; i1 < a1.numel(); ++i1) {
     for (int i2 = 0; i2 < a2.numel(); ++i2) {
       ret_data[i++] = calc_nuclattr(

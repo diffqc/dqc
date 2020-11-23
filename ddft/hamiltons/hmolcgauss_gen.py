@@ -333,11 +333,7 @@ class Ecoeff2(object):
         return kinetic(self.a, self.pos, self.lmn, self.a, self.pos, self.lmn)
 
     def get_nuclattr(self):
-        a = self.a + self.zeros_natoms
-        pos = self.pos.unsqueeze(1) + self.zeros_natoms
-        lmn = self.lmn.unsqueeze(1) + self.zeros_natoms.to(self.lmn.dtype)
-        posc = self.atompos.unsqueeze(-1) + self.zeros_natoms
-        return nuclattr(a, pos, lmn, a, pos, lmn, posc)
+        return nuclattr(self.a, self.pos, self.lmn, self.a, self.pos, self.lmn, self.atompos)
 
     def get_elrep(self):
         return elrep(self.a, self.pos, self.lmn,

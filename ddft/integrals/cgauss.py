@@ -4,16 +4,45 @@ from ddft.csrc import _overlap, _kinetic, _nuclattr, _elrep
 __all__ = ["overlap", "kinetic", "nuclattr", "elrep"]
 
 def overlap(a1, pos1, lmn1, a2, pos2, lmn2):
+    # a1: (*na1)
+    # pos1, lmn1: (3, *na1)
+    # a2: (*na2)
+    # pos2, lmn2: (3, *na2)
+
+    # returns: (*na1, *na2)
     return _apply_fcn(OverlapFunction.apply, (a1, a2), (pos1, pos2), (lmn1, lmn2))
 
 def kinetic(a1, pos1, lmn1, a2, pos2, lmn2):
+    # a1: (*na1)
+    # pos1, lmn1: (3, *na1)
+    # a2: (*na2)
+    # pos2, lmn2: (3, *na2)
+
+    # returns: (*na1, *na2)
     return _apply_fcn(KineticFunction.apply, (a1, a2), (pos1, pos2), (lmn1, lmn2))
 
 def nuclattr(a1, pos1, lmn1, a2, pos2, lmn2, posc):
+    # a1: (*na1)
+    # pos1, lmn1: (3, *na1)
+    # a2: (*na2)
+    # pos2, lmn2: (3, *na2)
+    # posc: (3, natoms)
+
+    # returns: (natoms, *na1, *na2)
+
     # making the atom at (0, 0, 0)
-    pos1 = pos1 - posc
-    pos2 = pos2 - posc
-    return _apply_fcn(NuclattrFunction.apply, (a1, a2), (pos1, pos2), (lmn1, lmn2))
+    natoms = posc.shape[1]
+    pos1 = pos1.unsqueeze(1) - posc[(..., ) + (None, ) * a1.ndim]  # (3, natoms, *na1)
+    pos2 = pos2.unsqueeze(1) - posc[(..., ) + (None, ) * a2.ndim]  # (3, natoms, *na1)
+    lmn1 = lmn1.unsqueeze(1).expand(-1, natoms, *lmn1.shape[1:])
+    lmn2 = lmn2.unsqueeze(1).expand(-1, natoms, *lmn2.shape[1:])
+    a1i = a1.unsqueeze(0).expand(natoms, *a1.shape)
+    a2i = a2.unsqueeze(0).expand(natoms, *a2.shape)
+
+    # res: (natoms, *na1, natoms, *na2)
+    res = _apply_fcn(NuclattrFunction.apply, (a1i, a2i), (pos1, pos2), (lmn1, lmn2))
+    idx = (..., ) + (0, ) + ((slice(None, None, None), ) * a2.ndim)
+    return res[idx]  # (natoms, *na1, *na2)
 
 def elrep(a1, pos1, lmn1, a2, pos2, lmn2, a3, pos3, lmn3, a4, pos4, lmn4):
     return _apply_fcn(ElrepFunction.apply, (a1, a2, a3, a4),
@@ -68,11 +97,18 @@ class ElrepFunction(torch.autograd.Function):
         return _calc_backward_el(ctx.saved_tensors, grad_res, ElrepFunction.apply)
 
 def _apply_fcn(fcn, alphas, poss, lmns):
+    # preparing the inputs before feeding them to the c-function by making them:
+    # * contiguous
+    # * reshaped to 1D (alpha) or 2D (pos and lmn)
+    # and returns the correct shape (before reshaping)
+
     n = len(alphas)
     assert n > 0
     assert all((a.shape == pos.shape[1:] == lmn.shape[1:]) \
            for (a, pos, lmn) in zip(alphas, poss, lmns))
 
+    # making
+    alphas0 = alphas
     alphas = [a.contiguous().view(-1) for a in alphas]
     poss = [pos.contiguous().view(3, -1) for pos in poss]
     lmns = [lmn.to(torch.int).contiguous().view(3, -1) for lmn in lmns]
@@ -80,7 +116,8 @@ def _apply_fcn(fcn, alphas, poss, lmns):
     flat_inps = [item for sublist in inps for item in sublist]
     res = fcn(*flat_inps)  # (numel(a)^n)
 
-    flat_shape = [item for sublist in ([alphas[0].shape] * n) for item in sublist]
+    allshapes = [a.shape for a in alphas0]
+    flat_shape = [item for sublist in allshapes for item in sublist]
     return res.view(*flat_shape)
 
 def _calc_forward(cfunc, a1, pos1, lmn1, a2, pos2, lmn2):
@@ -261,55 +298,3 @@ def _calc_backward_el(saved_tensors, grad_res, fcn):
         grad_pos4 = (dsdpos4 * grad_res).sum(dim=-2).sum(dim=-2).sum(dim=-2)
 
     return grad_a1, grad_pos1, None, grad_a2, grad_pos2, None, grad_a3, grad_pos3, None, grad_a4, grad_pos4, None
-
-if __name__ == "__main__":
-    import time
-    with_gradcheck = 1
-    op = "elrep"
-    n = 2 if with_gradcheck else 20000
-    dtype = torch.double
-    a1 = (torch.rand(n, dtype=dtype) + 0.1).requires_grad_()
-    a2 = (torch.rand(n, dtype=dtype) + 0.1).requires_grad_()
-    a3 = (torch.rand(n, dtype=dtype) + 0.1).requires_grad_()
-    a4 = (torch.rand(n, dtype=dtype) + 0.1).requires_grad_()
-    pos1 = (torch.randn((3, n), dtype=dtype) * 0.3).requires_grad_()
-    pos2 = (torch.randn((3, n), dtype=dtype) * 0.3).requires_grad_()
-    pos3 = (torch.randn((3, n), dtype=dtype) * 0.3).requires_grad_()
-    pos4 = (torch.randn((3, n), dtype=dtype) * 0.3).requires_grad_()
-    posc = (torch.randn((3, n), dtype=dtype) + 1)#.requires_grad_()
-    lmn1 = torch.ones((3, n)) * 1
-    lmn2 = torch.ones((3, n)) * 1
-    lmn3 = torch.ones((3, n)) * 1
-    lmn4 = torch.ones((3, n)) * 1
-    params1 = (a1, pos1, lmn1, a2, pos2, lmn2)
-    params2 = (a1, pos1, lmn1, a2, pos2, lmn2, posc)
-    params4 = (a1, pos1, lmn1, a2, pos2, lmn2, a3, pos3, lmn3, a4, pos4, lmn4)
-    t0 = time.time()
-    if op == "overlap":
-        s = overlap(*params1)
-    elif op == "kinetic":
-        s = kinetic(*params1)
-    elif op == "nuclattr":
-        s = nuclattr(*params2)
-    elif op == "elrep":
-        s = elrep(*params4)
-    else:
-        raise RuntimeError("Unknown op: %s" % op)
-    t1 = time.time()
-    print(s)
-    print(t1 - t0)
-    if with_gradcheck:
-        if op == "overlap":
-            torch.autograd.gradcheck(overlap, params1)
-            torch.autograd.gradgradcheck(overlap, params1)
-        elif op == "kinetic":
-            torch.autograd.gradcheck(kinetic, params1)
-            torch.autograd.gradgradcheck(kinetic, params1)
-        elif op == "nuclattr":
-            torch.autograd.gradcheck(nuclattr, params2)
-            torch.autograd.gradgradcheck(nuclattr, params2)
-        elif op == "elrep":
-            torch.autograd.gradcheck(elrep, params4)
-            torch.autograd.gradgradcheck(elrep, params4)
-    t2 = time.time()
-    print(t2 - t1)
