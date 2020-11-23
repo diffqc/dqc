@@ -191,6 +191,7 @@ class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
         # dm: (*BD, nbasis, nbasis)
         # elrep_mat: (nbasis, nbasis, nbasis, nbasis)
         mat = torch.einsum("...ij,ijkl->...kl", dm, self.elrep_mat)
+        mat = (mat + mat.transpose(-2, -1)) * 0.5
         return xt.LinearOperator.m(mat, is_hermitian=True)
 
     def get_vext(self, vext):
