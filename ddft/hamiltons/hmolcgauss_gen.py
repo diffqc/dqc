@@ -9,7 +9,7 @@ from ddft.utils.spharmonics import spharmonics
 from ddft.utils.gamma import incgamma
 # from ddft.csrc import get_ecoeff, get_overlap_mat, get_kinetics_mat, \
 #     get_coulomb_mat
-from ddft.integrals.cgauss import overlap, kinetic, nuclattr
+from ddft.integrals.cgauss import overlap, kinetic, nuclattr, elrep
 
 class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
     """
@@ -59,8 +59,9 @@ class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
 
     def __init__(self, grid,
                  ijks, alphas, centres, coeffs, nelmts,
-                 atompos, atomzs, normalize_elmts=True,
-                 with_elrep=False):
+                 atompos, atomzs, normalize_elmts=True):
+        with_elrep = True  # set to False to disable electron repulsion
+
         # self.nbasis, self.nelmts, ndim = centres.shape
         self.nelmtstot, ndim = centres.shape
         assert ndim == 3, "The centres must be 3 dimensions"
@@ -235,6 +236,8 @@ class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
             return [prefix+"basis_dvolume", prefix+"basis"]
         elif methodname == "get_overlap":
             return [prefix+"olp_mat"]
+        elif methodname == "get_elrep":
+            return [prefix+"elrep_mat"]
         elif methodname == "dm2dens":
             return [prefix+"basis"]
         else:
@@ -251,10 +254,8 @@ class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
         mat_size = mat.shape[-2:]
         if isinstance(self.nelmts, torch.Tensor):
             mat = mat.view(-1, *mat_size) # (-1, nelmtstot, nelmtstot)
-            csmat1 = torch.cumsum(mat, dim=1)[:,self.csnelmts,:] # (-1, nbasis, nelmtstot)
-            mat1 = torch.cat((csmat1[:,:1,:], csmat1[:,1:,:]-csmat1[:,:-1,:]), dim=1) # (-1, nbasis, nelmtstot)
-            csmat2 = torch.cumsum(mat1, dim=2)[:,:,self.csnelmts] # (-1, nbasis, nbasis)
-            cmat = torch.cat((csmat2[:,:,:1], csmat2[:,:,1:]-csmat2[:,:,:-1]), dim=2) # (-1, nbasis, nbasis)
+            mat = contract_dim(mat, dim=1, csnelmts=self.csnelmts)
+            cmat = contract_dim(mat, dim=2, csnelmts=self.csnelmts)
         else:
             # resize mat to have shape of (-1, nbasis, nelmts, nbasis, nelmts)
             mat = mat.view(-1, self.nbasis, self.nelmts, self.nbasis, self.nelmts)
@@ -273,10 +274,10 @@ class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
         mat_size = mat.shape[-4:]
         if isinstance(self.nelmts, torch.Tensor):
             cmat = mat.view(-1, *mat_size) # (-1, nelmtstot^4)
-            cmat = contract_dim(cmat, dim=1, csnelmts=csnelmts)
-            cmat = contract_dim(cmat, dim=2, csnelmts=csnelmts)
-            cmat = contract_dim(cmat, dim=3, csnelmts=csnelmts)
-            cmat = contract_dim(cmat, dim=4, csnelmts=csnelmts)  # (-1, nbasis^4)
+            cmat = contract_dim(cmat, dim=1, csnelmts=self.csnelmts)
+            cmat = contract_dim(cmat, dim=2, csnelmts=self.csnelmts)
+            cmat = contract_dim(cmat, dim=3, csnelmts=self.csnelmts)
+            cmat = contract_dim(cmat, dim=4, csnelmts=self.csnelmts)  # (-1, nbasis^4)
         else:
             # resize mat to have shape of (-1, nbasis, nelmts, nbasis, nelmts, nbasis, nelmts, nbasis, nelmts)
             mat = mat.view(-1, self.nbasis, self.nelmts, self.nbasis, self.nelmts,
@@ -297,8 +298,8 @@ def contract_dim(mat, dim, csnelmts):
     index = (slice(None, None, None), ) * dim
     csmat = torch.cumsum(mat, dim=dim)[index + (csnelmts,)]
     resmat = torch.cat(
-        (csmat[index + slice(None, 1, None)],
-         csmat[index + slice(1, None, None)] - csmat[index + slice(None, -1, None)]),
+        (csmat[index + (slice(None, 1, None), )],
+         csmat[index + (slice(1, None, None), )] - csmat[index + (slice(None, -1, None), )]),
         dim=dim)
     return resmat
 

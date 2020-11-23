@@ -41,7 +41,7 @@ class dft(BaseQCCalc):
 
         # set up the vhks
         eks_model = self.__get_eks_model(eks_model)
-        self.eks_model = eks_model + Hartree()
+        self.eks_model = eks_model #+ Hartree()
         self.eks_model.set_hmodel(self.hmodel)
 
         # set up the basis for hmodel
@@ -89,9 +89,9 @@ class dft(BaseQCCalc):
             # calculate the total potential experienced by Kohn-Sham particles
             # from the last forward calculation
             densinfo = self.scf_densinfo
-            eigvals, eigvecs, vks_linop = self.__diagonalize(densinfo)
+            eigvals, eigvecs, vks_linop, v_elrep = self.__diagonalize(densinfo, self.scf_dm)
 
-            # calculates the Kohn-Sham energy
+            # calculates the external energy (xc)
             half_densinfo = densinfo * 0.5
             eks_density = self.eks_model(half_densinfo, half_densinfo) # energy density (nbatch, nr)
             Eks = self.grid.integralbox(eks_density, dim=-1) # (nbatch,)
@@ -102,9 +102,10 @@ class dft(BaseQCCalc):
             # NOTE: if the gradient is unstable, please try using the integralbox
             vks_integral = 2 * torch.einsum("...rc,...rc->...", vks_linop.mm(eigvecs), eigvecs)
             # vks_integral = self.grid.integralbox(vks * densinfo.density, dim=-1)
+            e_elrep = torch.einsum("...rc,...rc->...", v_elrep.mm(eigvecs), eigvecs)
 
             # compute the interacting particles energy
-            Etot = sum_eigvals - vks_integral + Eks + self.system.get_nuclei_energy()
+            Etot = sum_eigvals - vks_integral + Eks + self.system.get_nuclei_energy() - e_elrep
             self.scf_energy = Etot
         return self.scf_energy
 
@@ -149,7 +150,8 @@ class dft(BaseQCCalc):
         vext_linop = self.hmodel.get_vext(self.vext)
 
         # get the new fock matrix
-        fock_linop = self.hmodel.get_kincoul() + vks_linop + vext_linop
+        fock_linop = self.hmodel.get_kincoul() + self.hmodel.get_elrep(dm) + \
+            vks_linop + vext_linop
         fock = fock_linop.fullmatrix()
         return fock
 
@@ -162,22 +164,23 @@ class dft(BaseQCCalc):
         dm = dm * normfactor.unsqueeze(-1) # (*BMD, nbasis_tot, nbasis_tot)
         return dm # (*BMD, nbasis_tot, nbasis_tot)
 
-    def __diagonalize(self, densinfo):
+    def __diagonalize(self, densinfo, dm):
         # calculate the total potential experienced by Kohn-Sham particles
         half_densinfo = densinfo * 0.5
         vks_linop, _ = self.eks_model.potential_linop(half_densinfo, half_densinfo) # (nbatch, nr)
+        v_elrep = self.hmodel.get_elrep(dm)
         vext_linop = self.hmodel.get_vext(self.vext)
 
         # compute the eigenpairs
         # evals: (nbatch, norb), evecs: (nbatch, nr, norb)
-        A = self.hmodel.get_kincoul() + vks_linop + vext_linop
+        A = self.hmodel.get_kincoul() + vks_linop + vext_linop + v_elrep
         eigvals, eigvecs = xitorch.linalg.lsymeig(
             A = A,
             neig = self.norb,
             M = self.hmodel.get_overlap(),
             **self.eigen_options)
 
-        return eigvals, eigvecs, vks_linop
+        return eigvals, eigvecs, vks_linop, v_elrep
 
     ############# parameters setup functions #############
     def __get_eks_model(self, eks_model):
@@ -239,10 +242,12 @@ class dft(BaseQCCalc):
                    self.hmodel.getparamnames("dm2dens", prefix=prefix+"hmodel.") + \
                    self.eks_model.getparamnames("potential_linop", prefix=prefix+"eks_model.") + \
                    self.hmodel.getparamnames("get_kincoul", prefix=prefix+"hmodel.") + \
+                   self.hmodel.getparamnames("get_elrep", prefix=prefix+"hmodel.") + \
                    self.hmodel.getparamnames("get_vext", prefix=prefix+"hmodel.")
         elif methodname == "__diagonalize":
             return [prefix+"vext"] + \
                    self.hmodel.getparamnames("get_kincoul", prefix=prefix+"hmodel.") + \
+                   self.hmodel.getparamnames("get_elrep", prefix=prefix+"hmodel.") + \
                    self.hmodel.getparamnames("get_vext", prefix=prefix+"hmodel.") + \
                    self.hmodel.getparamnames("get_overlap", prefix=prefix+"hmodel.") + \
                    self.eks_model.getparamnames("potential_linop", prefix=prefix+"eks_model.")
