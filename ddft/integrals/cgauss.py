@@ -41,8 +41,9 @@ def nuclattr(a1, pos1, lmn1, a2, pos2, lmn2, posc):
 
     # res: (natoms, *na1, natoms, *na2)
     res = _apply_fcn(NuclattrFunction.apply, (a1i, a2i), (pos1, pos2), (lmn1, lmn2))
-    idx = (..., ) + (0, ) + ((slice(None, None, None), ) * a2.ndim)
-    return res[idx]  # (natoms, *na1, *na2)
+    res = torch.diagonal(res, dim1 = 0, dim2 = 1 + a1.ndim)
+    res = res.unsqueeze(0).transpose(-1, 0).squeeze(-1)
+    return res  # (natoms, *na1, *na2)
 
 def elrep(a1, pos1, lmn1, a2, pos2, lmn2, a3, pos3, lmn3, a4, pos4, lmn4):
     return _apply_fcn(ElrepFunction.apply, (a1, a2, a3, a4),
@@ -55,7 +56,10 @@ def elrep(a1, pos1, lmn1, a2, pos2, lmn2, a3, pos3, lmn3, a4, pos4, lmn4):
 class OverlapFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, a1, pos1, lmn1, a2, pos2, lmn2):
-        res = _calc_forward(_overlap, a1, pos1, lmn1, a2, pos2, lmn2)
+        res = _overlap(
+            a1, *pos1, *lmn1,
+            a2, *pos2, *lmn2
+        )
         ctx.save_for_backward(a1, pos1, lmn1, a2, pos2, lmn2)
         return res
 
@@ -66,7 +70,10 @@ class OverlapFunction(torch.autograd.Function):
 class KineticFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, a1, pos1, lmn1, a2, pos2, lmn2):
-        res = _calc_forward(_kinetic, a1, pos1, lmn1, a2, pos2, lmn2)
+        res = _kinetic(
+            a1, *pos1, *lmn1,
+            a2, *pos2, *lmn2
+        )
         ctx.save_for_backward(a1, pos1, lmn1, a2, pos2, lmn2)
         return res
 
@@ -77,7 +84,10 @@ class KineticFunction(torch.autograd.Function):
 class NuclattrFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, a1, pos1, lmn1, a2, pos2, lmn2):
-        res = _calc_forward(_nuclattr, a1, pos1, lmn1, a2, pos2, lmn2)
+        res = _nuclattr(
+            a1, *pos1, *lmn1,
+            a2, *pos2, *lmn2,
+        )
         ctx.save_for_backward(a1, pos1, lmn1, a2, pos2, lmn2)
         return res
 
@@ -88,7 +98,12 @@ class NuclattrFunction(torch.autograd.Function):
 class ElrepFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, a1, pos1, lmn1, a2, pos2, lmn2, a3, pos3, lmn3, a4, pos4, lmn4):
-        res = _calc_forward_el(_elrep, a1, pos1, lmn1, a2, pos2, lmn2, a3, pos3, lmn3, a4, pos4, lmn4)
+        res = _elrep(
+            a1, *pos1, *lmn1,
+            a2, *pos2, *lmn2,
+            a3, *pos3, *lmn3,
+            a4, *pos4, *lmn4,
+        )
         ctx.save_for_backward(a1, pos1, lmn1, a2, pos2, lmn2, a3, pos3, lmn3, a4, pos4, lmn4)
         return res
 
@@ -119,16 +134,6 @@ def _apply_fcn(fcn, alphas, poss, lmns):
     allshapes = [a.shape for a in alphas0]
     flat_shape = [item for sublist in allshapes for item in sublist]
     return res.view(*flat_shape)
-
-def _calc_forward(cfunc, a1, pos1, lmn1, a2, pos2, lmn2):
-    x1, y1, z1 = pos1
-    l1, m1, n1 = lmn1
-    x2, y2, z2 = pos2
-    l2, m2, n2 = lmn2
-    res = cfunc(
-        a1, x1, y1, z1, l1, m1, n1,
-        a2, x2, y2, z2, l2, m2, n2)
-    return res
 
 def _calc_backward(saved_tensors, grad_res, fcn):
     a1, pos1, lmn1, a2, pos2, lmn2 = saved_tensors
@@ -184,22 +189,6 @@ def _calc_backward(saved_tensors, grad_res, fcn):
         grad_pos2 = (dsdpos2 * grad_res).sum(dim=-2)
 
     return grad_a1, grad_pos1, None, grad_a2, grad_pos2, None
-
-def _calc_forward_el(cfunc, a1, pos1, lmn1, a2, pos2, lmn2, a3, pos3, lmn3, a4, pos4, lmn4):
-    x1, y1, z1 = pos1
-    l1, m1, n1 = lmn1
-    x2, y2, z2 = pos2
-    l2, m2, n2 = lmn2
-    x3, y3, z3 = pos3
-    l3, m3, n3 = lmn3
-    x4, y4, z4 = pos4
-    l4, m4, n4 = lmn4
-    res = cfunc(
-        a1, x1, y1, z1, l1, m1, n1,
-        a2, x2, y2, z2, l2, m2, n2,
-        a3, x3, y3, z3, l3, m3, n3,
-        a4, x4, y4, z4, l4, m4, n4)
-    return res
 
 def _calc_backward_el(saved_tensors, grad_res, fcn):
     a1, pos1, lmn1, a2, pos2, lmn2, a3, pos3, lmn3, a4, pos4, lmn4 = saved_tensors
