@@ -60,7 +60,7 @@ class HamiltonMoleculeCGaussGenerator(BaseHamiltonGenerator):
     def __init__(self, grid,
                  ijks, alphas, centres, coeffs, nelmts,
                  atompos, atomzs, normalize_elmts=True):
-        with_elrep = True  # set to False to disable electron repulsion
+        with_elrep = 1  # set to False to disable electron repulsion
 
         # self.nbasis, self.nelmts, ndim = centres.shape
         self.nelmtstot, ndim = centres.shape

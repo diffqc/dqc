@@ -16,6 +16,7 @@ class dft(BaseQCCalc):
     def __init__(self, system, eks_model="lda,", vext_fcn=None,
             # arguments for scf run
             dm0=None, eigen_options={}, fwd_options=None, bck_options=None):
+        self.with_eri = 1
 
         # extract properties of the system
         self.system = system
@@ -41,7 +42,9 @@ class dft(BaseQCCalc):
 
         # set up the vhks
         eks_model = self.__get_eks_model(eks_model)
-        self.eks_model = eks_model #+ Hartree()
+        self.eks_model = eks_model
+        if not self.with_eri:
+            self.eks_model = self.eks_model + Hartree()
         self.eks_model.set_hmodel(self.hmodel)
 
         # set up the basis for hmodel
@@ -102,7 +105,10 @@ class dft(BaseQCCalc):
             # NOTE: if the gradient is unstable, please try using the integralbox
             vks_integral = 2 * torch.einsum("...rc,...rc->...", vks_linop.mm(eigvecs), eigvecs)
             # vks_integral = self.grid.integralbox(vks * densinfo.density, dim=-1)
-            e_elrep = torch.einsum("...rc,...rc->...", v_elrep.mm(eigvecs), eigvecs)
+            if self.with_eri:
+                e_elrep = torch.einsum("...rc,...rc->...", v_elrep.mm(eigvecs), eigvecs)
+            else:
+                e_elrep = 0.0
 
             # compute the interacting particles energy
             Etot = sum_eigvals - vks_integral + Eks + self.system.get_nuclei_energy() - e_elrep
@@ -150,8 +156,9 @@ class dft(BaseQCCalc):
         vext_linop = self.hmodel.get_vext(self.vext)
 
         # get the new fock matrix
-        fock_linop = self.hmodel.get_kincoul() + self.hmodel.get_elrep(dm) + \
-            vks_linop + vext_linop
+        fock_linop = self.hmodel.get_kincoul() + vks_linop + vext_linop
+        if self.with_eri:
+            fock_linop = fock_linop + self.hmodel.get_elrep(dm)
         fock = fock_linop.fullmatrix()
         return fock
 
@@ -168,12 +175,17 @@ class dft(BaseQCCalc):
         # calculate the total potential experienced by Kohn-Sham particles
         half_densinfo = densinfo * 0.5
         vks_linop, _ = self.eks_model.potential_linop(half_densinfo, half_densinfo) # (nbatch, nr)
-        v_elrep = self.hmodel.get_elrep(dm)
+        if self.with_eri:
+            v_elrep = self.hmodel.get_elrep(dm)
+        else:
+            v_elrep = None
         vext_linop = self.hmodel.get_vext(self.vext)
 
         # compute the eigenpairs
         # evals: (nbatch, norb), evecs: (nbatch, nr, norb)
-        A = self.hmodel.get_kincoul() + vks_linop + vext_linop + v_elrep
+        A = self.hmodel.get_kincoul() + vks_linop + vext_linop
+        if self.with_eri:
+            A = A + v_elrep
         eigvals, eigvecs = xitorch.linalg.lsymeig(
             A = A,
             neig = self.norb,
@@ -242,15 +254,15 @@ class dft(BaseQCCalc):
                    self.hmodel.getparamnames("dm2dens", prefix=prefix+"hmodel.") + \
                    self.eks_model.getparamnames("potential_linop", prefix=prefix+"eks_model.") + \
                    self.hmodel.getparamnames("get_kincoul", prefix=prefix+"hmodel.") + \
-                   self.hmodel.getparamnames("get_elrep", prefix=prefix+"hmodel.") + \
-                   self.hmodel.getparamnames("get_vext", prefix=prefix+"hmodel.")
+                   self.hmodel.getparamnames("get_vext", prefix=prefix+"hmodel.") + \
+                   (self.hmodel.getparamnames("get_elrep", prefix=prefix+"hmodel.") if self.with_eri else [])
         elif methodname == "__diagonalize":
             return [prefix+"vext"] + \
                    self.hmodel.getparamnames("get_kincoul", prefix=prefix+"hmodel.") + \
-                   self.hmodel.getparamnames("get_elrep", prefix=prefix+"hmodel.") + \
                    self.hmodel.getparamnames("get_vext", prefix=prefix+"hmodel.") + \
                    self.hmodel.getparamnames("get_overlap", prefix=prefix+"hmodel.") + \
-                   self.eks_model.getparamnames("potential_linop", prefix=prefix+"eks_model.")
+                   self.eks_model.getparamnames("potential_linop", prefix=prefix+"eks_model.") + \
+                   (self.hmodel.getparamnames("get_elrep", prefix=prefix+"hmodel.") if self.with_eri else [])
         elif methodname == "__normalize_dm":
             return [prefix+"numel"] + \
                    self.grid.getparamnames("integralbox", prefix=prefix+"grid.")
