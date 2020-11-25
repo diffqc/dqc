@@ -39,6 +39,7 @@ setup(
         "scipy>=0.15",
         "matplotlib>=1.5.3",
         "pybind11>=2.5.0",
+        "basis_set_exchange",
         # "pytorch>=1.8.0",
     ],
     setup_requires=["pybind11>=2.5.0"],
