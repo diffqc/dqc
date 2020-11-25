@@ -1,3 +1,6 @@
 [submodule "submodules/libxc"]
 	path = submodules/libxc
 	url = https://gitlab.com/libxc/libxc/
+[submodule "submodules/libcint"]
+	path = submodules/libcint
+	url = https://github.com/sunqm/libcint
