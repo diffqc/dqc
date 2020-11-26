@@ -1,0 +1,2 @@
+This lib directory contains libraries from PySCF. The modifications made:
+* Modifying CMakeLists.txt so only include gto, np_helper, and cint

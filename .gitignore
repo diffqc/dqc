@@ -3,6 +3,14 @@ profile.sh
 profile.prof
 rprofile.py
 
+# library dependence
+CMakeCache.txt
+CMakeFiles
+Makefile
+cmake_install.cmake
+lib/deps
+lib/config.h
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -19,7 +27,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# lib/
 lib64/
 parts/
 sdist/
