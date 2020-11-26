@@ -58,7 +58,7 @@ class LibcintWrapper(object):
             # modifying most of the parameters above
             ns = self._add_atom_and_basis(i, atombasis)
             self._nshells.append(ns)
-        self._nshells_tot = sum(self._nshells)
+        self.nshells_tot = sum(self._nshells)
 
         # flatten the params list
         self._allpos_params = torch.cat(self._allpos, dim=0)  # (natom, NDIM)
@@ -83,10 +83,71 @@ class LibcintWrapper(object):
 
         # get the size of the contracted gaussian
         self._offset = [0]
-        for i in range(self._nshells_tot):
+        for i in range(self.nshells_tot):
             nbasiscontr = self._nbasiscontr(i)
             self._offset.append(self._offset[-1] + nbasiscontr)
-        self.nbases_tot = self._offset[-1]
+        self.nao_tot = self._offset[-1]
+
+    def _add_atom_and_basis(self, iatom: int, atombasis: AtomCGTOBasis) -> int:
+        # construct the atom first
+        assert atombasis.pos.numel() == NDIM, "Please report this bug in Github"
+        #                charge           ptr_coord       nucl model (unused for standard nucl model)
+        self._atm.append([atombasis.atomz, self._ptr_env, 1, self._ptr_env + NDIM, 0, 0])
+        self._env.extend(atombasis.pos)
+        self._ptr_env += NDIM
+        self._env.extend([0.0])
+        self._ptr_env += 1
+
+        # then construct the basis
+        for basis in atombasis.bases:
+            assert basis.alphas.shape == basis.coeffs.shape and basis.alphas.ndim == 1,\
+                   "Please report this bug in Github"
+
+            # TODO: perform coefficient normalization!
+            normcoeff = self._normalize_basis(basis.alphas, basis.coeffs, basis.angmom)
+
+            ngauss = len(basis.alphas)
+            #                iatom, angmom,       ngauss, ncontr, kappa, ptr_exp
+            self._bas.append([iatom, basis.angmom, ngauss, 1     , 0, self._ptr_env,
+            #                ptr_coeffs,           unused
+                             self._ptr_env + ngauss, 0])
+            self._env.extend(basis.alphas)
+            self._env.extend(normcoeff)
+            self._ptr_env += 2 * ngauss
+
+            # add the basis coeffs and alphas to the flat list and update the offset
+            self._allalphas.append(basis.alphas)
+            self._allcoeffs.append(normcoeff)
+            self._basis_offset.append(self._basis_offset[-1] + ngauss)
+            self._r_idx.append(iatom)
+
+        # add the atom position
+        self._allpos.append(atombasis.pos.unsqueeze(0))
+        return len(atombasis.bases)
+
+    def _normalize_basis(self, alphas: torch.Tensor, coeffs: torch.Tensor,
+                         angmom: int) -> torch.Tensor:
+        # the normalization is obtained from CINTgto_norm from
+        # libcint/src/misc.c, or
+        # https://github.com/sunqm/libcint/blob/b8594f1d27c3dad9034984a2a5befb9d607d4932/src/misc.c#L80
+
+        # precomputed factor:
+        # 2 ** (2 * angmom + 3) * factorial(angmom + 1) * / \
+        # (factorial(angmom * 2 + 2) * np.sqrt(np.pi)))
+        factor = [
+            2.256758334191025,  # 0
+            1.5045055561273502,  # 1
+            0.6018022224509401,  # 2
+            0.17194349212884005,  # 3
+            0.03820966491752001,  # 4
+            0.006947211803185456,  # 5
+            0.0010688018158746854,  # 6
+        ]
+        return coeffs * torch.sqrt(factor[angmom] * (2 * alphas) ** (angmom + 1.5))
+
+    @property
+    def ao_loc(self):
+        return self._offset
 
     def overlap(self) -> torch.Tensor:
         return self._int1e("ovlp")
@@ -104,13 +165,13 @@ class LibcintWrapper(object):
     def _int1e(self, shortname: str, nuc: bool = False) -> torch.Tensor:
         # one electron integral (overlap, kinetic, and nuclear attraction)
 
-        shape = (self.nbases_tot, self.nbases_tot)
+        shape = (self.nao_tot, self.nao_tot)
         res = torch.empty(shape, dtype=self.dtype, device=self.device)
-        for i1 in range(self._nshells_tot):
+        for i1 in range(self.nshells_tot):
             c1, a1, r1 = self._get_params(i1)
             slice1 = self._get_matrix_index(i1)
 
-            for i2 in range(i1, self._nshells_tot):
+            for i2 in range(i1, self.nshells_tot):
                 # get the parameters for backward propagation
                 c2, a2, r2 = self._get_params(i2)
                 slice2 = self._get_matrix_index(i2)
@@ -155,20 +216,20 @@ class LibcintWrapper(object):
         return res
 
     def _int2e(self) -> torch.Tensor:
-        shape = (self.nbases_tot, self.nbases_tot, self.nbases_tot, self.nbases_tot)
+        shape = (self.nao_tot, self.nao_tot, self.nao_tot, self.nao_tot)
         res = torch.empty(shape, dtype=self.dtype, device=self.device)
 
         # TODO: add symmetry here
-        for i1 in range(self._nshells_tot):
+        for i1 in range(self.nshells_tot):
             c1, a1, r1 = self._get_params(i1)
             slice1 = self._get_matrix_index(i1)
-            for i2 in range(self._nshells_tot):
+            for i2 in range(self.nshells_tot):
                 c2, a2, r2 = self._get_params(i2)
                 slice2 = self._get_matrix_index(i2)
-                for i3 in range(self._nshells_tot):
+                for i3 in range(self.nshells_tot):
                     c3, a3, r3 = self._get_params(i3)
                     slice3 = self._get_matrix_index(i3)
-                    for i4 in range(self._nshells_tot):
+                    for i4 in range(self.nshells_tot):
                         c4, a4, r4 = self._get_params(i4)
                         slice4 = self._get_matrix_index(i4)
                         mat = _Int2eFunction.apply(c1, a1, r1, c2, a2, r2,
@@ -347,38 +408,6 @@ class LibcintWrapper(object):
             op = cint.CINTcgto_cart
         return op(ctypes.c_int(sh), self.bas_ctypes)
 
-    def _add_atom_and_basis(self, iatom: int, atombasis: AtomCGTOBasis) -> int:
-        # construct the atom first
-        assert atombasis.pos.numel() == NDIM, "Please report this bug in Github"
-        #                charge           ptr_coord     (unused for standard nucl model)
-        self._atm.append([atombasis.atomz, self._ptr_env, 0, 0, 0, 0])
-        self._env.extend(atombasis.pos)
-        self._ptr_env += NDIM
-
-        # then construct the basis
-        for basis in atombasis.bases:
-            assert basis.alphas.shape == basis.coeffs.shape and basis.alphas.ndim == 1,\
-                   "Please report this bug in Github"
-
-            ngauss = len(basis.alphas)
-            #                iatom, angmom,       ngauss, ncontr, kappa, ptr_exp
-            self._bas.append([iatom, basis.angmom, ngauss, 1     , 0, self._ptr_env,
-            #                ptr_coeffs,           unused
-                             self._ptr_env + ngauss, 0])
-            self._env.extend(basis.alphas)
-            self._env.extend(basis.coeffs)
-            self._ptr_env += 2 * ngauss
-
-            # add the basis coeffs and alphas to the flat list and update the offset
-            self._allalphas.append(basis.alphas)
-            self._allcoeffs.append(basis.coeffs)
-            self._basis_offset.append(self._basis_offset[-1] + ngauss)
-            self._r_idx.append(iatom)
-
-        # add the atom position
-        self._allpos.append(atombasis.pos.unsqueeze(0))
-        return len(atombasis.bases)
-
 class _Int1eFunction(torch.autograd.Function):
     # wrapper class to provide the gradient of the one-e integrals
     @staticmethod
@@ -529,6 +558,7 @@ if __name__ == "__main__":
     # torch.autograd.gradgradcheck(get_int1e, (pos1, pos2, "overlap"))
     # torch.autograd.gradgradcheck(get_int1e, (pos1, pos2, "kinetic"))
 
-    a = get_int1e(pos1, pos2, "elrep")
+    a = get_int1e(pos1, pos2, "overlap")
+    print(a)
     # TODO: gradient for nuclattr is wrong, so correct it!
     # torch.autograd.gradcheck(get_int1e, (pos1, pos2, "nuclattr"))
