@@ -49,8 +49,8 @@ class LibcintWrapper(object):
         self._allcoeffs: List[torch.Tensor] = []
         # offset indicating the starting point of i-th shell in r & (alphas & coeffs)
         # in the flatten list above
-        self._r_idx: List[int] = []
-        self._basis_offset: List[int] = [0]
+        self.shell_to_atom: List[int] = []
+        self.shell_to_gauss: List[int] = [0]
 
         # construct the atom, basis, and env lists
         self._nshells = []
@@ -61,9 +61,9 @@ class LibcintWrapper(object):
         self.nshells_tot = sum(self._nshells)
 
         # flatten the params list
-        self._allpos_params = torch.cat(self._allpos, dim=0)  # (natom, NDIM)
-        self._allalphas_params = torch.cat(self._allalphas, dim=0)  # (ntot_gauss)
-        self._allcoeffs_params = torch.cat(self._allcoeffs, dim=0)  # (ntot_gauss)
+        self.allpos_params = torch.cat(self._allpos, dim=0)  # (natom, NDIM)
+        self.allalphas_params = torch.cat(self._allalphas, dim=0)  # (ntot_gauss)
+        self.allcoeffs_params = torch.cat(self._allcoeffs, dim=0)  # (ntot_gauss)
 
         # convert the lists to numpy (to make it contiguous, Python list is not contiguous)
         self._atm = np.array(self._atm, dtype=np.int32)
@@ -82,11 +82,19 @@ class LibcintWrapper(object):
         self.device = atombases[0].bases[0].alphas.device
 
         # get the size of the contracted gaussian
-        self._offset = [0]
+        self.shell_to_aoloc = [0]
+        shell_to_nao = []
         for i in range(self.nshells_tot):
             nbasiscontr = self._nbasiscontr(i)
-            self._offset.append(self._offset[-1] + nbasiscontr)
-        self.nao_tot = self._offset[-1]
+            shell_to_nao.append(nbasiscontr)
+            self.shell_to_aoloc.append(self.shell_to_aoloc[-1] + nbasiscontr)
+        self.nao_tot = self.shell_to_aoloc[-1]
+
+        # get the mapping from ao to atom index
+        self.ao_to_atom = torch.zeros((self.nao_tot,), dtype=torch.long)
+        for i in range(self.nshells_tot):
+            idx = self.shell_to_aoloc[i]
+            self.ao_to_atom[idx : idx + shell_to_nao[i]] = self.shell_to_atom[i]
 
     def _add_atom_and_basis(self, iatom: int, atombasis: AtomCGTOBasis) -> int:
         # construct the atom first
@@ -117,8 +125,8 @@ class LibcintWrapper(object):
             # add the basis coeffs and alphas to the flat list and update the offset
             self._allalphas.append(basis.alphas)
             self._allcoeffs.append(normcoeff)
-            self._basis_offset.append(self._basis_offset[-1] + ngauss)
-            self._r_idx.append(iatom)
+            self.shell_to_gauss.append(self.shell_to_gauss[-1] + ngauss)
+            self.shell_to_atom.append(iatom)
 
         # add the atom position
         self._allpos.append(atombasis.pos.unsqueeze(0))
@@ -146,7 +154,7 @@ class LibcintWrapper(object):
 
     @property
     def ao_loc(self):
-        return self._offset
+        return self.shell_to_aoloc
 
     def overlap(self) -> torch.Tensor:
         return self._int1e("ovlp")
@@ -189,7 +197,7 @@ class LibcintWrapper(object):
                         #         self, "rinv", i1, i2)
 
                         with self._all_atomz_are_zero_except(ia):
-                            atompos = self._allpos_params[ia]
+                            atompos = self.allpos_params[ia]
                             mat = mat + _Int1eFunction.apply(
                                 c1, a1, r1,
                                 c2, a2, r2,
@@ -199,14 +207,14 @@ class LibcintWrapper(object):
                     # # debugging code
                     # mat2 = _Int1eFunction.apply(
                     #     c1, a1, r1, c2, a2, r2,
-                    #     self._allpos_params,
+                    #     self.allpos_params,
                     #     self, shortname, i1, i2)
                     # assert torch.allclose(mat, mat2)
 
                 else:
                     mat = _Int1eFunction.apply(
                         c1, a1, r1, c2, a2, r2,
-                        self._allpos_params,
+                        self.allpos_params,
                         self, shortname, i1, i2)
 
                 # apply symmetry
@@ -261,17 +269,17 @@ class LibcintWrapper(object):
 
     def _get_params(self, sh1: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # getting the parameters of the sh1-th shell (i.e. coeffs, alphas, and pos)
-        ib1l = self._basis_offset[sh1]
-        ib1u = self._basis_offset[sh1 + 1]
-        c1 = self._allcoeffs_params[ib1l:ib1u]
-        a1 = self._allalphas_params[ib1l:ib1u]
-        r1 = self._allpos_params[self._r_idx[sh1]]
+        ib1l = self.shell_to_gauss[sh1]
+        ib1u = self.shell_to_gauss[sh1 + 1]
+        c1 = self.allcoeffs_params[ib1l:ib1u]
+        a1 = self.allalphas_params[ib1l:ib1u]
+        r1 = self.allpos_params[self.shell_to_atom[sh1]]
         return c1, a1, r1
 
     def _get_matrix_index(self, sh1: int) -> slice:
         # getting the lower and upper indices of the sh1-th shell in the contracted
         # integral matrix
-        return slice(self._offset[sh1], self._offset[sh1 + 1], None)
+        return slice(self.shell_to_aoloc[sh1], self.shell_to_aoloc[sh1 + 1], None)
 
     ################ one electron integral for a basis pair ################
     def calc_integral_1e(self, shortname: str, sh1: int, sh2: int) -> torch.Tensor:
