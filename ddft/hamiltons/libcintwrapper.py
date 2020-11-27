@@ -515,7 +515,7 @@ class _Int1eFunction(torch.autograd.Function):
                 c1: torch.Tensor, a1: torch.Tensor, r1: torch.Tensor,
                 c2: torch.Tensor, a2: torch.Tensor, r2: torch.Tensor,
                 ratom: torch.Tensor,
-                env: LibcintWrapper, opshortname: str, sh1: int, sh2: int) -> \
+                wrapper: LibcintWrapper, opshortname: str, sh1: int, sh2: int) -> \
                 torch.Tensor:  # type: ignore
         # c_: (ngauss,)
         # a_: (ngauss,)
@@ -523,16 +523,16 @@ class _Int1eFunction(torch.autograd.Function):
         # ratom: (NDIM,)
         # they are not used in forward, but present in the argument so that
         # the gradient can be propagated
-        out_tensor = env.calc_integral_1e_internal(opshortname, sh1, sh2)
+        out_tensor = wrapper.calc_integral_1e_internal(opshortname, sh1, sh2)
         ctx.save_for_backward(c1, a1, r1, c2, a2, r2, ratom)
-        ctx.other_info = (env, sh1, sh2, opshortname)
+        ctx.other_info = (wrapper, sh1, sh2, opshortname)
         return out_tensor  # (*outshape)
 
     @staticmethod
     def backward(ctx, grad_out: torch.Tensor):  # type: ignore
         # grad_out: (*outshape)
         c1, a1, r1, c2, a2, r2, ratom = ctx.saved_tensors
-        env, sh1, sh2, opshortname = ctx.other_info
+        wrapper, sh1, sh2, opshortname = ctx.other_info
         nuc_int = "nuc" in opshortname
 
         # TODO: to be completed (???)
@@ -543,8 +543,8 @@ class _Int1eFunction(torch.autograd.Function):
 
         grad_r1: Optional[torch.Tensor] = None
         if r1.requires_grad:
-            opsname = env.get_int1e_deriv_shortname(opshortname, "r1")
-            doutdr1 = _Int1eFunction.apply(*ctx.saved_tensors, env, opsname,
+            opsname = wrapper.get_int1e_deriv_shortname(opshortname, "r1")
+            doutdr1 = _Int1eFunction.apply(*ctx.saved_tensors, wrapper, opsname,
                                            sh1, sh2)  # (NDIM, *outshape)
             # negative because the integral calculates the nabla w.r.t. the
             # spatial coordinate, not the basis central position
@@ -552,8 +552,8 @@ class _Int1eFunction(torch.autograd.Function):
 
         grad_r2: Optional[torch.Tensor] = None
         if r2.requires_grad:
-            opsname = env.get_int1e_deriv_shortname(opshortname, "r2")
-            doutdr2 = _Int1eFunction.apply(*ctx.saved_tensors, env, opsname,
+            opsname = wrapper.get_int1e_deriv_shortname(opshortname, "r2")
+            doutdr2 = _Int1eFunction.apply(*ctx.saved_tensors, wrapper, opsname,
                                            sh1, sh2)
             grad_r2 = -(grad_out * doutdr2).reshape(NDIM, -1).sum(dim=-1)
 
@@ -571,23 +571,23 @@ class _Int2eFunction(torch.autograd.Function):
                 c2: torch.Tensor, a2: torch.Tensor, r2: torch.Tensor,
                 c3: torch.Tensor, a3: torch.Tensor, r3: torch.Tensor,
                 c4: torch.Tensor, a4: torch.Tensor, r4: torch.Tensor,
-                env: LibcintWrapper, opshortname: str,
+                wrapper: LibcintWrapper, opshortname: str,
                 sh1: int, sh2: int, sh3: int, sh4: int):
         # c_: (ngauss,)
         # a_: (ngauss,)
         # r_: (NDIM,)
         # they are not used in forward, but present in the argument so that
         # the gradient can be propagated
-        out_tensor = env.calc_integral_2e_internal(opshortname, sh1, sh2, sh3, sh4)
+        out_tensor = wrapper.calc_integral_2e_internal(opshortname, sh1, sh2, sh3, sh4)
         ctx.save_for_backward(c1, a1, r1, c2, a2, r2, c3, a3, r3, c4, a4, r4)
-        ctx.other_info = (env, sh1, sh2, sh3, sh4, opshortname)
+        ctx.other_info = (wrapper, sh1, sh2, sh3, sh4, opshortname)
         return out_tensor  # (*outshape)
 
     @staticmethod
     def backward(ctx, grad_out):
         # grad_out: (*outshape)
         c1, a1, r1, c2, a2, r2, c3, a3, r3, c4, a4, r4 = ctx.saved_tensors
-        env, sh1, sh2, sh3, sh4, opshortname = ctx.other_info
+        wrapper, sh1, sh2, sh3, sh4, opshortname = ctx.other_info
 
         # TODO: to be completed (???)
         grad_c1 = None
@@ -601,29 +601,29 @@ class _Int2eFunction(torch.autograd.Function):
 
         grad_r1 = None
         if r1.requires_grad:
-            opsname = env.get_int2e_deriv_shortname(opshortname, "r1")
-            doutdr1 = _Int2eFunction.apply(*ctx.saved_tensors, env, opsname,
+            opsname = wrapper.get_int2e_deriv_shortname(opshortname, "r1")
+            doutdr1 = _Int2eFunction.apply(*ctx.saved_tensors, wrapper, opsname,
                                            sh1, sh2, sh3, sh4)  # (*outshape, NDIM)
             grad_r1 = -(grad_out.unsqueeze(-1) * doutdr1).view(-1, NDIM).sum(dim=0)
 
         grad_r2 = None
         if r2.requires_grad:
-            opsname = env.get_int2e_deriv_shortname(opshortname, "r2")
-            doutdr2 = _Int2eFunction.apply(*ctx.saved_tensors, env, opsname,
+            opsname = wrapper.get_int2e_deriv_shortname(opshortname, "r2")
+            doutdr2 = _Int2eFunction.apply(*ctx.saved_tensors, wrapper, opsname,
                                            sh1, sh2, sh3, sh4)  # (*outshape, NDIM)
             grad_r2 = -(grad_out.unsqueeze(-1) * doutdr2).view(-1, NDIM).sum(dim=0)
 
         grad_r3 = None
         if r3.requires_grad:
-            opsname = env.get_int2e_deriv_shortname(opshortname, "r3")
-            doutdr3 = _Int2eFunction.apply(*ctx.saved_tensors, env, opsname,
+            opsname = wrapper.get_int2e_deriv_shortname(opshortname, "r3")
+            doutdr3 = _Int2eFunction.apply(*ctx.saved_tensors, wrapper, opsname,
                                            sh1, sh2, sh3, sh4)  # (*outshape, NDIM)
             grad_r3 = -(grad_out.unsqueeze(-1) * doutdr3).view(-1, NDIM).sum(dim=0)
 
         grad_r4 = None
         if r4.requires_grad:
-            opsname = env.get_int2e_deriv_shortname(opshortname, "r4")
-            doutdr4 = _Int2eFunction.apply(*ctx.saved_tensors, env, opsname,
+            opsname = wrapper.get_int2e_deriv_shortname(opshortname, "r4")
+            doutdr4 = _Int2eFunction.apply(*ctx.saved_tensors, wrapper, opsname,
                                            sh1, sh2, sh3, sh4)  # (*outshape, NDIM)
             grad_r4 = -(grad_out.unsqueeze(-1) * doutdr4).view(-1, NDIM).sum(dim=0)
 
@@ -704,15 +704,15 @@ if __name__ == "__main__":
         bases = loadbasis("1:%s" % basis, dtype=dtype, requires_grad=False)
         atombasis1 = AtomCGTOBasis(atomz=1, bases=bases, pos=pos1)
         atombasis2 = AtomCGTOBasis(atomz=1, bases=bases, pos=pos2)
-        env = LibcintWrapper([atombasis1, atombasis2], spherical=False)
+        wrapper = LibcintWrapper([atombasis1, atombasis2], spherical=False)
         if name == "overlap":
-            return env.overlap()
+            return wrapper.overlap()
         elif name == "kinetic":
-            return env.kinetic()
+            return wrapper.kinetic()
         elif name == "nuclattr":
-            return env.nuclattr()
+            return wrapper.nuclattr()
         elif name == "elrep":
-            return env.elrep()
+            return wrapper.elrep()
         else:
             raise RuntimeError()
 
@@ -720,13 +720,13 @@ if __name__ == "__main__":
         bases = loadbasis("1:%s" % basis, dtype=dtype, requires_grad=False)
         atombasis1 = AtomCGTOBasis(atomz=1, bases=bases, pos=pos1)
         atombasis2 = AtomCGTOBasis(atomz=1, bases=bases, pos=pos2)
-        env = LibcintWrapper([atombasis1, atombasis2], spherical=False)
+        wrapper = LibcintWrapper([atombasis1, atombasis2], spherical=False)
         if name == "":
-            return env.eval_gto(rgrid)
+            return wrapper.eval_gto(rgrid)
         elif name == "grad":
-            return env.eval_gradgto(rgrid)
+            return wrapper.eval_gradgto(rgrid)
         elif name == "laplace":
-            return env.eval_laplgto(rgrid)
+            return wrapper.eval_laplgto(rgrid)
         else:
             raise RuntimeError("Unknown name: %s" % name)
 
