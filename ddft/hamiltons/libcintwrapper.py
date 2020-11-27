@@ -9,11 +9,14 @@ from ddft.basissets.cgtobasis import CGTOBasis, AtomCGTOBasis
 
 NDIM = 3
 PTR_RINV_ORIG = 4  # from libcint/src/cint_const.h
+BLKSIZE = 128  # same as lib/gto/grid_ao_drv.c
 
 # load the libcint
 _curpath = os.path.dirname(os.path.abspath(__file__))
 _libcint_path = os.path.join(_curpath, "../../submodules/libcint/build/libcint.so")
-cint = ctypes.cdll.LoadLibrary(_libcint_path)
+_libcgto_path = os.path.join(_curpath, "../../lib/libcgto.so")
+CINT = ctypes.cdll.LoadLibrary(_libcint_path)
+CGTO = ctypes.cdll.LoadLibrary(_libcgto_path)
 
 # Optimizer class
 class CINTOpt(ctypes.Structure):
@@ -168,6 +171,21 @@ class LibcintWrapper(object):
     def elrep(self) -> torch.Tensor:
         return self._int2e()
 
+    def eval_gto(self, rgrid: torch.Tensor) -> torch.Tensor:
+        # rgrid: (ngrid, ndim)
+        # return: (nao, ngrid)
+        return self._evalgto("", rgrid)
+
+    def eval_gradgto(self, rgrid: torch.Tensor) -> torch.Tensor:
+        # rgrid: (ngrid, ndim)
+        # return: (ndim, nao, ngrid)
+        return self._evalgto("ip", rgrid)
+
+    def eval_laplgto(self, rgrid: torch.Tensor) -> torch.Tensor:
+        # rgrid: (ngrid, ndim)
+        # return: (nao, ngrid)
+        return self._evalgto("lapl", rgrid)
+
     ################ integrals to construct the operator ################
     def _int1e(self, shortname: str, nuc: bool = False) -> torch.Tensor:
         # one electron integral (overlap, kinetic, and nuclear attraction)
@@ -282,7 +300,7 @@ class LibcintWrapper(object):
         return slice(self.shell_to_aoloc[sh1], self.shell_to_aoloc[sh1 + 1], None)
 
     ################ one electron integral for a basis pair ################
-    def calc_integral_1e(self, shortname: str, sh1: int, sh2: int) -> torch.Tensor:
+    def calc_integral_1e_internal(self, shortname: str, sh1: int, sh2: int) -> torch.Tensor:
         # calculate the one-electron integral (type depends on the shortname)
         # for basis in shell sh1 & sh2 using libcint
 
@@ -297,7 +315,7 @@ class LibcintWrapper(object):
             sh1, sh2 = sh2, sh1
 
         opname = self._get_int1e_name(shortname)
-        operator = getattr(cint, opname)
+        operator = getattr(CINT, opname)
         outshape = self._get_int1e_outshape(shortname, sh1, sh2)
 
         c_shls = (ctypes.c_int * 2)(sh1, sh2)
@@ -355,7 +373,7 @@ class LibcintWrapper(object):
         return ([NDIM] * n_ip) + [self._nbasiscontr(sh2), self._nbasiscontr(sh1)]
 
     ################ two electrons integral for a basis pair ################
-    def calc_integral_2e(self, shortname: str,
+    def calc_integral_2e_internal(self, shortname: str,
                          sh1: int, sh2: int,
                          sh3: int, sh4: int) -> torch.Tensor:
         # calculate the one-electron integral (type depends on the shortname)
@@ -364,7 +382,7 @@ class LibcintWrapper(object):
         # NOTE: this function should only be called from this file only.
         # it does not propagate gradient.
         opname = self._get_int2e_name(shortname)
-        operator = getattr(cint, opname)
+        operator = getattr(CINT, opname)
         outshape = self._get_int2e_outshape(shortname, sh1, sh2, sh3, sh4)
 
         c_shls = (ctypes.c_int * 4)(sh1, sh2, sh3, sh4)
@@ -373,7 +391,7 @@ class LibcintWrapper(object):
 
         # set up the optimizer
         optname = opname + "_optimizer"
-        copt = getattr(cint, optname)
+        copt = getattr(CINT, optname)
         opt = CINTOpt()
         copt(ctypes.byref(opt),
              self.atm_ctypes, self.natm_ctypes,
@@ -407,14 +425,89 @@ class LibcintWrapper(object):
         return [self._nbasiscontr(sh4), self._nbasiscontr(sh3),
                 self._nbasiscontr(sh2), self._nbasiscontr(sh1)]
 
+    ################ evaluation of gto orbitals ################
+    def _evalgto(self, shortname: str, rgrid: torch.Tensor) -> torch.Tensor:
+        # expand ao_to_atom to have shape of (nao, ndim)
+        ao_to_atom = self.ao_to_atom.unsqueeze(-1).expand(-1, NDIM)
+
+        # rgrid: (ngrid, ndim)
+        return _EvalGTO.apply(
+            # tensors
+            self.allalphas_params,
+            self.allcoeffs_params,
+            self.allpos_params,
+            rgrid,
+
+            # nontensors or int tensors
+            ao_to_atom,
+            self,
+            shortname)
+
+    def _get_evalgto_opname(self, shortname: str) -> str:
+        sname = ("_" + shortname) if (shortname != "") else ""
+        suffix = "_sph" if self._spherical else "_cart"
+        return "GTOval%s%s" % (sname, suffix)
+
+    def _get_evalgto_outshape(self, shortname: str, nao: int, ngrid: int) -> List[int]:
+        # count "ip" only at the beginning
+        n_ip = len(re.findall(r"^(?:ip)*(?:ip)?", shortname)[0]) // 2
+        return ([NDIM] * n_ip) + [nao, ngrid]
+
+    def _get_evalgto_derivname(self, shortname: str, derivmode: str):
+        if derivmode == "r":
+            return "ip%s" % shortname
+        else:
+            raise RuntimeError("Unknown derivmode: %s" % derivmode)
+
+    def eval_gto_internal(self, shortname: str, rgrid: torch.Tensor) -> torch.Tensor:
+        # NOTE: this method do not propagate gradient and should only be used
+        # in this file only
+
+        # rgrid: (ngrid, ndim)
+        # returns: (*, nao, ngrid)
+
+        ngrid = rgrid.shape[0]
+        nshells = self.nshells_tot
+        nao = self.nao_tot
+        opname = self._get_evalgto_opname(shortname)
+        outshape = self._get_evalgto_outshape(shortname, nao, ngrid)
+
+        out = np.empty(outshape, dtype=np.float64)
+        non0tab = np.ones(((ngrid + BLKSIZE - 1) // BLKSIZE, nshells),
+                          dtype=np.int8)
+
+        # TODO: check if we need to transpose it first?
+        rgrid = rgrid.contiguous()
+        coords = np.asarray(rgrid, dtype=np.float64, order='F')
+        ao_loc = np.asarray(self.shell_to_aoloc, dtype=np.int32)
+
+        c_shls = (ctypes.c_int * 2)(0, nshells)
+        c_ngrid = ctypes.c_int(ngrid)
+
+        # evaluate the orbital
+        operator = getattr(CGTO, opname)
+        operator.restype = ctypes.c_double
+        operator(c_ngrid, c_shls,
+                 ao_loc.ctypes.data_as(ctypes.c_void_p),
+                 out.ctypes.data_as(ctypes.c_void_p),
+                 coords.ctypes.data_as(ctypes.c_void_p),
+                 non0tab.ctypes.data_as(ctypes.c_void_p),
+                 self.atm_ctypes, self.natm_ctypes,
+                 self.bas_ctypes, self.nbas_ctypes,
+                 self.env_ctypes)
+
+        out = torch.tensor(out, dtype=self.dtype, device=self.device)
+        return out
+
     ################ misc functions ################
     def _nbasiscontr(self, sh: int) -> int:
         if self._spherical:
-            op = cint.CINTcgto_spheric
+            op = CINT.CINTcgto_spheric
         else:
-            op = cint.CINTcgto_cart
+            op = CINT.CINTcgto_cart
         return op(ctypes.c_int(sh), self.bas_ctypes)
 
+############### autograd function ###############
 class _Int1eFunction(torch.autograd.Function):
     # wrapper class to provide the gradient of the one-e integrals
     @staticmethod
@@ -424,13 +517,13 @@ class _Int1eFunction(torch.autograd.Function):
                 ratom: torch.Tensor,
                 env: LibcintWrapper, opshortname: str, sh1: int, sh2: int) -> \
                 torch.Tensor:  # type: ignore
-        # c_: (nbasis,)
-        # a_: (nbasis,)
+        # c_: (ngauss,)
+        # a_: (ngauss,)
         # r_: (NDIM,)
         # ratom: (NDIM,)
         # they are not used in forward, but present in the argument so that
         # the gradient can be propagated
-        out_tensor = env.calc_integral_1e(opshortname, sh1, sh2)
+        out_tensor = env.calc_integral_1e_internal(opshortname, sh1, sh2)
         ctx.save_for_backward(c1, a1, r1, c2, a2, r2, ratom)
         ctx.other_info = (env, sh1, sh2, opshortname)
         return out_tensor  # (*outshape)
@@ -480,12 +573,12 @@ class _Int2eFunction(torch.autograd.Function):
                 c4: torch.Tensor, a4: torch.Tensor, r4: torch.Tensor,
                 env: LibcintWrapper, opshortname: str,
                 sh1: int, sh2: int, sh3: int, sh4: int):
-        # c_: (nbasis,)
-        # a_: (nbasis,)
+        # c_: (ngauss,)
+        # a_: (ngauss,)
         # r_: (NDIM,)
         # they are not used in forward, but present in the argument so that
         # the gradient can be propagated
-        out_tensor = env.calc_integral_2e(opshortname, sh1, sh2, sh3, sh4)
+        out_tensor = env.calc_integral_2e_internal(opshortname, sh1, sh2, sh3, sh4)
         ctx.save_for_backward(c1, a1, r1, c2, a2, r2, c3, a3, r3, c4, a4, r4)
         ctx.other_info = (env, sh1, sh2, sh3, sh4, opshortname)
         return out_tensor  # (*outshape)
@@ -538,14 +631,77 @@ class _Int2eFunction(torch.autograd.Function):
                grad_c3, grad_a3, grad_r3, grad_c4, grad_a4, grad_r4, \
                None, None, None, None, None, None
 
+class _EvalGTO(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx,
+                # tensors not used in calculating the forward, but required
+                # for the backward propagation
+                alphas: torch.Tensor,  # (ngauss_tot)
+                coeffs: torch.Tensor,  # (ngauss_tot)
+                pos: torch.Tensor,  # (natom, ndim)
+
+                # tensors used in forward
+                rgrid: torch.Tensor,  # (ngrid, ndim)
+
+                # other non-tensor info
+                ao_to_atom: torch.Tensor,  # int tensor (nao, ndim)
+                wrapper: LibcintWrapper,
+                shortname: str) -> torch.Tensor:
+
+        res = wrapper.eval_gto_internal(shortname, rgrid)  # (*, nao, ngrid)
+        ctx.save_for_backward(alphas, coeffs, pos, rgrid)
+        ctx.other_info = (ao_to_atom, wrapper, shortname)
+        return res
+
+    @staticmethod
+    def backward(ctx, grad_res):
+        # grad_res: (*, nao, ngrid)
+        ao_to_atom, wrapper, shortname = ctx.other_info
+        alphas, coeffs, pos, rgrid = ctx.saved_tensors
+
+        # TODO: implement the gradient w.r.t. alphas and coeffs
+        grad_alphas = None
+        grad_coeffs = None
+
+        # calculate the gradient w.r.t. basis' pos and rgrid
+        grad_pos = None
+        grad_rgrid = None
+        if rgrid.requires_grad or pos.requires_grad:
+            opsname = wrapper._get_evalgto_derivname(shortname, "r")
+            dresdr = _EvalGTO.apply(*ctx.saved_tensors,
+                                    ao_to_atom, wrapper, opsname)  # (ndim, *, nao, ngrid)
+            grad_r = dresdr * grad_res  # (ndim, *, nao, ngrid)
+
+            if rgrid.requires_grad:
+                grad_rgrid = grad_r.reshape(dresdr.shape[0], -1, dresdr.shape[-1])
+                grad_rgrid = grad_rgrid.sum(dim=1).transpose(-2, -1)  # (ngrid, ndim)
+
+            if pos.requires_grad:
+                grad_rao = torch.movedim(grad_r, -2, 0)  # (nao, ndim, *, ngrid)
+                grad_rao = -grad_rao.reshape(*grad_rao.shape[:2], -1).sum(dim=-1)  # (nao, ndim)
+                grad_pos = torch.zeros_like(pos)  # (natom, ndim)
+                grad_pos.scatter_add_(dim=0, index=ao_to_atom, src=grad_rao)
+
+        return grad_alphas, grad_coeffs, grad_pos, grad_rgrid, \
+               None, None, None, None, None
+
 if __name__ == "__main__":
     from ddft.basissets.cgtobasis import loadbasis
     dtype = torch.double
     pos1 = torch.tensor([0.0, 0.0,  0.8], dtype=dtype, requires_grad=True)
     pos2 = torch.tensor([0.0, 0.0, -0.8], dtype=dtype, requires_grad=True)
 
+    # set the grid
+    gradcheck = True
+    n = 3 if gradcheck else 1000
+    z = torch.linspace(-5, 5, n, dtype=dtype)
+    zeros = torch.zeros(n, dtype=dtype)
+    rgrid = torch.cat((zeros[None, :], zeros[None, :], z[None, :]), dim=0).T.contiguous().to(dtype)
+
+    basis = "3-21G"
+
     def get_int1e(pos1, pos2, name):
-        bases = loadbasis("1:3-21G", dtype=dtype, requires_grad=False)
+        bases = loadbasis("1:%s" % basis, dtype=dtype, requires_grad=False)
         atombasis1 = AtomCGTOBasis(atomz=1, bases=bases, pos=pos1)
         atombasis2 = AtomCGTOBasis(atomz=1, bases=bases, pos=pos2)
         env = LibcintWrapper([atombasis1, atombasis2], spherical=False)
@@ -560,12 +716,35 @@ if __name__ == "__main__":
         else:
             raise RuntimeError()
 
+    def evalgto(pos1, pos2, rgrid, name):
+        bases = loadbasis("1:%s" % basis, dtype=dtype, requires_grad=False)
+        atombasis1 = AtomCGTOBasis(atomz=1, bases=bases, pos=pos1)
+        atombasis2 = AtomCGTOBasis(atomz=1, bases=bases, pos=pos2)
+        env = LibcintWrapper([atombasis1, atombasis2], spherical=False)
+        if name == "":
+            return env.eval_gto(rgrid)
+        elif name == "grad":
+            return env.eval_gradgto(rgrid)
+        elif name == "laplace":
+            return env.eval_laplgto(rgrid)
+        else:
+            raise RuntimeError("Unknown name: %s" % name)
+
+    # # integrals gradcheck
     # torch.autograd.gradcheck(get_int1e, (pos1, pos2, "overlap"))
     # torch.autograd.gradcheck(get_int1e, (pos1, pos2, "kinetic"))
     # torch.autograd.gradgradcheck(get_int1e, (pos1, pos2, "overlap"))
     # torch.autograd.gradgradcheck(get_int1e, (pos1, pos2, "kinetic"))
 
-    a = get_int1e(pos1, pos2, "overlap")
-    print(a)
+    # # eval gto gradcheck
+    # torch.autograd.gradcheck(evalgto, (pos1, pos2, rgrid, ""))
+    # torch.autograd.gradgradcheck(evalgto, (pos1, pos2, rgrid, ""))
+    # torch.autograd.gradcheck(evalgto, (pos1, pos2, rgrid, "grad"))
+    # torch.autograd.gradgradcheck(evalgto, (pos1, pos2, rgrid, "grad"))
+    # torch.autograd.gradcheck(evalgto, (pos1, pos2, rgrid, "laplace"))
+    # torch.autograd.gradgradcheck(evalgto, (pos1, pos2, rgrid, "laplace"))
+
+    # a = get_int1e(pos1, pos2, "overlap")
+    # print(a)
     # TODO: gradient for nuclattr is wrong, so correct it!
     # torch.autograd.gradcheck(get_int1e, (pos1, pos2, "nuclattr"))

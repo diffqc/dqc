@@ -6,6 +6,9 @@
 (gen-eval "auto_eval1.c"
   '("GTOval_ipip"       (nabla nabla))
   '("GTOval_ipipip"     (nabla nabla nabla))
+  '("GTOval_lapl"       (nabla dot nabla))
+  '("GTOval_iplapl"     (nabla nabla dot nabla))
+  '("GTOval_ipiplapl"   (nabla nabla nabla dot nabla))
   '("GTOval_ig"         (#C(0 1) g))
   '("GTOval_ipig"       (#C(0 1) nabla g))
   '("GTOval_sp"         (sigma dot p))
