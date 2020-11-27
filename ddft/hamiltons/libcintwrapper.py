@@ -103,7 +103,6 @@ class LibcintWrapper(object):
             assert basis.alphas.shape == basis.coeffs.shape and basis.alphas.ndim == 1,\
                    "Please report this bug in Github"
 
-            # TODO: perform coefficient normalization!
             normcoeff = self._normalize_basis(basis.alphas, basis.coeffs, basis.angmom)
 
             ngauss = len(basis.alphas)

@@ -1,9 +1,11 @@
-#!/usr/bin/env clisp 
+#!/usr/bin/env clisp
 ;;;; Copyright (C) 2014-2018  Qiming Sun <osirpt.sun@gmail.com>
 
 (load "gen-code.cl")
 
 (gen-eval "auto_eval1.c"
+  '("GTOval_ipip"       (nabla nabla))
+  '("GTOval_ipipip"     (nabla nabla nabla))
   '("GTOval_ig"         (#C(0 1) g))
   '("GTOval_ipig"       (#C(0 1) nabla g))
   '("GTOval_sp"         (sigma dot p))
@@ -11,4 +13,3 @@
   '("GTOval_iprc"       (nabla rc))
   '("GTOval_ipr"        (nabla r))
 )
-
