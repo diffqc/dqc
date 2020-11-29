@@ -1,5 +1,5 @@
 import torch
-from dqc.xc.factory import get_libxc
+from dqc.api.getxc import get_libxc
 from dqc.utils.datastruct import ValGrad
 
 def test_libxc_lda_gradcheck():

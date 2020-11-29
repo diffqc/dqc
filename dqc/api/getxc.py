@@ -2,6 +2,8 @@ import pylibxc
 from dqc.xc.base_xc import BaseXC
 from dqc.xc.libxc import LibXCLDA, LibXCGGA
 
+__all__ = ["get_libxc", "get_xc"]
+
 xlist = {
     "lda": "lda_x",
     "pbe": "gga_x_pbe",

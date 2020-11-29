@@ -1,7 +1,17 @@
 import torch
-from typing import NamedTuple, Optional, Union
+from typing import NamedTuple, Optional, Union, List
 
-__all__ = ["ValGrad"]
+__all__ = ["CGTOBasis", "AtomCGTOBasis", "ValGrad"]
+
+class CGTOBasis(NamedTuple):
+    angmom: int
+    alphas: torch.Tensor  # (nbasis,)
+    coeffs: torch.Tensor  # (nbasis,)
+
+class AtomCGTOBasis(NamedTuple):
+    atomz: int
+    bases: List[CGTOBasis]
+    pos: torch.Tensor  # (ndim,)
 
 class ValGrad(NamedTuple):
     value: torch.Tensor  # torch.Tensor of the value in the grid
