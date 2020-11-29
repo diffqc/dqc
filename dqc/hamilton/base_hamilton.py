@@ -48,7 +48,7 @@ class BaseHamilton(xt.EditableModule):
 
     ############### grid-related ###############
     @abstractmethod
-    def setup_grid(self, grid: BaseGrid, gradlevel: int = 0) -> None:
+    def setup_grid(self, grid: BaseGrid, xcfamily: int = 0) -> None:
         """
         Setup the basis (with its grad) in the spatial grid.
         """
@@ -63,6 +63,7 @@ class BaseHamilton(xt.EditableModule):
             \mathbf{V}_{ij} = \int b_i(\mathbf{r}) V(\mathbf{r}) b_j(\mathbf{r})\ d\mathbf{r}
         """
         # vext: (*BR, ngrid)
+        # returns: (*BRH, nao, nao)
         pass
 
     @abstractmethod
@@ -96,6 +97,8 @@ class BaseHamilton(xt.EditableModule):
         """
         # dm: (*BD, nao, nao)
         # return: (*BDH, nao, nao)
+        # TODO: check if what we need for Meta-GGA involving kinetics and for
+        # exact-exchange
         pass
 
     @abstractmethod

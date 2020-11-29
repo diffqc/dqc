@@ -1,5 +1,6 @@
-from abc import abstractmethod, abstractproperty
+from abc import abstractmethod
 from typing import List
+import torch
 import xitorch as xt
 
 class BaseGrid(xt.EditableModule):
@@ -8,7 +9,7 @@ class BaseGrid(xt.EditableModule):
     dimensions.
     """
     @abstractmethod
-    def get_dvolume(self):
+    def get_dvolume(self) -> torch.Tensor:
         """
         Obtain the torch.tensor containing the dV elements for the integration.
 
@@ -19,8 +20,8 @@ class BaseGrid(xt.EditableModule):
         """
         pass
 
-    @abstractproperty
-    def rgrid(self):
+    @abstractmethod
+    def get_rgrid(self) -> torch.Tensor:
         """
         Returns the grid points position in the Cartesian coordinate.
 
