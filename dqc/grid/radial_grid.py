@@ -18,10 +18,13 @@ class RadialGrid(BaseGrid):
     grid_transform is to transform the integration from the coordinate of
     grid_integrator to the actual coordinate.
     """
+
     def __init__(self, ngrid: int, grid_integrator: str = "chebyshev",
                  grid_transform: str = "logm3",
                  dtype: torch.dtype = torch.float64,
                  device: torch.device = torch.device('cpu')):
+        self._dtype = dtype
+        self._device = device
         grid_transform_obj  = get_grid_transform(grid_transform)
 
         # get the location and weights of the integration in its original
@@ -42,6 +45,18 @@ class RadialGrid(BaseGrid):
         vol_elmt = 4 * np.pi * r * r  # (ngrid,)
         dr = drdx * w
         self.dvolume = vol_elmt * dr  # (ngrid,)
+
+    @property
+    def coord_type(self):
+        return "radial"
+
+    @property
+    def dtype(self):
+        return self._dtype
+
+    @property
+    def device(self):
+        return self._device
 
     def get_dvolume(self) -> torch.Tensor:
         return self.dvolume
