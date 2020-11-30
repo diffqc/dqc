@@ -20,9 +20,9 @@ class CalcLDALibXCUnpol(torch.autograd.Function):
         # The result is a tensor with shape (ninps)
 
         inp = {
-            "rho": rho,
+            "rho": rho.detach().numpy(),
         }
-        res = _get_libxc_res(inp, deriv, libxcfcn, family=1)[0]
+        res = _get_libxc_res(inp, deriv, libxcfcn, family=1, polarized=False)[0]
 
         ctx.save_for_backward(rho, res)
         ctx.deriv = deriv
@@ -48,9 +48,9 @@ class CalcLDALibXCPol(torch.autograd.Function):
         # spin-down and some of its combination.
 
         inp = {
-            "rho": (rho_u, rho_d),
+            "rho": _pack_input(rho_u, rho_d),
         }
-        res = _get_libxc_res(inp, deriv, libxcfcn, family=1)[0]
+        res = _get_libxc_res(inp, deriv, libxcfcn, family=1, polarized=True)[0]
 
         ctx.save_for_backward(rho_u, rho_d, res)
         ctx.deriv = deriv
@@ -84,7 +84,7 @@ class CalcGGALibXCUnpol(torch.autograd.Function):
             "sigma": sigma,
         }
         # for gga, res is a tuple
-        res = _get_libxc_res(inp, deriv, libxcfcn, family=2)
+        res = _get_libxc_res(inp, deriv, libxcfcn, family=2, polarized=False)
 
         ctx.save_for_backward(rho, sigma, *res)
         ctx.deriv = deriv
@@ -141,10 +141,10 @@ class CalcGGALibXCPol(torch.autograd.Function):
         # spin-down combinations, e.g. nderiv == 3 for vsigma (see libxc manual)
 
         inp = {
-            "rho": (rho_u, rho_d),
-            "sigma": (sigma_uu, sigma_ud, sigma_dd),
+            "rho": _pack_input(rho_u, rho_d),
+            "sigma": _pack_input(sigma_uu, sigma_ud, sigma_dd),
         }
-        res = _get_libxc_res(inp, deriv, libxcfcn, family=2)
+        res = _get_libxc_res(inp, deriv, libxcfcn, family=2, polarized=True)
 
         ctx.save_for_backward(rho_u, rho_d, sigma_uu, sigma_ud, sigma_dd, *res)
         ctx.deriv = deriv
@@ -216,7 +216,7 @@ class CalcGGALibXCPol(torch.autograd.Function):
 def _get_libxc_res(inp: Mapping[str, Union[torch.Tensor, Tuple[torch.Tensor, ...]]],
                    deriv: int,
                    libxcfcn: pylibxc.functional.LibXCFunctional,
-                   family: int) -> Tuple[torch.Tensor, ...]:
+                   family: int, polarized: bool) -> Tuple[torch.Tensor, ...]:
     # deriv == 0 for energy per unit volume
     # deriv == 1 for vrho (1st derivative of energy/volume w.r.t. density)
     # deriv == 2 for v2rho2
@@ -243,12 +243,21 @@ def _get_libxc_res(inp: Mapping[str, Union[torch.Tensor, Tuple[torch.Tensor, ...
     # only.
     if deriv == 0:
         rho = inp["rho"]
-        if isinstance(rho, tuple):
-            rho = rho[0] + rho[1]
+        if polarized:
+            rho = sum(_unpack_input(rho))  # rho[:, 0] + rho[:, 1]
         res0 = res[0] * rho
         res = (res0, *res[1:])
 
     return res
+
+def _pack_input(*vals):
+    # arrange the values in a numpy array with fortran memory order
+    vals_np = np.asarray([val.detach().numpy() for val in vals])
+    return np.ascontiguousarray(vals_np.T)
+
+def _unpack_input(inp):
+    # unpack from libxc input format into tuple of inputs
+    return (a for a in inp.T)
 
 def _get_dos(deriv: int) -> Tuple[bool, ...]:
     do_exc = deriv == 0

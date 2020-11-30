@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 from dqc.api.getxc import get_libxc
 from dqc.utils.datastruct import ValGrad
 
@@ -85,3 +86,31 @@ def test_libxc_gga_gradcheck():
     torch.autograd.gradcheck(get_vxc_pol, param_pol)
     torch.autograd.gradgradcheck(get_edens_pol, param_pol)
     torch.autograd.gradgradcheck(get_vxc_pol, param_pol)
+
+def test_libxc_lda_x():
+    # check if the value is consistent
+    xcunpol = get_libxc("lda_x", False)
+    xcpol   = get_libxc("lda_x", True)
+    assert xcunpol.family == 1
+    assert xcpol.family == 1
+
+    torch.manual_seed(123)
+    n = 100
+    rho_u = torch.rand((n,), dtype=torch.float64).requires_grad_()
+    rho_d = rho_u  # torch.rand((n,), dtype=torch.float64).requires_grad_()
+    rho_tot = rho_u + rho_d
+
+    densinfo_u = ValGrad(value=rho_u)
+    densinfo_d = ValGrad(value=rho_d)
+    densinfo = (densinfo_u, densinfo_d)
+    densinfo_tot = ValGrad(value=rho_tot)
+
+    edens_unpol = xcunpol.get_edensityxc(densinfo_tot)
+    edens_unpol_true = -0.75 * (3 / np.pi) ** (1. / 3) * rho_tot ** (4. / 3)
+    assert torch.allclose(edens_unpol, edens_unpol_true)
+
+    edens_pol = xcpol.get_edensityxc(densinfo)
+    edens_pol_true = 0.5 * (-0.75) * (3 / np.pi) ** (1. / 3) * (
+        (2 * rho_u) ** (4. / 3) + (2 * rho_d) ** (4. / 3)
+    )
+    assert torch.allclose(edens_pol, edens_pol_true)
