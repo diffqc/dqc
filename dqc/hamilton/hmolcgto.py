@@ -61,6 +61,7 @@ class HMolCGTO(BaseHamilton):
         # save the grid
         self.grid = grid
         self.rgrid = grid.get_rgrid()
+        assert grid.coord_type == "cart"
 
         # setup the basis as a spatial function
         self.is_ao_set = True
