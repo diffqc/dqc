@@ -50,12 +50,12 @@ class HamiltonCGTO(BaseHamilton):
         # convert the atomic orbital to the density matrix
         # in CGTO, it is U.W.U^T
 
-        # orb: (*BO, norb, nao)
+        # orb: (*BO, nao, norb)
         # orb_weight: (*BW, norb)
         # return: (*BOW, nao, nao)
 
-        orb_w = orb * orb_weight.unsqueeze(-1)  # (*BOW, norb, nao)
-        return torch.matmul(orb_w.transpose(-2, -1), orb)  # (*BOW, nao, nao)
+        orb_w = orb * orb_weight.unsqueeze(-2)  # (*BOW, nao, norb)
+        return torch.matmul(orb_w, orb_w.transpose(-2, -1))  # (*BOW, nao, nao)
 
     ############### grid-related ###############
     def setup_grid(self, grid: BaseGrid, xcfamily: int = 0) -> None:

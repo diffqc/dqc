@@ -101,7 +101,7 @@ class Mol(BaseSystem):
         r12_pair = self._atompos.unsqueeze(-3) - self._atompos.unsqueeze(-2)  # (natoms, natoms, ndim)
         # add the diagonal with a small eps to safeguard from nan
         r12_pair = r12_pair + \
-            torch.eye(r12_pair.shape[-2], dtype=self.dtype, device=self.device).unsqueeze(-1) * util_eps
+            torch.eye(r12_pair.shape[-2], dtype=self._dtype, device=self._device).unsqueeze(-1) * util_eps
         r12 = r12_pair.norm(dim=-1)  # (natoms, natoms)
         z12 = self._atomzs.unsqueeze(-2) * self._atomzs.unsqueeze(-1)  # (natoms, natoms)
         infdiag = torch.eye(r12.shape[0], dtype=r12.dtype, device=r12.device)

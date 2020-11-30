@@ -1,4 +1,4 @@
-from typing import Optional, Mapping, Any, Tuple
+from typing import Optional, Mapping, Any, Tuple, List
 import torch
 import xitorch as xt
 import xitorch.linalg
@@ -93,27 +93,30 @@ class RKS(BaseQCCalc):
     def energy(self) -> torch.Tensor:
         # calculate the total energy from the diagonalization
         fock = self.__dm2fock(self._dm)
-        # eivals: (..., norb), eivecs: (..., norb, nao)
+        # eivals: (..., norb), eivecs: (..., nao, norb)
         eivals, eivecs = self.__diagonalize_fock(fock)
-        eivals_tot = torch.sum(eivals * self.orb_weight, dim=-1)
+        e_eivals = torch.sum(eivals * self.orb_weight, dim=-1)
 
         # get the energy from xc
-        exc = self.hamilton.get_exc(self.xc, self._dm)
+        e_exc = self.hamilton.get_exc(self.xc, self._dm)
 
         # get the energy from xc potential
         vxc = self.hamilton.get_vxc(self.xc, self._dm)
-        e_vxc = torch.einsum("...rc,r,...rc->...", vxc.mm(eivecs), self.orb_weight, eivecs)
+        e_vxc = torch.einsum("...rc,c,...rc->...", vxc.mm(eivecs), self.orb_weight, eivecs)
 
         # get the energy from electron repulsion
         elrep = self.hamilton.get_elrep(self._dm)
-        e_elrep = 0.5 * torch.einsum("...rc,r,...rc->...", elrep.mm(eivecs), self.orb_weight, eivecs)
+        e_elrep = 0.5 * torch.einsum("...rc,c,...rc->...", elrep.mm(eivecs), self.orb_weight, eivecs)
 
         # compute the total energy
-        e_tot = eivals_tot + (exc - vxc) - e_elrep + self.system.get_nuclei_energy()
+        e_tot = e_eivals + (e_exc - e_vxc) - e_elrep + self.system.get_nuclei_energy()
         return e_tot
 
     def aodm(self) -> torch.Tensor:
         return self._dm
+
+    def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
+        return []  # TODO: to complete
 
     def __dm2fock(self, dm: torch.Tensor) -> xt.LinearOperator:
         # construct the fock matrix from the density matrix

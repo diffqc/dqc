@@ -48,7 +48,7 @@ class BaseHamilton(xt.EditableModule):
         """
         Convert the atomic orbital to the density matrix.
         """
-        # orb: (*BO, norb, nao)
+        # orb: (*BO, nao, norb)
         # orb_weight: (*BW, norb)
         # return: (*BOWH, nao, nao)
         pass
