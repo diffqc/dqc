@@ -1,11 +1,12 @@
+from typing import Optional, Mapping, Any, Tuple
 import torch
+import xitorch as xt
 import xitorch.linalg
 import xitorch.optimize
 from dqc.system.base_system import BaseSystem
 from dqc.qccalc.base_qccalc import BaseQCCalc
 from dqc.xc.base_xc import BaseXC
 from dqc.api.getxc import get_xc
-from dqc.api
 
 class RKS(BaseQCCalc):
     """
@@ -21,10 +22,11 @@ class RKS(BaseQCCalc):
         The external potential applied to the system. It must have the shape of
         ``(*BV, system.get_grid().shape[-2])``
     """
+
     def __init__(self, system: BaseSystem, xc: str,
                  vext: Optional[torch.Tensor] = None):
         # get the xc object
-        self.xc: BaseXC = get_xc(xc)
+        self.xc: BaseXC = get_xc(xc, polarized=False)
         self.system = system
 
         # build and setup basis and grid
@@ -50,7 +52,7 @@ class RKS(BaseQCCalc):
         self.device = self.knvext_linop.device
         self.has_run = True
 
-    def run(self, dm0: Optional[torch.Tensor] = None,
+    def run(self, dm0: Optional[torch.Tensor] = None,  # type: ignore
             eigen_options: Optional[Mapping[str, Any]] = None,
             fwd_options: Optional[Mapping[str, Any]] = None,
             bck_options: Optional[Mapping[str, Any]] = None) -> BaseQCCalc:
@@ -78,9 +80,9 @@ class RKS(BaseQCCalc):
 
         # do the self-consistent iteration
         scp = xitorch.optimize.equilibrium(
-            fcn = self.__scp2scp,
-            y0 = scp0,
-            bck_options = {**bck_options},
+            fcn=self.__scp2scp,
+            y0=scp0,
+            bck_options={**bck_options},
             **fwd_options)
 
         # post-process parameters
@@ -120,7 +122,7 @@ class RKS(BaseQCCalc):
 
     def __fock2dm(self, fock: xt.LinearOperator) -> torch.Tensor:
         # diagonalize the fock matrix and obtain the density matrix
-        eigvals, eigvecs = self.__diagonalize_fock()
+        eigvals, eigvecs = self.__diagonalize_fock(fock)
         dm = self.hamilton.ao_orb2dm(eigvecs, self.orb_weight)
         return dm
 
@@ -131,9 +133,9 @@ class RKS(BaseQCCalc):
 
     def __diagonalize_fock(self, fock: xt.LinearOperator) -> Tuple[torch.Tensor, torch.Tensor]:
         return xitorch.linalg.lsymeig(
-            A = fock,
-            neig = self.norb,
-            M = self.overlap_linop,
+            A=fock,
+            neig=self.norb,
+            M=self.overlap_linop,
             **self.eigen_options)
 
     ######### self-consistent-param related #########
@@ -146,7 +148,7 @@ class RKS(BaseQCCalc):
 
     def __scp2dm(self, scp: torch.Tensor) -> torch.Tensor:
         fock = xt.LinearOperator.m(scp, is_hermitian=True)
-        return self.__fock2dm(dm)
+        return self.__fock2dm(fock)
 
     def __scp2scp(self, scp: torch.Tensor) -> torch.Tensor:
         dm = self.__scp2dm(scp)

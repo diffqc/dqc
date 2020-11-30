@@ -1,6 +1,6 @@
 import torch
 import pytest
-from dqc.system.Mol import Mol
+from dqc.system.mol import Mol
 
 # these tests to make sure the systems parse the inputs correctly
 

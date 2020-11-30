@@ -9,6 +9,7 @@ class BeckeGrid(BaseGrid):
     Using Becke's scheme to construct the 3D grid consists of multiple 3D grids
     centered on each atom
     """
+
     def __init__(self, atomgrid: List[LebedevGrid], atompos: torch.Tensor) -> None:
         # atomgrid: list with length (natoms)
         # atompos: (natoms, ndim)

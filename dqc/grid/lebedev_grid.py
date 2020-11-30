@@ -9,6 +9,7 @@ class LebedevGrid(BaseGrid):
     """
     Using Lebedev predefined angular points + radial grid to form 3D grid.
     """
+
     def __init__(self, radgrid: RadialGrid, prec: int) -> None:
         self._dtype = radgrid.dtype
         self._device = radgrid.device

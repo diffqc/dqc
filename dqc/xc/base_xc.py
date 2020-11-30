@@ -60,6 +60,11 @@ class AddBaseXC(BaseXC):
     def __init__(self, a: BaseXC, b: BaseXC) -> None:
         self.a = a
         self.b = b
+        self._family = max(a.family, b.family)
+
+    @property
+    def family(self):
+        return self._family
 
     @overload
     def get_vxc(self, densinfo: ValGrad) -> ValGrad:
@@ -73,10 +78,10 @@ class AddBaseXC(BaseXC):
         avxc = self.a.get_vxc(densinfo)
         bvxc = self.b.get_vxc(densinfo)
 
-        if isinstance(densinfo, tuple):
-            return (avxc[0] + bvxc[0], avxc[1] + bvxc[1])
-        else:
+        if isinstance(densinfo, ValGrad):
             return avxc + bvxc
+        else:
+            return (avxc[0] + bvxc[0], avxc[1] + bvxc[1])
 
     def get_edensityxc(self, densinfo: Union[ValGrad, Tuple[ValGrad, ValGrad]]) -> \
             torch.Tensor:
