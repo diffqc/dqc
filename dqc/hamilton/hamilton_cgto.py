@@ -7,7 +7,7 @@ from dqc.utils.datastruct import AtomCGTOBasis, ValGrad
 from dqc.grid.base_grid import BaseGrid
 from dqc.xc.base_xc import BaseXC
 
-class HMolCGTO(BaseHamilton):
+class HamiltonCGTO(BaseHamilton):
     def __init__(self, atombases: List[AtomCGTOBasis], spherical: bool = True) -> None:
         self.atombases = atombases
         self.libcint_wrapper = LibcintWrapper(atombases, spherical)
