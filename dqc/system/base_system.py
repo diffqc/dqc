@@ -26,6 +26,13 @@ class BaseSystem(xt.EditableModule):
         pass
 
     @abstractmethod
+    def get_nuclei_energy(self) -> torch.Tensor:
+        """
+        Returns the nuclei-nuclei repulsion energy.
+        """
+        pass
+
+    @abstractmethod
     def setup_grid(self) -> None:
         """
         Construct the integration grid for the system

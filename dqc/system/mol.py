@@ -10,6 +10,7 @@ from dqc.grid.lebedev_grid import LebedevGrid
 from dqc.grid.becke_grid import BeckeGrid
 from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis
 from dqc.utils.periodictable import get_atomz
+from dqc.utils.safeops import eps as util_eps
 from dqc.api.loadbasis import loadbasis
 
 AtomZType   = Union[List[str], List[int], torch.Tensor]
@@ -73,6 +74,7 @@ class Mol(BaseSystem):
                      for (atz, bas, atpos) in zip(atomzs, allbases, atompos)]
         self._hamilton = HamiltonCGTO(atombases)
         self._atompos = atompos  # (natoms, ndim)
+        self._atomzs = atomzs  # (natoms,) int-type
 
         # get the orbital weights
         nelecs: int = int(torch.sum(atomzs).item()) - charge
@@ -92,6 +94,22 @@ class Mol(BaseSystem):
 
     def get_orbweight(self) -> torch.Tensor:
         return self._orb_weights
+
+    def get_nuclei_energy(self) -> torch.Tensor:
+        # atomzs: (natoms,)
+        # atompos: (natoms, ndim)
+        r12_pair = self._atompos.unsqueeze(-3) - self._atompos.unsqueeze(-2) # (natoms, natoms, ndim)
+        # add the diagonal with a small eps to safeguard from nan
+        r12_pair = r12_pair + \
+            torch.eye(r12_pair.shape[-2], dtype=self.dtype, device=self.device).unsqueeze(-1) * util_eps
+        r12 = r12_pair.norm(dim=-1) # (natoms, natoms)
+        z12 = self._atomzs.unsqueeze(-2) * self._atomzs.unsqueeze(-1) # (natoms, natoms)
+        infdiag = torch.eye(r12.shape[0], dtype=r12.dtype, device=r12.device)
+        idiag = infdiag.diagonal()
+        idiag[:] = float("inf")
+        r12 = r12 + infdiag
+        q_by_r = z12 / r12
+        return q_by_r.sum() * 0.5
 
     def setup_grid(self) -> None:
         grid_inp = self._grid_inp
