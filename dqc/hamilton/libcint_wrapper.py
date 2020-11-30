@@ -248,19 +248,22 @@ class LibcintWrapper(object):
         for i1 in range(self.nshells_tot):
             c1, a1, r1 = self._get_params(i1)
             slice1 = self._get_matrix_index(i1)
-            for i2 in range(self.nshells_tot):
+            for i2 in range(i1, self.nshells_tot):
                 c2, a2, r2 = self._get_params(i2)
                 slice2 = self._get_matrix_index(i2)
                 for i3 in range(self.nshells_tot):
                     c3, a3, r3 = self._get_params(i3)
                     slice3 = self._get_matrix_index(i3)
-                    for i4 in range(self.nshells_tot):
+                    for i4 in range(i3, self.nshells_tot):
                         c4, a4, r4 = self._get_params(i4)
                         slice4 = self._get_matrix_index(i4)
                         mat = _Int2eFunction.apply(c1, a1, r1, c2, a2, r2,
                                                    c3, a3, r3, c4, a4, r4,
                                                    self, "", i1, i2, i3, i4)
                         res[slice1, slice2, slice3, slice4] = mat
+                        res[slice2, slice1, slice3, slice4] = mat.transpose(0, 1)
+                        res[slice1, slice2, slice4, slice3] = mat.transpose(-2, -1)
+                        res[slice2, slice1, slice4, slice3] = mat.transpose(-2, -1).transpose(0, 1)
         return res
 
     @contextmanager
