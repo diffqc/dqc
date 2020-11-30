@@ -11,6 +11,13 @@ class BaseHamilton(xt.EditableModule):
     components.
     """
     @abstractmethod
+    def build(self) -> None:
+        """
+        Construct the elements needed for the Hamiltonian.
+        """
+        pass
+
+    @abstractmethod
     def get_kinnucl(self) -> xt.LinearOperator:
         """
         Returns the LinearOperator of the one-electron operator (i.e. kinetic

@@ -14,6 +14,12 @@ class HamiltonCGTO(BaseHamilton):
         self.dtype = self.libcint_wrapper.dtype
         self.device = self.libcint_wrapper.device
 
+        self.is_grid_set = False
+        self.is_ao_set = False
+        self.is_grad_ao_set = False
+        self.is_lapl_ao_set = False
+
+    def build(self):
         # get the matrices (all (nao, nao), except el_mat)
         # these matrices have already been normalized
         self.olp_mat = self.libcint_wrapper.overlap()
@@ -21,11 +27,6 @@ class HamiltonCGTO(BaseHamilton):
         nucl_mat = self.libcint_wrapper.nuclattr()
         self.kinnucl_mat = kin_mat + nucl_mat
         self.el_mat = self.libcint_wrapper.elrep()  # (nao^4)
-
-        self.is_grid_set = False
-        self.is_ao_set = False
-        self.is_grad_ao_set = False
-        self.is_lapl_ao_set = False
 
     def get_kinnucl(self) -> xt.LinearOperator:
         # kinnucl_mat: (nao, nao)

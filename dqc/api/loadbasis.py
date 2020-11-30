@@ -90,9 +90,9 @@ def _get_basis_file(cmd: str) -> str:
     # (download if not), and return the file name
 
     # parse to get the atomz and the basisname
-    atomz, raw_basisname = cmd.split(":")
+    atomz_str, raw_basisname = cmd.split(":")
     raw_basisname = raw_basisname.strip()
-    atomz = int(atomz)
+    atomz = int(atomz_str)
 
     # get the path to the database
     basisname = _normalize_basisname(raw_basisname)

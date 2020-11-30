@@ -20,7 +20,7 @@ class BaseSystem(xt.EditableModule):
     @abstractmethod
     def get_orbweight(self) -> torch.Tensor:
         """
-        Returns the orbital weights.
+        Returns the atomic orbital weights.
         """
         # returns: (*BS, norb)
         pass

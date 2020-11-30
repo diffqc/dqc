@@ -70,7 +70,7 @@ def test_becke_grid_dvol(rgrid_integrator, rgrid_transform):
     atompos = atompos.unsqueeze(1)  # (natoms, 1, ndim)
 
     # test gaussian integration
-    fcn = torch.exp(- ((rgrid - atompos) ** 2).sum(dim = -1) * 0.5).sum(dim = 0)  # (ngrid)
+    fcn = torch.exp(-((rgrid - atompos) ** 2).sum(dim=-1) * 0.5).sum(dim=0)  # (ngrid)
     int1 = (fcn * dvol).sum()
     val1 = 2 * (2 * np.sqrt(2 * np.pi) * np.pi)
 
