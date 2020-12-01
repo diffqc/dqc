@@ -9,8 +9,9 @@ def test_libxc_lda_gradcheck():
     xcpol = get_libxc(name, True)
 
     torch.manual_seed(123)
-    rho_u = torch.rand((1,), dtype=torch.float64).requires_grad_()
-    rho_d = torch.rand((1,), dtype=torch.float64).requires_grad_()
+    n = 2
+    rho_u = torch.rand((n,), dtype=torch.float64).requires_grad_()
+    rho_d = torch.rand((n,), dtype=torch.float64).requires_grad_()
 
     def get_edens_unpol(xc, rho):
         densinfo = ValGrad(value=rho)
@@ -50,10 +51,11 @@ def test_libxc_gga_gradcheck():
     xcpol = get_libxc(name, True)
 
     torch.manual_seed(123)
-    rho_u = torch.rand((1,), dtype=torch.float64).requires_grad_()
-    rho_d = torch.rand((1,), dtype=torch.float64).requires_grad_()
-    grad_u = torch.rand((1, 3), dtype=torch.float64).requires_grad_()
-    grad_d = torch.rand((1, 3), dtype=torch.float64).requires_grad_()
+    n = 2
+    rho_u = torch.rand((n,), dtype=torch.float64).requires_grad_()
+    rho_d = torch.rand((n,), dtype=torch.float64).requires_grad_()
+    grad_u = torch.rand((n, 3), dtype=torch.float64).requires_grad_()
+    grad_d = torch.rand((n, 3), dtype=torch.float64).requires_grad_()
 
     def get_edens_unpol(xc, rho, grad):
         densinfo = ValGrad(value=rho, grad=grad)
@@ -87,7 +89,7 @@ def test_libxc_gga_gradcheck():
     torch.autograd.gradgradcheck(get_edens_pol, param_pol)
     torch.autograd.gradgradcheck(get_vxc_pol, param_pol)
 
-def test_libxc_lda_x():
+def test_libxc_lda_value():
     # check if the value is consistent
     xcunpol = get_libxc("lda_x", False)
     xcpol   = get_libxc("lda_x", True)
@@ -96,8 +98,8 @@ def test_libxc_lda_x():
 
     torch.manual_seed(123)
     n = 100
-    rho_u = torch.rand((n,), dtype=torch.float64).requires_grad_()
-    rho_d = torch.rand((n,), dtype=torch.float64).requires_grad_()
+    rho_u = torch.rand((n,), dtype=torch.float64)
+    rho_d = torch.rand((n,), dtype=torch.float64)
     rho_tot = rho_u + rho_d
 
     densinfo_u = ValGrad(value=rho_u)
@@ -107,21 +109,64 @@ def test_libxc_lda_x():
 
     # calculate the energy and compare with analytic
     edens_unpol = xcunpol.get_edensityxc(densinfo_tot)
-    edens_unpol_true = -0.75 * (3 / np.pi) ** (1. / 3) * rho_tot ** (4. / 3)
+    edens_unpol_true = lda_e_true(rho_tot)
     assert torch.allclose(edens_unpol, edens_unpol_true)
 
     edens_pol = xcpol.get_edensityxc(densinfo)
-    edens_pol_true = 0.5 * (-0.75) * (3 / np.pi) ** (1. / 3) * (
-        (2 * rho_u) ** (4. / 3) + (2 * rho_d) ** (4. / 3)
-    )
+    edens_pol_true = 0.5 * (lda_e_true(2 * rho_u) + lda_e_true(2 * rho_d))
     assert torch.allclose(edens_pol, edens_pol_true)
 
     vxc_unpol = xcunpol.get_vxc(densinfo_tot)
-    vxc_unpol_value_true = - (3 / np.pi) ** (1. / 3) * rho_tot ** (1. / 3)
+    vxc_unpol_value_true = lda_v_true(rho_tot)
     assert torch.allclose(vxc_unpol.value, vxc_unpol_value_true)
 
     vxc_pol_u, vxc_pol_d = xcpol.get_vxc(densinfo)
-    vxc_pol_u_value_true = - (3 / np.pi) ** (1. / 3) * (2 * rho_u) ** (1. / 3)
-    vxc_pol_d_value_true = - (3 / np.pi) ** (1. / 3) * (2 * rho_d) ** (1. / 3)
+    vxc_pol_u_value_true = lda_v_true(2 * rho_u)
+    vxc_pol_d_value_true = lda_v_true(2 * rho_d)
     assert torch.allclose(vxc_pol_u.value, vxc_pol_u_value_true)
     assert torch.allclose(vxc_pol_d.value, vxc_pol_d_value_true)
+
+def test_libxc_gga_value():
+    # compare the calculated value of GGA potential
+    dtype = torch.float64
+    xcunpol = get_libxc("gga_x_pbe", False)
+    xcpol   = get_libxc("gga_x_pbe", True)
+    assert xcunpol.family == 2
+    assert xcpol.family == 2
+
+    torch.manual_seed(123)
+    n = 100
+    rho_u = torch.rand((n,), dtype=dtype)
+    rho_d = torch.rand((n,), dtype=dtype)
+    rho_tot = rho_u + rho_d
+    gradn_u = torch.rand((n, 3), dtype=dtype) * 0
+    gradn_d = torch.rand((n, 3), dtype=dtype) * 0
+    gradn_tot = gradn_u + gradn_d
+
+    densinfo_u = ValGrad(value=rho_u, grad=gradn_u)
+    densinfo_d = ValGrad(value=rho_d, grad=gradn_d)
+    densinfo_tot = densinfo_u + densinfo_d
+    densinfo = (densinfo_u, densinfo_d)
+
+    # calculate the energy and compare with analytical expression
+    edens_unpol = xcunpol.get_edensityxc(densinfo_tot)
+    edens_unpol_true = pbe_e_true(rho_tot, gradn_tot)
+    assert torch.allclose(edens_unpol, edens_unpol_true)
+
+    edens_pol = xcpol.get_edensityxc(densinfo)
+    edens_pol_true = 0.5 * (pbe_e_true(2 * rho_u, 2 * gradn_u) + pbe_e_true(2 * rho_d, 2 * gradn_d))
+    assert torch.allclose(edens_pol, edens_pol_true)
+
+def lda_e_true(rho):
+    return -0.75 * (3 / np.pi) ** (1. / 3) * rho ** (4. / 3)
+
+def lda_v_true(rho):
+    return -(3 / np.pi) ** (1. / 3) * rho ** (1. / 3)
+
+def pbe_e_true(rho, gradn):
+    kf = (3 * np.pi * np.pi * rho) ** (1. / 3)
+    s = torch.norm(gradn, dim=-1) / (2 * rho * kf)
+    kappa = 0.804
+    mu = 0.21951
+    fxs = (1 + kappa - kappa / (1 + mu * s * s / kappa))
+    return lda_e_true(rho) * fxs

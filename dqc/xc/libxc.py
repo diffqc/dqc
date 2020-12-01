@@ -198,7 +198,7 @@ class LibXCGGA(BaseXC):
 
         # calculate the derivative w.r.t density and grad density
         outs = CalcGGALibXCUnpol.apply(
-            rho.reshape(-1), sigma.reshape(-1), 1, self.libxc)  # tuple of (*BD, nr)
+            rho.reshape(-1), sigma.reshape(-1), deriv, self.libxc)  # tuple of (*BD, nr)
         return tuple(out.reshape(rho.shape) for out in outs)
 
     def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
