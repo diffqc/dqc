@@ -15,12 +15,12 @@ except ImportError:
 
 AtomEnv = namedtuple("AtomEnv", ["poss", "basis", "rgrid", "atomzs"])
 
-def get_atom_env(dtype, rgrid=False):
-    pos1 = torch.tensor([0.0, 0.0, 0.8], dtype=dtype, requires_grad=True)
-    pos2 = torch.tensor([0.0, 0.0, -0.8], dtype=dtype, requires_grad=True)
+def get_atom_env(dtype, basis="3-21G", rgrid=False):
+    d = 0.8
+    pos1 = torch.tensor([0.0, 0.0, d], dtype=dtype, requires_grad=True)
+    pos2 = torch.tensor([0.0, 0.0, -d], dtype=dtype, requires_grad=True)
     poss = [pos1, pos2]
     atomzs = [1, 1]
-    basis = "3-21G"
 
     # set the grid
     n = 3
@@ -34,6 +34,51 @@ def get_atom_env(dtype, rgrid=False):
         rgrid=rgrid,
         atomzs=atomzs
     )
+
+def get_mol_pyscf(dtype, basis="3-21G"):
+    d = 0.8
+    mol = pyscf.gto.M(atom="H 0 0 {d}; H 0 0 -{d}".format(d=d), basis=basis, unit="Bohr")
+    return mol
+
+@pytest.mark.parametrize(
+    "int_type",
+    ["overlap", "kinetic", "nuclattr", "elrep"]
+)
+def test_integral_vs_pyscf(int_type):
+    # check if the integrals from dqc agrees with pyscf
+
+    dtype = torch.double
+    atomenv = get_atom_env(dtype)
+    allbases = [
+        loadbasis("%d:%s" % (atomz, atomenv.basis), dtype=dtype, requires_grad=False)
+        for atomz in atomenv.atomzs
+    ]
+
+    atombasis1 = AtomCGTOBasis(atomz=atomenv.atomzs[0], bases=allbases[0], pos=atomenv.poss[0])
+    atombasis2 = AtomCGTOBasis(atomz=atomenv.atomzs[1], bases=allbases[1], pos=atomenv.poss[1])
+    env = LibcintWrapper([atombasis1, atombasis2], spherical=True)
+    if int_type == "overlap":
+        mat = env.overlap()
+    elif int_type == "kinetic":
+        mat = env.kinetic()
+    elif int_type == "nuclattr":
+        mat = env.nuclattr()
+    elif int_type == "elrep":
+        mat = env.elrep()
+
+    # get the matrix from pyscf
+    mol = get_mol_pyscf(dtype)
+    if int_type == "overlap":
+        int_name = "int1e_ovlp_sph"
+    elif int_type == "kinetic":
+        int_name = "int1e_kin_sph"
+    elif int_type == "nuclattr":
+        int_name = "int1e_nuc_sph"
+    elif int_type == "elrep":
+        int_name = "int2e_sph"
+    mat_scf = pyscf.gto.moleintor.getints(int_name, mol._atm, mol._bas, mol._env)
+
+    assert torch.allclose(torch.tensor(mat_scf, dtype=dtype), mat)
 
 # TODO: check nuclattr and elrep
 @pytest.mark.parametrize(
