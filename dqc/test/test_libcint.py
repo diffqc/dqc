@@ -122,7 +122,7 @@ def test_integral_grad(int_type):
     "eval_type",
     ["", "grad"]
 )
-def test_eval_vs_pyscf(eval_type):
+def test_eval_gto_vs_pyscf(eval_type):
     basis = "6-311++G**"
     dtype = torch.double
     d = 0.8
@@ -157,7 +157,7 @@ def test_eval_vs_pyscf(eval_type):
     "eval_type",
     ["", "grad", "lapl"]
 )
-def test_eval_grad(eval_type):
+def test_eval_gto_grad(eval_type):
     dtype = torch.double
 
     atomenv = get_atom_env(dtype, ngrid=3)
