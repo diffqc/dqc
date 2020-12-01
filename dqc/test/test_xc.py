@@ -97,7 +97,7 @@ def test_libxc_lda_x():
     torch.manual_seed(123)
     n = 100
     rho_u = torch.rand((n,), dtype=torch.float64).requires_grad_()
-    rho_d = rho_u  # torch.rand((n,), dtype=torch.float64).requires_grad_()
+    rho_d = torch.rand((n,), dtype=torch.float64).requires_grad_()
     rho_tot = rho_u + rho_d
 
     densinfo_u = ValGrad(value=rho_u)
@@ -105,6 +105,7 @@ def test_libxc_lda_x():
     densinfo = (densinfo_u, densinfo_d)
     densinfo_tot = ValGrad(value=rho_tot)
 
+    # calculate the energy and compare with analytic
     edens_unpol = xcunpol.get_edensityxc(densinfo_tot)
     edens_unpol_true = -0.75 * (3 / np.pi) ** (1. / 3) * rho_tot ** (4. / 3)
     assert torch.allclose(edens_unpol, edens_unpol_true)
@@ -114,3 +115,13 @@ def test_libxc_lda_x():
         (2 * rho_u) ** (4. / 3) + (2 * rho_d) ** (4. / 3)
     )
     assert torch.allclose(edens_pol, edens_pol_true)
+
+    vxc_unpol = xcunpol.get_vxc(densinfo_tot)
+    vxc_unpol_value_true = - (3 / np.pi) ** (1. / 3) * rho_tot ** (1. / 3)
+    assert torch.allclose(vxc_unpol.value, vxc_unpol_value_true)
+
+    vxc_pol_u, vxc_pol_d = xcpol.get_vxc(densinfo)
+    vxc_pol_u_value_true = - (3 / np.pi) ** (1. / 3) * (2 * rho_u) ** (1. / 3)
+    vxc_pol_d_value_true = - (3 / np.pi) ** (1. / 3) * (2 * rho_d) ** (1. / 3)
+    assert torch.allclose(vxc_pol_u.value, vxc_pol_u_value_true)
+    assert torch.allclose(vxc_pol_d.value, vxc_pol_d_value_true)
