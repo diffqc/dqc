@@ -55,7 +55,7 @@ class HamiltonCGTO(BaseHamilton):
         # return: (*BOW, nao, nao)
 
         orb_w = orb * orb_weight.unsqueeze(-2)  # (*BOW, nao, norb)
-        return torch.matmul(orb_w, orb_w.transpose(-2, -1))  # (*BOW, nao, nao)
+        return torch.matmul(orb, orb_w.transpose(-2, -1))  # (*BOW, nao, nao)
 
     ############### grid-related ###############
     def setup_grid(self, grid: BaseGrid, xcfamily: int = 0) -> None:

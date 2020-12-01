@@ -120,19 +120,15 @@ class RKS(BaseQCCalc):
 
     def __dm2fock(self, dm: torch.Tensor) -> xt.LinearOperator:
         # construct the fock matrix from the density matrix
-        ks_linop = self.__get_ks_linop(dm)  # (..., nao, nao)
-        return self.knvext_linop + ks_linop
+        elrep = self.hamilton.get_elrep(dm)  # (..., nao, nao)
+        vxc = self.hamilton.get_vxc(self.xc, dm)
+        return self.knvext_linop + elrep + vxc
 
     def __fock2dm(self, fock: xt.LinearOperator) -> torch.Tensor:
         # diagonalize the fock matrix and obtain the density matrix
         eigvals, eigvecs = self.__diagonalize_fock(fock)
         dm = self.hamilton.ao_orb2dm(eigvecs, self.orb_weight)
         return dm
-
-    def __get_ks_linop(self, dm: torch.Tensor) -> xt.LinearOperator:
-        elrep = self.hamilton.get_elrep(dm)  # (..., nao, nao)
-        vxc = self.hamilton.get_vxc(self.xc, dm)
-        return elrep + vxc
 
     def __diagonalize_fock(self, fock: xt.LinearOperator) -> Tuple[torch.Tensor, torch.Tensor]:
         return xitorch.linalg.lsymeig(
