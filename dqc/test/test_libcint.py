@@ -15,25 +15,28 @@ except ImportError:
 
 AtomEnv = namedtuple("AtomEnv", ["poss", "basis", "rgrid", "atomzs"])
 
-def get_atom_env(dtype, basis="3-21G", rgrid=False):
+def get_atom_env(dtype, basis="3-21G", ngrid=0):
     d = 0.8
     pos1 = torch.tensor([0.0, 0.0, d], dtype=dtype, requires_grad=True)
     pos2 = torch.tensor([0.0, 0.0, -d], dtype=dtype, requires_grad=True)
     poss = [pos1, pos2]
     atomzs = [1, 1]
 
-    # set the grid
-    n = 3
-    z = torch.linspace(-5, 5, n, dtype=dtype)
-    zeros = torch.zeros(n, dtype=dtype)
-    rgrid = torch.cat((zeros[None, :], zeros[None, :], z[None, :]), dim=0).T.contiguous().to(dtype)
+    rgrid = None
+    if ngrid > 0:
+        # set the grid
+        n = ngrid
+        z = torch.linspace(-5, 5, n, dtype=dtype)
+        zeros = torch.zeros(n, dtype=dtype)
+        rgrid = torch.cat((zeros[None, :], zeros[None, :], z[None, :]), dim=0).T.contiguous().to(dtype)
 
-    return AtomEnv(
+    atomenv = AtomEnv(
         poss=poss,
         basis=basis,
         rgrid=rgrid,
         atomzs=atomzs
     )
+    return atomenv
 
 def get_mol_pyscf(dtype, basis="3-21G"):
     d = 0.8
@@ -125,15 +128,14 @@ def test_eval_vs_pyscf(eval_type):
     d = 0.8
 
     # setup the system for dqc
-    n = 100
-    pos1 = torch.tensor([0.0, 0.0, d], dtype=dtype, requires_grad=True)
-    pos2 = torch.tensor([0.0, 0.0, -d], dtype=dtype, requires_grad=True)
-    z = torch.linspace(-5, 5, n, dtype=dtype)
-    zeros = torch.zeros(n, dtype=dtype)
-    rgrid = torch.cat((zeros[None, :], zeros[None, :], z[None, :]), dim=0).T.contiguous().to(dtype)
-    bases = loadbasis("1:%s" % basis, dtype=dtype, requires_grad=False)
-    atombasis1 = AtomCGTOBasis(atomz=1, bases=bases, pos=pos1)
-    atombasis2 = AtomCGTOBasis(atomz=1, bases=bases, pos=pos2)
+    atomenv = get_atom_env(dtype, ngrid=100)
+    rgrid = atomenv.rgrid
+    allbases = [
+        loadbasis("%d:%s" % (atomz, atomenv.basis), dtype=dtype, requires_grad=False)
+        for atomz in atomenv.atomzs
+    ]
+    atombasis1 = AtomCGTOBasis(atomz=atomenv.atomzs[0], bases=allbases[0], pos=atomenv.poss[0])
+    atombasis2 = AtomCGTOBasis(atomz=atomenv.atomzs[1], bases=allbases[1], pos=atomenv.poss[1])
     wrapper = LibcintWrapper([atombasis1, atombasis2], spherical=True)
     if eval_type == "":
         ao_value = wrapper.eval_gto(rgrid)
@@ -141,7 +143,7 @@ def test_eval_vs_pyscf(eval_type):
         ao_value = wrapper.eval_gradgto(rgrid)
 
     # system in pyscf
-    mol = pyscf.gto.M(atom="H 0 0 {d}; H 0 0 -{d}".format(d=d), basis=basis, unit="Bohr")
+    mol = get_mol_pyscf(dtype)
 
     coords_np = rgrid.detach().numpy()
     if eval_type == "":
@@ -158,7 +160,7 @@ def test_eval_vs_pyscf(eval_type):
 def test_eval_grad(eval_type):
     dtype = torch.double
 
-    atomenv = get_atom_env(dtype, rgrid=True)
+    atomenv = get_atom_env(dtype, ngrid=3)
     pos1 = atomenv.poss[0]
     pos2 = atomenv.poss[1]
     allbases = [
