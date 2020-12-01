@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 import pylibxc
-from typing import Mapping, Tuple, Optional, Union
+from typing import Mapping, Tuple, Optional, Union, Iterator
 
 ############################ libxc with derivative ############################
 
@@ -213,7 +213,7 @@ class CalcGGALibXCPol(torch.autograd.Function):
         return (grad_rho_u, grad_rho_d, grad_sigma_uu, grad_sigma_ud, grad_sigma_dd,
                 None, None)
 
-def _get_libxc_res(inp: Mapping[str, Union[torch.Tensor, Tuple[torch.Tensor, ...]]],
+def _get_libxc_res(inp: Mapping[str, Union[np.array, Tuple[np.array, ...]]],
                    deriv: int,
                    libxcfcn: pylibxc.functional.LibXCFunctional,
                    family: int, polarized: bool) -> Tuple[torch.Tensor, ...]:
@@ -250,12 +250,12 @@ def _get_libxc_res(inp: Mapping[str, Union[torch.Tensor, Tuple[torch.Tensor, ...
 
     return res
 
-def _pack_input(*vals):
+def _pack_input(*vals: torch.Tensor) -> np.array:
     # arrange the values in a numpy array with fortran memory order
     vals_np = np.asarray([val.detach().numpy() for val in vals])
     return np.ascontiguousarray(vals_np.T)
 
-def _unpack_input(inp):
+def _unpack_input(inp: np.array) -> Iterator[np.array]:
     # unpack from libxc input format into tuple of inputs
     return (a for a in inp.T)
 

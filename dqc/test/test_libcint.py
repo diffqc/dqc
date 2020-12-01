@@ -1,9 +1,17 @@
 from collections import namedtuple
 import torch
 import pytest
+import warnings
 from dqc.api.loadbasis import loadbasis
 from dqc.hamilton.libcint_wrapper import LibcintWrapper
 from dqc.utils.datastruct import AtomCGTOBasis
+
+# import pyscf
+try:
+    warnings.filterwarnings("ignore", category=DeprecationWarning)
+    import pyscf
+except ImportError:
+    raise ImportError("pyscf is needed for this test")
 
 AtomEnv = namedtuple("AtomEnv", ["poss", "basis", "rgrid", "atomzs"])
 
@@ -62,13 +70,41 @@ def test_integral_grad(int_type):
     torch.autograd.gradcheck(get_int1e, (pos1, pos2, int_type))
     torch.autograd.gradgradcheck(get_int1e, (pos1, pos2, int_type))
 
-# TODO: complete this
-# @pytest.mark.parametrize(
-#     "eval_type",
-#     ["", "grad"]
-# )
-# def test_eval_vs_pyscf(eval_type):
-#     pass
+@pytest.mark.parametrize(
+    "eval_type",
+    ["", "grad"]
+)
+def test_eval_vs_pyscf(eval_type):
+    basis = "6-311++G**"
+    dtype = torch.double
+    d = 0.8
+
+    # setup the system for dqc
+    n = 100
+    pos1 = torch.tensor([0.0, 0.0, d], dtype=dtype, requires_grad=True)
+    pos2 = torch.tensor([0.0, 0.0, -d], dtype=dtype, requires_grad=True)
+    z = torch.linspace(-5, 5, n, dtype=dtype)
+    zeros = torch.zeros(n, dtype=dtype)
+    rgrid = torch.cat((zeros[None, :], zeros[None, :], z[None, :]), dim=0).T.contiguous().to(dtype)
+    bases = loadbasis("1:%s" % basis, dtype=dtype, requires_grad=False)
+    atombasis1 = AtomCGTOBasis(atomz=1, bases=bases, pos=pos1)
+    atombasis2 = AtomCGTOBasis(atomz=1, bases=bases, pos=pos2)
+    wrapper = LibcintWrapper([atombasis1, atombasis2], spherical=True)
+    if eval_type == "":
+        ao_value = wrapper.eval_gto(rgrid)
+    elif eval_type == "grad":
+        ao_value = wrapper.eval_gradgto(rgrid)
+
+    # system in pyscf
+    mol = pyscf.gto.M(atom="H 0 0 {d}; H 0 0 -{d}".format(d=d), basis=basis, unit="Bohr")
+
+    coords_np = rgrid.detach().numpy()
+    if eval_type == "":
+        ao_value_scf = mol.eval_gto("GTOval_sph", coords_np)
+    elif eval_type == "grad":
+        ao_value_scf = mol.eval_gto("GTOval_ip_sph", coords_np)
+
+    torch.allclose(ao_value, torch.tensor(ao_value_scf).transpose(-2, -1))
 
 @pytest.mark.parametrize(
     "eval_type",
