@@ -1,8 +1,5 @@
 import torch
 import pytest
-from dqc.api.loadbasis import loadbasis
-from dqc.utils.datastruct import AtomCGTOBasis
-from dqc.hamilton.hamilton_cgto import HamiltonCGTO
 from dqc.system.mol import Mol
 
 dtype = torch.float64

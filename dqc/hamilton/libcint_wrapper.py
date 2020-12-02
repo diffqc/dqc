@@ -24,19 +24,6 @@ CINT = ctypes.cdll.LoadLibrary(_libcint_path)
 CGTO = ctypes.cdll.LoadLibrary(_libcgto_path)
 
 # Optimizer class
-class CINTOpt(ctypes.Structure):
-    _fields_ = [
-        ('index_xyz_array', ctypes.POINTER(ctypes.POINTER(ctypes.c_int))),
-        ('prim_offset', ctypes.POINTER(ctypes.c_int)),
-        ('non0ctr', ctypes.POINTER(ctypes.c_int)),
-        ('non0idx', ctypes.POINTER(ctypes.POINTER(ctypes.c_int))),
-        ('non0coeff', ctypes.POINTER(ctypes.POINTER(ctypes.c_double))),
-        ('expij', ctypes.POINTER(ctypes.POINTER(ctypes.c_double))),
-        ('rij', ctypes.POINTER(ctypes.POINTER(ctypes.c_double))),
-        ('cceij', ctypes.POINTER(ctypes.POINTER(ctypes.c_int))),
-        ('tot_prim', ctypes.c_int),
-    ]
-
 class _cintoptHandler(ctypes.c_void_p):
     def __del__(self):
         try:
