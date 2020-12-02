@@ -7,6 +7,12 @@ import torch
 import numpy as np
 from dqc.utils.datastruct import AtomCGTOBasis
 
+# Terminology:
+# * gauss: one gaussian element (multiple gaussian becomes one shell)
+# * shell: one contracted basis
+# * ao: shell that has been splitted into its components,
+#       e.g. p-shell is splitted into 3 components for cartesian (x, y, z)
+
 NDIM = 3
 PTR_RINV_ORIG = 4  # from libcint/src/cint_const.h
 BLKSIZE = 128  # same as lib/gto/grid_ao_drv.c
@@ -32,6 +38,12 @@ class CINTOpt(ctypes.Structure):
         ('tot_prim', ctypes.c_int),
     ]
 
+class _cintoptHandler(ctypes.c_void_p):
+    def __del__(self):
+        try:
+            CGTO.CINTdel_optimizer(ctypes.byref(self))
+        except AttributeError:
+            pass
 
 class LibcintWrapper(object):
     # this class provides the contracted gaussian integrals
@@ -69,9 +81,9 @@ class LibcintWrapper(object):
         self.allcoeffs_params = torch.cat(self._allcoeffs, dim=0)  # (ntot_gauss)
 
         # convert the lists to numpy (to make it contiguous, Python list is not contiguous)
-        self._atm = np.array(self._atm_list, dtype=np.int32)
-        self._bas = np.array(self._bas_list, dtype=np.int32)
-        self._env = np.array(self._env_list, dtype=np.float64)
+        self._atm = np.array(self._atm_list, dtype=np.int32, order="C")
+        self._bas = np.array(self._bas_list, dtype=np.int32, order="C")
+        self._env = np.array(self._env_list, dtype=np.float64, order="C")
 
         # get the c-pointer of the numpy array
         self.atm_ctypes = self._atm.ctypes.data_as(ctypes.c_void_p)
@@ -85,12 +97,13 @@ class LibcintWrapper(object):
         self.device = atombases[0].bases[0].alphas.device
 
         # get the size of the contracted gaussian
-        self.shell_to_aoloc = [0]
+        shell_to_aoloc = [0]
         shell_to_nao = []
         for i in range(self.nshells_tot):
             nbasiscontr = self._nbasiscontr(i)
             shell_to_nao.append(nbasiscontr)
-            self.shell_to_aoloc.append(self.shell_to_aoloc[-1] + nbasiscontr)
+            shell_to_aoloc.append(shell_to_aoloc[-1] + nbasiscontr)
+        self.shell_to_aoloc = np.array(shell_to_aoloc, dtype=np.int32)
         self.nao_tot = self.shell_to_aoloc[-1]
 
         # get the mapping from ao to atom index
@@ -241,30 +254,7 @@ class LibcintWrapper(object):
         return res
 
     def _int2e(self) -> torch.Tensor:
-        shape = (self.nao_tot, self.nao_tot, self.nao_tot, self.nao_tot)
-        res = torch.empty(shape, dtype=self.dtype, device=self.device)
-
-        # TODO: add symmetry here
-        for i1 in range(self.nshells_tot):
-            c1, a1, r1 = self._get_params(i1)
-            slice1 = self._get_matrix_index(i1)
-            for i2 in range(i1, self.nshells_tot):
-                c2, a2, r2 = self._get_params(i2)
-                slice2 = self._get_matrix_index(i2)
-                for i3 in range(self.nshells_tot):
-                    c3, a3, r3 = self._get_params(i3)
-                    slice3 = self._get_matrix_index(i3)
-                    for i4 in range(i3, self.nshells_tot):
-                        c4, a4, r4 = self._get_params(i4)
-                        slice4 = self._get_matrix_index(i4)
-                        mat = _Int2eFunction.apply(c1, a1, r1, c2, a2, r2,
-                                                   c3, a3, r3, c4, a4, r4,
-                                                   self, "", i1, i2, i3, i4)
-                        res[slice1, slice2, slice3, slice4] = mat
-                        res[slice2, slice1, slice3, slice4] = mat.transpose(0, 1)
-                        res[slice1, slice2, slice4, slice3] = mat.transpose(-2, -1)
-                        res[slice2, slice1, slice4, slice3] = mat.transpose(-2, -1).transpose(0, 1)
-        return res
+        return self.calc_all_int2e_internal("")
 
     @contextmanager
     def _all_atomz_are_zero_except(self, ia: int) -> Iterator:
@@ -375,58 +365,58 @@ class LibcintWrapper(object):
         # is following fortran order
         return ([NDIM] * n_ip) + [self._nbasiscontr(sh2), self._nbasiscontr(sh1)]
 
-    ################ two electrons integral for a basis pair ################
-    def calc_integral_2e_internal(self, shortname: str,
-                                  sh1: int, sh2: int,
-                                  sh3: int, sh4: int) -> torch.Tensor:
-        # calculate the one-electron integral (type depends on the shortname)
-        # for basis in shell sh1 & sh2 using libcint
+    ################ two electrons integral for all basis pairs ################
+    def calc_all_int2e_internal(self, shortname: str) -> torch.Tensor:
+        # calculation of all 2-electron integrals
+        # no gradient is propagated
 
-        # NOTE: this function should only be called from this file only.
-        # it does not propagate gradient.
-        opname = self._get_int2e_name(shortname)
+        opname = self._get_all_int2e_name(shortname)
         operator = getattr(CINT, opname)
-        outshape = self._get_int2e_outshape(shortname, sh1, sh2, sh3, sh4)
+        optimizer = self._get_all_int2e_optimizer(opname)
 
-        c_shls = (ctypes.c_int * 4)(sh1, sh2, sh3, sh4)
+        # prepare the output
+        outshape, ncomp = self._get_all_int2e_outshape(shortname)
         out = np.empty(outshape, dtype=np.float64)
-        out_ctypes = out.ctypes.data_as(ctypes.c_void_p)
 
-        # set up the optimizer
-        optname = opname + "_optimizer"
-        copt = getattr(CINT, optname)
-        opt = CINTOpt()
-        copt(ctypes.byref(opt),
-             self.atm_ctypes, self.natm_ctypes,
-             self.bas_ctypes, self.nbas_ctypes, self.env_ctypes)
+        drv = CGTO.GTOnr2e_fill_drv
+        fill = CGTO.GTOnr2e_fill_s1
+        prescreen = ctypes.POINTER(ctypes.c_void_p)()
+        shls_slice = (0, self.nshells_tot) * 4
+        drv(operator, fill, prescreen,
+            out.ctypes.data_as(ctypes.c_void_p),
+            ctypes.c_int(ncomp),
+            (ctypes.c_int * 8)(*shls_slice),
+            self.shell_to_aoloc.ctypes.data_as(ctypes.c_void_p),
+            optimizer,
+            self.atm_ctypes, self.natm_ctypes,
+            self.bas_ctypes, self.nbas_ctypes,
+            self.env_ctypes)
 
-        # calculate the integral
-        operator.restype = ctypes.c_double
-        operator(out_ctypes, c_shls, self.atm_ctypes, self.natm_ctypes,
-                 self.bas_ctypes, self.nbas_ctypes, self.env_ctypes, opt)
-
-        out_tensor = torch.tensor(out, dtype=self.dtype, device=self.device)
-
-        # reverse the axis order for the last 4 dims to make it have dimensions
-        # of (*, sh1, sh2, sh3, sh4)
-        out_tensor = out_tensor.transpose(-1, -4)
-        out_tensor = out_tensor.transpose(-2, -3)
+        out_tensor = torch.as_tensor(out, dtype=self.dtype, device=self.device)
         return out_tensor
 
-    def _get_int2e_name(self, shortname: str) -> str:
-        # TODO: check this for derivative
-        suffix = "sph" if self._spherical else "cart"
-        if shortname != "":
-            shortname = "_" + shortname
-        return "cint2e%s_%s" % (shortname, suffix)
+    def _get_all_int2e_name(self, shortname: str) -> str:
+        suffix = ("_" + shortname) if shortname != "" else shortname
+        cartsph = "sph" if self._spherical else "cart"
+        return "int2e%s_%s" % (suffix, cartsph)
 
-    def _get_int2e_outshape(self, shortname: str, sh1: int, sh2: int,
-                            sh3: int, sh4: int) -> List[int]:
-        # TODO: complete this for derivative
-        # reversing the shape because the output of libcint is following the
-        # fortran order
-        return [self._nbasiscontr(sh4), self._nbasiscontr(sh3),
-                self._nbasiscontr(sh2), self._nbasiscontr(sh1)]
+    def _get_all_int2e_optimizer(self, opname: str) -> ctypes.c_void_p:
+        # setup the optimizer
+        cintopt = ctypes.POINTER(ctypes.c_void_p)()
+        copt = getattr(CINT, "int2e_optimizer")
+        copt(ctypes.byref(cintopt),
+             self.atm_ctypes, self.natm_ctypes,
+             self.bas_ctypes, self.nbas_ctypes, self.env_ctypes)
+        opt = ctypes.cast(cintopt, _cintoptHandler)
+        return opt
+
+    def _get_all_int2e_outshape(self, shortname: str) -> Tuple[Tuple[int, ...], int]:
+        n_ip_start = len(re.findall(r"^(?:ip)*(?:ip)?", shortname)[0]) // 2
+        n_ip_end = len(re.findall(r"(?:ip)?(?:ip)*$", shortname)[0]) // 2
+        n_ip = n_ip_start + n_ip_end
+        outshape = (NDIM, ) * n_ip + (self.nao_tot, ) * 4
+        ncomp = NDIM ** n_ip
+        return outshape, ncomp
 
     ################ evaluation of gto orbitals ################
     def _evalgto(self, shortname: str, rgrid: torch.Tensor) -> torch.Tensor:
@@ -567,73 +557,6 @@ class _Int1eFunction(torch.autograd.Function):
 
         return grad_c1, grad_a1, grad_r1, grad_c2, grad_a2, grad_r2, grad_ratom, \
             None, None, None, None
-
-class _Int2eFunction(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx,  # type: ignore
-                c1: torch.Tensor, a1: torch.Tensor, r1: torch.Tensor,
-                c2: torch.Tensor, a2: torch.Tensor, r2: torch.Tensor,
-                c3: torch.Tensor, a3: torch.Tensor, r3: torch.Tensor,
-                c4: torch.Tensor, a4: torch.Tensor, r4: torch.Tensor,
-                wrapper: LibcintWrapper, opshortname: str,
-                sh1: int, sh2: int, sh3: int, sh4: int) -> torch.Tensor:
-        # c_: (ngauss,)
-        # a_: (ngauss,)
-        # r_: (NDIM,)
-        # they are not used in forward, but present in the argument so that
-        # the gradient can be propagated
-        out_tensor = wrapper.calc_integral_2e_internal(opshortname, sh1, sh2, sh3, sh4)
-        ctx.save_for_backward(c1, a1, r1, c2, a2, r2, c3, a3, r3, c4, a4, r4)
-        ctx.other_info = (wrapper, sh1, sh2, sh3, sh4, opshortname)
-        return out_tensor  # (*outshape)
-
-    @staticmethod
-    def backward(ctx, grad_out: torch.Tensor) -> Tuple[Optional[torch.Tensor], ...]:  # type: ignore
-        # grad_out: (*outshape)
-        c1, a1, r1, c2, a2, r2, c3, a3, r3, c4, a4, r4 = ctx.saved_tensors
-        wrapper, sh1, sh2, sh3, sh4, opshortname = ctx.other_info
-
-        # TODO: to be completed (???)
-        grad_c1 = None
-        grad_a1 = None
-        grad_c2 = None
-        grad_a2 = None
-        grad_c3 = None
-        grad_a3 = None
-        grad_c4 = None
-        grad_a4 = None
-
-        grad_r1 = None
-        if r1.requires_grad:
-            opsname = wrapper.get_int2e_deriv_shortname(opshortname, "r1")
-            doutdr1 = _Int2eFunction.apply(*ctx.saved_tensors, wrapper, opsname,
-                                           sh1, sh2, sh3, sh4)  # (*outshape, NDIM)
-            grad_r1 = -(grad_out.unsqueeze(-1) * doutdr1).view(-1, NDIM).sum(dim=0)
-
-        grad_r2 = None
-        if r2.requires_grad:
-            opsname = wrapper.get_int2e_deriv_shortname(opshortname, "r2")
-            doutdr2 = _Int2eFunction.apply(*ctx.saved_tensors, wrapper, opsname,
-                                           sh1, sh2, sh3, sh4)  # (*outshape, NDIM)
-            grad_r2 = -(grad_out.unsqueeze(-1) * doutdr2).view(-1, NDIM).sum(dim=0)
-
-        grad_r3 = None
-        if r3.requires_grad:
-            opsname = wrapper.get_int2e_deriv_shortname(opshortname, "r3")
-            doutdr3 = _Int2eFunction.apply(*ctx.saved_tensors, wrapper, opsname,
-                                           sh1, sh2, sh3, sh4)  # (*outshape, NDIM)
-            grad_r3 = -(grad_out.unsqueeze(-1) * doutdr3).view(-1, NDIM).sum(dim=0)
-
-        grad_r4 = None
-        if r4.requires_grad:
-            opsname = wrapper.get_int2e_deriv_shortname(opshortname, "r4")
-            doutdr4 = _Int2eFunction.apply(*ctx.saved_tensors, wrapper, opsname,
-                                           sh1, sh2, sh3, sh4)  # (*outshape, NDIM)
-            grad_r4 = -(grad_out.unsqueeze(-1) * doutdr4).view(-1, NDIM).sum(dim=0)
-
-        return grad_c1, grad_a1, grad_r1, grad_c2, grad_a2, grad_r2, \
-            grad_c3, grad_a3, grad_r3, grad_c4, grad_a4, grad_r4, \
-            None, None, None, None, None, None
 
 class _EvalGTO(torch.autograd.Function):
     @staticmethod

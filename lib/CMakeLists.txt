@@ -126,7 +126,7 @@ endif ()
 
 add_subdirectory(np_helper)
 add_subdirectory(gto)
-#add_subdirectory(vhf)
+add_subdirectory(vhf)
 #add_subdirectory(ao2mo)
 #add_subdirectory(mcscf)
 #add_subdirectory(cc)
