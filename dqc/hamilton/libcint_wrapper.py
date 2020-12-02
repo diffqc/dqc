@@ -1,8 +1,7 @@
 import os
 import re
 import ctypes
-from contextlib import contextmanager
-from typing import List, Tuple, Optional, Iterator
+from typing import List, Tuple, Optional
 import torch
 import numpy as np
 from dqc.utils.datastruct import AtomCGTOBasis
@@ -168,10 +167,6 @@ class LibcintWrapper(object):
         ]
         return coeffs * torch.sqrt(factor[angmom] * (2 * alphas) ** (angmom + 1.5))
 
-    @property
-    def ao_loc(self):
-        return self.shell_to_aoloc
-
     def overlap(self) -> torch.Tensor:
         return self._int1e("ovlp")
 
@@ -202,180 +197,60 @@ class LibcintWrapper(object):
     ################ integrals to construct the operator ################
     def _int1e(self, shortname: str, nuc: bool = False) -> torch.Tensor:
         # one electron integral (overlap, kinetic, and nuclear attraction)
-
-        shape = (self.nao_tot, self.nao_tot)
-        res = torch.empty(shape, dtype=self.dtype, device=self.device)
-        for i1 in range(self.nshells_tot):
-            c1, a1, r1 = self._get_params(i1)
-            slice1 = self._get_matrix_index(i1)
-
-            for i2 in range(i1, self.nshells_tot):
-                # get the parameters for backward propagation
-                c2, a2, r2 = self._get_params(i2)
-                slice2 = self._get_matrix_index(i2)
-
-                if nuc:
-                    # computing the nuclear attraction operator per atom
-                    # so that the gradient w.r.t. atom's position can be computed
-                    mat = torch.tensor(0.0, dtype=self.dtype, device=self.device)
-                    for ia in range(self._natoms):
-
-                        # with self._coord_to_centre_on_atom(ia):
-                        #     z = float(self._atm[ia, 0])
-                        #     mat = mat - z * _Int1eFunction.apply(
-                        #         c1, a1, r1 - atompos,
-                        #         c2, a2, r2 - atompos,
-                        #         self, "rinv", i1, i2)
-
-                        with self._all_atomz_are_zero_except(ia):
-                            atompos = self.allpos_params[ia]
-                            mat = mat + _Int1eFunction.apply(
-                                c1, a1, r1,
-                                c2, a2, r2,
-                                atompos,
-                                self, shortname, i1, i2)
-
-                    # # debugging code
-                    # mat2 = _Int1eFunction.apply(
-                    #     c1, a1, r1, c2, a2, r2,
-                    #     self.allpos_params,
-                    #     self, shortname, i1, i2)
-                    # assert torch.allclose(mat, mat2)
-
-                else:
-                    mat = _Int1eFunction.apply(
-                        c1, a1, r1, c2, a2, r2,
-                        self.allpos_params,
-                        self, shortname, i1, i2)
-
-                # apply symmetry
-                res[slice1, slice2] = mat
-                res[slice2, slice1] = mat.transpose(-2, -1)
-        return res
+        return _Int1eFunction.apply(
+            self.allcoeffs_params, self.allalphas_params, self.allpos_params,
+            self.allpos_params,
+            self, shortname)
 
     def _int2e(self) -> torch.Tensor:
         return self.calc_all_int2e_internal("")
 
-    @contextmanager
-    def _all_atomz_are_zero_except(self, ia: int) -> Iterator:
-        try:
-            _atm_backup = self._atm[:, 0].copy()
-            self._atm[:, 0] = 0
-            self._atm[ia, 0] = _atm_backup[ia]
-            yield
-        finally:
-            self._atm[:, 0] = _atm_backup[:]
+    ################ one electrons integral for all basis pairs ################
+    def calc_all_int1e_internal(self, shortname: str) -> torch.Tensor:
+        # calculation of all basis pairs of 1-electron integrals
+        # no gradient is propagated
+        # return (ndim^n, nao, nao)
 
-    @contextmanager
-    def _coord_to_centre_on_atom(self, ia: int) -> Iterator:
-        try:
-            # set the coordinates to centre on atoms ia
-            idx = self._atm[ia, 1]
-            atompos = self._env[idx: idx + NDIM]
-            self._env[PTR_RINV_ORIG: PTR_RINV_ORIG + NDIM] = atompos
-            yield
-        finally:
-            # restore the central coordinate into 0.0
-            self._env[PTR_RINV_ORIG: PTR_RINV_ORIG + NDIM] = 0.0
-
-    def _get_params(self, sh1: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        # getting the parameters of the sh1-th shell (i.e. coeffs, alphas, and pos)
-        ib1l = self.shell_to_gauss[sh1]
-        ib1u = self.shell_to_gauss[sh1 + 1]
-        c1 = self.allcoeffs_params[ib1l:ib1u]
-        a1 = self.allalphas_params[ib1l:ib1u]
-        r1 = self.allpos_params[self.shell_to_atom[sh1]]
-        return c1, a1, r1
-
-    def _get_matrix_index(self, sh1: int) -> slice:
-        # getting the lower and upper indices of the sh1-th shell in the contracted
-        # integral matrix
-        return slice(self.shell_to_aoloc[sh1], self.shell_to_aoloc[sh1 + 1], None)
-
-    ################ one electron integral for a basis pair ################
-    def calc_integral_1e_internal(self, shortname: str, sh1: int, sh2: int) -> torch.Tensor:
-        # calculate the one-electron integral (type depends on the shortname)
-        # for basis in shell sh1 & sh2 using libcint
-
-        # NOTE: this function should only be called from this file only.
-        # it does not propagate gradient.
-
-        # check if the operation needs to be flipped (e.g. "nucip" flipped to be
-        # "ipnuc")
-        shortname, toflip = self._is_int1e_need_flip(shortname)
-        toflip = toflip and (sh1 != sh2)
-        if toflip:
-            sh1, sh2 = sh2, sh1
-
-        opname = self._get_int1e_name(shortname)
+        opname = self._get_all_intxe_name(1, shortname)
         operator = getattr(CINT, opname)
-        outshape = self._get_int1e_outshape(shortname, sh1, sh2)
+        optimizer = self._get_intxe_optimizer(opname)
 
-        c_shls = (ctypes.c_int * 2)(sh1, sh2)
+        # prepare the output
+        outshape, ncomp = self._get_all_intxe_outshape(1, shortname)
         out = np.empty(outshape, dtype=np.float64)
-        out_ctypes = out.ctypes.data_as(ctypes.c_void_p)
 
-        # calculate the integral
-        operator.restype = ctypes.c_double
-        operator(out_ctypes, c_shls, self.atm_ctypes, self.natm_ctypes,
-                 self.bas_ctypes, self.nbas_ctypes, self.env_ctypes)
+        shls_slice = (0, self.nshells_tot) * 2
+        drv = CGTO.GTOint2c
+        drv(operator,
+            out.ctypes.data_as(ctypes.c_void_p),
+            ctypes.c_int(ncomp),
+            ctypes.c_int(0),  # do not assume hermitian
+            (ctypes.c_int * len(shls_slice))(*shls_slice),
+            self.shell_to_aoloc.ctypes.data_as(ctypes.c_void_p),
+            optimizer,
+            self.atm_ctypes, self.natm_ctypes,
+            self.bas_ctypes, self.nbas_ctypes,
+            self.env_ctypes)
 
-        out_tensor = torch.tensor(out, dtype=self.dtype, device=self.device)
-
-        # flip the last two dimensions because the output of libcint is following
-        # fortran memory order, but we want to keep the spatial dimension as
-        # the first dimension
-        out_tensor = out_tensor.transpose(-2, -1)
-        if toflip:
-            out_tensor = out_tensor.transpose(-2, -1)
+        out = np.swapaxes(out, -2, -1)
+        # TODO: check if we need to do the lines below for 3rd order grad and higher
+        # if out.ndim > 2:
+        #     out = np.moveaxis(out, -3, 0)
+        out_tensor = torch.as_tensor(out, dtype=self.dtype, device=self.device)
         return out_tensor
-
-    def get_int1e_deriv_shortname(self, opshortname: str, derivmode: str) -> str:
-        if derivmode == "r1":
-            return "ip%s" % opshortname
-        elif derivmode == "r2":
-            return "%sip" % opshortname
-        else:
-            raise RuntimeError("Unknown derivmode: %s" % derivmode)
-
-    def _is_int1e_need_flip(self, shortname: str) -> Tuple[str, bool]:
-        # check if the integral needs to be flipped (e.g. "nucip" need to be
-        # flipped to "ipnuc" to access the integral from libcint)
-
-        # count the number of "ip" at the beginning and end of the string
-        n_ip_start = len(re.findall(r"^(?:ip)*(?:ip)?", shortname)[0]) // 2
-        n_ip_end = len(re.findall(r"(?:ip)?(?:ip)*$", shortname)[0]) // 2
-        flip = n_ip_end > n_ip_start
-        if flip:
-            sname = shortname[2 * n_ip_start: -2 * n_ip_end]
-            shortname = ("ip" * n_ip_end) + sname + ("ip" * n_ip_start)
-        return shortname, flip
-
-    def _get_int1e_name(self, shortname: str):
-        # get the full name of the integral 1 electron to be called in libcint
-        suffix = "sph" if self._spherical else "cart"
-        return "cint1e_%s_%s" % (shortname, suffix)
-
-    def _get_int1e_outshape(self, shortname: str, sh1: int, sh2: int) -> List[int]:
-        n_ip_start = len(re.findall(r"^(?:ip)*(?:ip)?", shortname)[0]) // 2
-        n_ip_end = len(re.findall(r"(?:ip)?(?:ip)*$", shortname)[0]) // 2
-        n_ip = n_ip_start + n_ip_end
-
-        # note that sh2 and sh1 is reversed because the output of libcint
-        # is following fortran order
-        return ([NDIM] * n_ip) + [self._nbasiscontr(sh2), self._nbasiscontr(sh1)]
 
     ################ two electrons integral for all basis pairs ################
     def calc_all_int2e_internal(self, shortname: str) -> torch.Tensor:
         # calculation of all 2-electron integrals
         # no gradient is propagated
+        # return (ndim^n, nao, nao, nao, nao)
 
-        opname = self._get_all_int2e_name(shortname)
+        opname = self._get_all_intxe_name(2, shortname)
         operator = getattr(CINT, opname)
-        optimizer = self._get_all_int2e_optimizer(opname)
+        optimizer = self._get_intxe_optimizer(opname)
 
         # prepare the output
-        outshape, ncomp = self._get_all_int2e_outshape(shortname)
+        outshape, ncomp = self._get_all_intxe_outshape(2, shortname)
         out = np.empty(outshape, dtype=np.float64)
 
         drv = CGTO.GTOnr2e_fill_drv
@@ -395,26 +270,28 @@ class LibcintWrapper(object):
         out_tensor = torch.as_tensor(out, dtype=self.dtype, device=self.device)
         return out_tensor
 
-    def _get_all_int2e_name(self, shortname: str) -> str:
+    ################ helpers for all pairs integrals ################
+    def _get_all_intxe_name(self, x: int, shortname: str) -> str:
         suffix = ("_" + shortname) if shortname != "" else shortname
         cartsph = "sph" if self._spherical else "cart"
-        return "int2e%s_%s" % (suffix, cartsph)
+        return "int%de%s_%s" % (x, suffix, cartsph)
 
-    def _get_all_int2e_optimizer(self, opname: str) -> ctypes.c_void_p:
+    def _get_intxe_optimizer(self, opname: str) -> ctypes.c_void_p:
         # setup the optimizer
         cintopt = ctypes.POINTER(ctypes.c_void_p)()
-        copt = getattr(CINT, "int2e_optimizer")
+        optname = opname.replace("_cart", "").replace("_sph", "") + "_optimizer"
+        copt = getattr(CINT, optname)
         copt(ctypes.byref(cintopt),
              self.atm_ctypes, self.natm_ctypes,
              self.bas_ctypes, self.nbas_ctypes, self.env_ctypes)
         opt = ctypes.cast(cintopt, _cintoptHandler)
         return opt
 
-    def _get_all_int2e_outshape(self, shortname: str) -> Tuple[Tuple[int, ...], int]:
-        n_ip_start = len(re.findall(r"^(?:ip)*(?:ip)?", shortname)[0]) // 2
-        n_ip_end = len(re.findall(r"(?:ip)?(?:ip)*$", shortname)[0]) // 2
+    def _get_all_intxe_outshape(self, x: int, shortname: str) -> Tuple[Tuple[int, ...], int]:
+        n_ip_start = _calc_pattern_occurence(shortname, "ip", at_start=True)
+        n_ip_end = _calc_pattern_occurence(shortname, "ip", at_start=False)
         n_ip = n_ip_start + n_ip_end
-        outshape = (NDIM, ) * n_ip + (self.nao_tot, ) * 4
+        outshape = (NDIM, ) * n_ip + (self.nao_tot, ) * (2 * x)
         ncomp = NDIM ** n_ip
         return outshape, ncomp
 
@@ -505,58 +382,68 @@ class _Int1eFunction(torch.autograd.Function):
     # wrapper class to provide the gradient of the one-e integrals
     @staticmethod
     def forward(ctx,  # type: ignore
-                c1: torch.Tensor, a1: torch.Tensor, r1: torch.Tensor,
-                c2: torch.Tensor, a2: torch.Tensor, r2: torch.Tensor,
-                ratom: torch.Tensor,
-                wrapper: LibcintWrapper, opshortname: str, sh1: int, sh2: int) -> \
-            torch.Tensor:  # type: ignore
-        # c_: (ngauss,)
-        # a_: (ngauss,)
-        # r_: (NDIM,)
-        # ratom: (NDIM,)
-        # they are not used in forward, but present in the argument so that
-        # the gradient can be propagated
-        out_tensor = wrapper.calc_integral_1e_internal(opshortname, sh1, sh2)
-        ctx.save_for_backward(c1, a1, r1, c2, a2, r2, ratom)
-        ctx.other_info = (wrapper, sh1, sh2, opshortname)
-        return out_tensor  # (*outshape)
+                allcoeffs: torch.Tensor, allalphas: torch.Tensor, allposs: torch.Tensor,
+                ratoms: torch.Tensor,
+                wrapper: LibcintWrapper, shortname: str) -> torch.Tensor:
+        # allcoeffs: (ngauss_tot,)
+        # allalphas: (ngauss_tot,)
+        # allposs: (natom, ndim)
+        # ratoms: (natom, ndim)
+
+        # those tensors are not used in the forward calculation, but required
+        # for backward propagation
+        out_tensor = wrapper.calc_all_int1e_internal(shortname)
+        ctx.save_for_backward(allcoeffs, allalphas, allposs, ratoms)
+        ctx.other_info = (wrapper, shortname)
+        return out_tensor  # (..., nao, nao)
 
     @staticmethod
     def backward(ctx, grad_out: torch.Tensor) -> Tuple[Optional[torch.Tensor], ...]:  # type: ignore
-        # grad_out: (*outshape)
-        c1, a1, r1, c2, a2, r2, ratom = ctx.saved_tensors
-        wrapper, sh1, sh2, opshortname = ctx.other_info
-        nuc_int = "nuc" in opshortname
-        grad_ratom_reqgrad = nuc_int and ratom.requires_grad
+        # grad_out: (..., nao, nao)
+        allcoeffs, allalphas, allposs, ratoms = ctx.saved_tensors
+        wrapper, shortname = ctx.other_info
+        nao = grad_out.shape[-1]
 
         # TODO: to be completed (???)
-        grad_c1: Optional[torch.Tensor] = None
-        grad_a1: Optional[torch.Tensor] = None
-        grad_c2: Optional[torch.Tensor] = None
-        grad_a2: Optional[torch.Tensor] = None
+        grad_allcoeffs: Optional[torch.Tensor] = None
+        grad_allalphas: Optional[torch.Tensor] = None
+        grad_ratoms: Optional[torch.Tensor] = None
 
-        grad_r1: Optional[torch.Tensor] = None
-        if grad_ratom_reqgrad or r1.requires_grad:
-            opsname = wrapper.get_int1e_deriv_shortname(opshortname, "r1")
-            doutdr1 = _Int1eFunction.apply(*ctx.saved_tensors, wrapper, opsname,
-                                           sh1, sh2)  # (NDIM, *outshape)
+        grad_allposs: Optional[torch.Tensor] = None
+        if allposs.requires_grad:
+            grad_allposs = torch.zeros(allposs.shape, dtype=allposs.dtype, device=allposs.device)  # (natom, ndim)
+            grad_allpossT = grad_allposs.transpose(-2, -1)  # (ndim, natom)
+
+            deriv_shortname  = _get_int1e_deriv_shortname(shortname, "r1")
+            deriv_shortnameT = _get_int1e_deriv_shortname(shortname, "r2")
+            dout_dpos = _Int1eFunction.apply(
+                *ctx.saved_tensors, wrapper, deriv_shortname)  # (ndim, ..., nao, nao)
+
+            # if deriv_shortname and deriv_shortnameT can be just flipped, then
+            # no need to calculate the other one
+            if _int1e_shortname_equiv(deriv_shortname, deriv_shortnameT):
+                dout_dposT = dout_dpos.transpose(-2, -1)
+            else:
+                dout_dposT = _Int1eFunction.apply(
+                    *ctx.saved_tensors, wrapper, deriv_shortnameT)
+
             # negative because the integral calculates the nabla w.r.t. the
             # spatial coordinate, not the basis central position
-            grad_r1 = -(grad_out * doutdr1).reshape(NDIM, -1).sum(dim=-1)
+            neg_grad_out = -grad_out
+            grad_dpos  = neg_grad_out * dout_dpos
+            grad_dposT = neg_grad_out * dout_dposT
+            ndim = dout_dpos.shape[0]
+            grad_dpos_j = grad_dpos .reshape(ndim, -1, nao, nao).sum(dim=-3).sum(dim=-1)  # (ndim, nao)
+            grad_dpos_i = grad_dposT.reshape(ndim, -1, nao).sum(dim=-2)
+            grad_dpos_ij = grad_dpos_i + grad_dpos_j
 
-        grad_r2: Optional[torch.Tensor] = None
-        if grad_ratom_reqgrad or r2.requires_grad:
-            opsname = wrapper.get_int1e_deriv_shortname(opshortname, "r2")
-            doutdr2 = _Int1eFunction.apply(*ctx.saved_tensors, wrapper, opsname,
-                                           sh1, sh2)
-            grad_r2 = -(grad_out * doutdr2).reshape(NDIM, -1).sum(dim=-1)
+            # grad_allpossT is only a view of grad_allposs, so the operation below
+            # also changes grad_allposs
+            ao_to_atom = wrapper.ao_to_atom.expand(ndim, -1)
+            grad_allpossT.scatter_add_(dim=-1, index=ao_to_atom, src=grad_dpos_ij)
 
-        grad_ratom: Optional[torch.Tensor] = None
-        if grad_ratom_reqgrad:
-            grad_ratom = -(grad_r1 + grad_r2)  # type: ignore
-
-        return grad_c1, grad_a1, grad_r1, grad_c2, grad_a2, grad_r2, grad_ratom, \
-            None, None, None, None
+        return grad_allcoeffs, grad_allalphas, grad_allposs, grad_ratoms, \
+            None, None
 
 class _EvalGTO(torch.autograd.Function):
     @staticmethod
@@ -611,3 +498,46 @@ class _EvalGTO(torch.autograd.Function):
 
         return grad_alphas, grad_coeffs, grad_pos, grad_rgrid, \
             None, None, None, None, None
+
+############### name derivation manager functions ###############
+def _get_int1e_deriv_shortname(shortname: str, derivmode: str) -> str:
+    # get the operation required for the derivation of the integration operator
+    if derivmode == "r1":
+        return "ip%s" % shortname
+    elif derivmode == "r2":
+        return "%sip" % shortname
+    else:
+        raise RuntimeError("Unknown derivmode: %s" % derivmode)
+
+def _int1e_shortname_equiv(s1: str, s2: str) -> bool:
+    # check if the shortname 1 and 2 is actually a transpose of each other
+    n_ip_start1 = _calc_pattern_occurence(s1, "ip", at_start=True)
+    n_ip_end1 = _calc_pattern_occurence(s1, "ip", at_start=False)
+    n_ip_start2 = _calc_pattern_occurence(s2, "ip", at_start=True)
+    n_ip_end2 = _calc_pattern_occurence(s2, "ip", at_start=False)
+    return min(n_ip_start1, n_ip_end1) == min(n_ip_start2, n_ip_end2) and \
+        max(n_ip_start1, n_ip_end1) == max(n_ip_start2, n_ip_end2)
+
+def _calc_pattern_occurence(s: str, pattern: str, at_start: bool) -> int:
+    # calculate the occurence of a pattern in string s at the start or at the end
+    # of the string
+    if at_start:
+        re_pattern = r"^(?:{pattern})*(?:{pattern})?".format(pattern=pattern)
+    else:
+        re_pattern = r"(?:{pattern})?(?:{pattern})*$".format(pattern=pattern)
+    return len(re.findall(re_pattern, s)[0]) // len(pattern)
+
+
+if __name__ == "__main__":
+    from dqc.api.loadbasis import loadbasis
+    dtype = torch.float64
+    bases = loadbasis("3:6-311++G**", dtype=dtype)
+    pos1 = torch.tensor([0.0, 0.0, 0.0], dtype=dtype)
+    pos2 = torch.tensor([0.0, 0.0, 1.0], dtype=dtype)
+    atom1 = AtomCGTOBasis(atomz=3, bases=bases, pos=pos1)
+    atom2 = AtomCGTOBasis(atomz=3, bases=bases, pos=pos2)
+    wrapper = LibcintWrapper([atom1, atom2], spherical=True)
+
+    out = wrapper.calc_all_int1e_internal("ipovlp")
+    print(out)
+    print(out.shape)
