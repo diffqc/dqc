@@ -1,7 +1,8 @@
 import os
 import re
 import ctypes
-from typing import List, Tuple, Optional
+from contextlib import contextmanager
+from typing import List, Tuple, Optional, Iterator
 import torch
 import numpy as np
 from dqc.utils.datastruct import AtomCGTOBasis
@@ -101,7 +102,7 @@ class LibcintWrapper(object):
     def _add_atom_and_basis(self, iatom: int, atombasis: AtomCGTOBasis) -> int:
         # construct the atom first
         assert atombasis.pos.numel() == NDIM, "Please report this bug in Github"
-        #                charge           ptr_coord       nucl model (unused for standard nucl model)
+        #                      charge           ptr_coord       nucl model (unused for standard nucl model)
         self._atm_list.append([atombasis.atomz, self._ptr_env, 1, self._ptr_env + NDIM, 0, 0])
         self._env_list.extend(atombasis.pos)
         self._ptr_env += NDIM
@@ -282,6 +283,16 @@ class LibcintWrapper(object):
         ncomp = NDIM ** n_ip
         return outshape, ncomp
 
+    @contextmanager
+    def _centre_on_r(self, ratom: torch.Tensor) -> Iterator:
+        # ratom: (ndim,)
+        try:
+            prev_centre = self._env[PTR_RINV_ORIG : PTR_RINV_ORIG + NDIM]
+            self._env[PTR_RINV_ORIG : PTR_RINV_ORIG + NDIM] = ratom.detach().numpy()
+            yield
+        finally:
+            self._env[PTR_RINV_ORIG : PTR_RINV_ORIG + NDIM] = prev_centre
+
     ################ evaluation of gto orbitals ################
     def _evalgto(self, shortname: str, rgrid: torch.Tensor) -> torch.Tensor:
         # expand ao_to_atom to have shape of (nao, ndim)
@@ -375,11 +386,18 @@ class _Int1eFunction(torch.autograd.Function):
         # allcoeffs: (ngauss_tot,)
         # allalphas: (ngauss_tot,)
         # allposs: (natom, ndim)
-        # ratoms: (natom, ndim)
+        # ratoms: (natom, ndim) if contains "nuc" or (ndim,) if contains "rinv"
+        #         ratoms is only meaningful if shortname contains "rinv" or "nuc"
+        # in "rinv", ratoms becomes the centre
 
         # those tensors are not used in the forward calculation, but required
         # for backward propagation
-        out_tensor = wrapper.calc_all_int1e_internal(shortname)
+        if "rinv" in shortname:
+            assert ratoms.ndim == 1 and ratoms.shape[0] == NDIM
+            with wrapper._centre_on_r(ratoms):
+                out_tensor = wrapper.calc_all_int1e_internal(shortname)
+        else:
+            out_tensor = wrapper.calc_all_int1e_internal(shortname)
         ctx.save_for_backward(allcoeffs, allalphas, allposs, ratoms)
         ctx.other_info = (wrapper, shortname)
         return out_tensor  # (..., nao, nao)
@@ -394,7 +412,6 @@ class _Int1eFunction(torch.autograd.Function):
         # TODO: to be completed (???)
         grad_allcoeffs: Optional[torch.Tensor] = None
         grad_allalphas: Optional[torch.Tensor] = None
-        grad_ratoms: Optional[torch.Tensor] = None
 
         grad_allposs: Optional[torch.Tensor] = None
         if allposs.requires_grad:
@@ -428,6 +445,54 @@ class _Int1eFunction(torch.autograd.Function):
             # also changes grad_allposs
             ao_to_atom = wrapper.ao_to_atom.expand(ndim, -1)
             grad_allpossT.scatter_add_(dim=-1, index=ao_to_atom, src=grad_dpos_ij)
+
+        # calculate the gradient of ratoms for "nuc" or "rinv" integration
+        grad_ratoms: Optional[torch.Tensor] = None
+        if ratoms.requires_grad and "nuc" in shortname:
+            # ratoms: (natoms, ndim)
+            natoms = ratoms.shape[0]
+            sname_rinv = shortname.replace("nuc", "rinv")
+            sname_deriv1 = _get_int1e_deriv_shortname(sname_rinv, "r1")
+            sname_deriv2 = _get_int1e_deriv_shortname(sname_rinv, "r2")
+            sname12_equiv = _int1e_shortname_equiv(sname_deriv1, sname_deriv2)
+
+            grad_ratoms = torch.empty_like(ratoms)
+            for i in range(natoms):
+                atomz = wrapper._atm[i, 0]  # 0 is the charge position in _atm
+
+                # calculate where the derivative is on the left basis
+                dout_datpos1 = _Int1eFunction.apply(
+                    allcoeffs, allalphas, allposs, ratoms[i],
+                    wrapper, sname_deriv1)  # (ndim, ..., nao, nao)
+
+                # calculate the factor where the derivative is on the right
+                if sname12_equiv:
+                    dout_datpos2 = dout_datpos1.transpose(-2, -1)
+                else:
+                    dout_datpos2 = _Int1eFunction.apply(
+                        allcoeffs, allalphas, allposs, ratoms[i],
+                        wrapper, sname_deriv2)
+
+                grad_datpos = grad_out * (dout_datpos1 + dout_datpos2)
+                grad_datpos = grad_datpos.reshape(grad_datpos.shape[0], -1).sum(dim=-1)
+                grad_ratoms[i] = -atomz * grad_datpos
+
+        elif ratoms.requires_grad and "rinv" in shortname:
+            # ratoms: (ndim)
+            sname_deriv1 = _get_int1e_deriv_shortname(shortname, "r1")
+            sname_deriv2 = _get_int1e_deriv_shortname(shortname, "r2")
+
+            dout_datpos1 = _Int1eFunction.apply(
+                *ctx.saved_tensors, wrapper, sname_deriv1)
+
+            if _int1e_shortname_equiv(sname_deriv1, sname_deriv2):
+                dout_datpos2 = dout_datpos1.transpose(-2, -1)
+            else:
+                dout_datpos2 = _Int1eFunction.apply(
+                    *ctx.saved_tensors, wrapper, sname_deriv2)
+
+            grad_datpos = grad_out * (dout_datpos1 + dout_datpos2)
+            grad_ratoms = grad_datpos.reshape(grad_datpos.shape[0], -1).sum(dim=-1)
 
         return grad_allcoeffs, grad_allalphas, grad_allposs, grad_ratoms, \
             None, None

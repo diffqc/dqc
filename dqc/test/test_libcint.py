@@ -86,7 +86,7 @@ def test_integral_vs_pyscf(int_type):
 # TODO: check nuclattr and elrep
 @pytest.mark.parametrize(
     "int_type",
-    ["overlap", "kinetic"]
+    ["overlap", "kinetic", "nuclattr"]
 )
 def test_integral_grad(int_type):
     dtype = torch.double
