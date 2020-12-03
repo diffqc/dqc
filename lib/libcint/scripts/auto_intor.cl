@@ -49,6 +49,7 @@
 
 (gen-cint "intor2.c"
   ;'("int2e"                     ( \, \| \, ))
+  '("int2e_ar12b"               ( \, \| r12 \| \, ))
   '("int2e_ig1"                 (#C(0 1) g \, \| \, ))
   '("int2e_gg1"                 (g g \, \| \, ))
   '("int2e_g1g2"                (-1 g \, \| g \, ))
@@ -134,6 +135,7 @@
 )
 
 (gen-cint "grad2.c"
+  '("int2e_ipar12b"             (nabla \, \| r12 \| \,))
   '("int2e_ip1"                 (nabla \, \| r12 \| \,))
   '("int2e_ip2"                 ( \, \| nabla \,))
   '("int2e_ipspsp1"             (nabla sigma dot p \, sigma dot p \| \,))
@@ -187,6 +189,9 @@
   '("int1e_ipsprinvspip"        ( nabla sigma dot p \| rinv sigma dot p \| nabla ))
   '("int2e_ipip1ipip2"          ( nabla nabla \, \| nabla nabla \, ))
   '("int2e_ipvip1ipvip2"        ( nabla \, nabla \| nabla \, nabla ))
+  '("int2e_ipipar12b"           ( nabla nabla \, \| r12 \| \,))
+  '("int2e_ipaipr12b"           ( nabla \, nabla \| r12 \| \,))
+  '("int2e_ipar12ipb"           ( nabla \, \| r12 \| nabla \,))
 )
 
 (gen-cint "int3c2e.c"
@@ -219,4 +224,8 @@
   '("int1e_ipipiprinv"          ( nabla nabla nabla \| rinv \| ))
   '("int1e_ipipnucip"           ( nabla nabla \| nuc \| nabla ))
   '("int1e_ipiprinvip"          ( nabla nabla \| rinv \| nabla ))
+  '("int2e_ipipipar12b"         ( nabla nabla nabla \, \| r12 \| \,))
+  '("int2e_ipipaipr12b"         ( nabla nabla \, nabla \| r12 \| \,))
+  '("int2e_ipipar12ipb"         ( nabla nabla \, \| r12 \| nabla \,))
+  '("int2e_ipaipr12ipb"         ( nabla \, nabla \| r12 \| nabla \,))
 )
