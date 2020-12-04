@@ -1,19 +1,23 @@
 import torch
-from typing import NamedTuple, Optional, Union, List
+from dataclasses import dataclass
+from typing import Optional, Union, List
 
 __all__ = ["CGTOBasis", "AtomCGTOBasis", "ValGrad"]
 
-class CGTOBasis(NamedTuple):
+@dataclass
+class CGTOBasis:
     angmom: int
     alphas: torch.Tensor  # (nbasis,)
     coeffs: torch.Tensor  # (nbasis,)
 
-class AtomCGTOBasis(NamedTuple):
+@dataclass
+class AtomCGTOBasis:
     atomz: int
     bases: List[CGTOBasis]
     pos: torch.Tensor  # (ndim,)
 
-class ValGrad(NamedTuple):
+@dataclass
+class ValGrad:
     value: torch.Tensor  # torch.Tensor of the value in the grid
     grad: Optional[torch.Tensor] = None  # torch.Tensor representing (gradx, grady, gradz) with shape
     # ``(..., 3)``
