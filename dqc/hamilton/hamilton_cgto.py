@@ -18,6 +18,7 @@ class HamiltonCGTO(BaseHamilton):
         self.is_ao_set = False
         self.is_grad_ao_set = False
         self.is_lapl_ao_set = False
+        self.xcfamily = 0
 
     def build(self):
         # get the matrices (all (nao, nao), except el_mat)
@@ -60,6 +61,9 @@ class HamiltonCGTO(BaseHamilton):
     ############### grid-related ###############
     def setup_grid(self, grid: BaseGrid, xcfamily: int = 0) -> None:
         # save the grid
+        assert 1 <= xcfamily <= 3
+
+        self.xcfamily = xcfamily
         self.grid = grid
         self.rgrid = grid.get_rgrid()
         assert grid.coord_type == "cart"
@@ -108,14 +112,16 @@ class HamiltonCGTO(BaseHamilton):
     ################ xc-related ################
     def get_vxc(self, xc: BaseXC, dm: torch.Tensor) -> xt.LinearOperator:
         # dm: (*BD, nao, nao)
+        assert xc.family == self.xcfamily, "Please redo setup_grid with xcfamily %d" % xc.family
+
         densinfo = self._dm2densinfo(dm, xc.family)  # value: (*BD, nr)
         potinfo = xc.get_vxc(densinfo)  # value: (*BD, nr)
 
         # get the linear operator from the potential
         vxc_linop = self.get_vext(potinfo.value)
-        if potinfo.grad is not None:
+        if self.xcfamily >= 2:  # GGA or MGGA
             vxc_linop = vxc_linop + self.get_grad_vext(potinfo.grad)
-        if potinfo.lapl is not None:
+        if self.xcfamily >= 3:  # MGGA
             vxc_linop = vxc_linop + self.get_lapl_vext(potinfo.lapl)
 
         return vxc_linop
@@ -152,7 +158,7 @@ class HamiltonCGTO(BaseHamilton):
         elif methodname == "get_overlap":
             return [prefix + "olp_mat"]
         elif methodname == "get_elrep":
-            return [prefix + "elrep_mat"]
+            return [prefix + "el_mat"]
         elif methodname == "ao_orb2dm":
             return []
         elif methodname == "get_vext":
@@ -161,6 +167,21 @@ class HamiltonCGTO(BaseHamilton):
             return [prefix + "basis_dvolume", prefix + "grad_basis"]
         elif methodname == "get_lapl_vext":
             return [prefix + "basis_dvolume", prefix + "lapl_basis"]
+        elif methodname == "get_vxc":
+            params = self.getparamnames("_dm2densinfo", prefix=prefix) + \
+                     self.getparamnames("get_vext", prefix=prefix)
+            if self.xcfamily >= 2:
+                params += self.getparamnames("get_grad_vext", prefix=prefix)
+            if self.xcfamily >= 3:
+                params += self.getparamnames("get_lapl_vext", prefix=prefix)
+            return params
+        elif methodname == "_dm2densinfo":
+            params = [prefix + "basis"]
+            if self.xcfamily >= 2:
+                params += [prefix + "grad_basis"]
+            if self.xcfamily >= 3:
+                params += [prefix + "lapl_basis"]
+            return params
         else:
             raise KeyError("getparamnames has no %s method" % methodname)
         # TODO: complete this

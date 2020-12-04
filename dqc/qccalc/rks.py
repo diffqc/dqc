@@ -45,8 +45,6 @@ class RKS(BaseQCCalc):
             assert vext.shape[-1] == system.get_grid().shape[-2]
             self.knvext_linop = self.knvext_linop + self.hamilton.get_vext(vext)
 
-        self.overlap_linop = self.hamilton.get_overlap()  # overlap linear operator
-
         # misc info
         self.dtype = self.knvext_linop.dtype
         self.device = self.knvext_linop.device
@@ -115,9 +113,6 @@ class RKS(BaseQCCalc):
     def aodm(self) -> torch.Tensor:
         return self._dm
 
-    def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
-        return []  # TODO: to complete
-
     def __dm2fock(self, dm: torch.Tensor) -> xt.LinearOperator:
         # construct the fock matrix from the density matrix
         elrep = self.hamilton.get_elrep(dm)  # (..., nao, nao)
@@ -134,7 +129,7 @@ class RKS(BaseQCCalc):
         return xitorch.linalg.lsymeig(
             A=fock,
             neig=self.norb,
-            M=self.overlap_linop,
+            M=self.hamilton.get_overlap(),
             **self.eigen_options)
 
     ######### self-consistent-param related #########
@@ -152,3 +147,26 @@ class RKS(BaseQCCalc):
     def __scp2scp(self, scp: torch.Tensor) -> torch.Tensor:
         dm = self.__scp2dm(scp)
         return self.__dm2scp(dm)
+
+    def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
+        if methodname == "__scp2scp":
+            return self.getparamnames("__scp2dm", prefix=prefix) + \
+                   self.getparamnames("__dm2scp", prefix=prefix)
+        elif methodname == "__scp2dm":
+            return self.getparamnames("__fock2dm", prefix=prefix)
+        elif methodname == "__dm2scp":
+            return self.getparamnames("__dm2fock", prefix=prefix)
+        elif methodname == "__fock2dm":
+            return self.getparamnames("__diagonalize_fock", prefix=prefix) + \
+                   self.hamilton.getparamnames("ao_orb2dm", prefix=prefix + "hamilton.") + \
+                   [prefix + "orb_weight"]
+        elif methodname == "__dm2fock":
+            hprefix = prefix + "hamilton."
+            return self.hamilton.getparamnames("get_elrep", prefix=hprefix) + \
+                   self.hamilton.getparamnames("get_vxc", prefix=hprefix) + \
+                   self.knvext_linop._getparamnames(prefix=prefix + "knvext_linop.")
+        elif methodname == "__diagonalize_fock":
+            return self.hamilton.getparamnames("get_overlap", prefix=prefix + "hamilton.")
+        else:
+            raise KeyError("Method %s has no paramnames set" % methodname)
+        return []  # TODO: to complete
