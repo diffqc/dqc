@@ -19,7 +19,7 @@ BLKSIZE = 128  # same as lib/gto/grid_ao_drv.c
 
 # load the libcint
 _curpath = os.path.dirname(os.path.abspath(__file__))
-_libcint_path = os.path.join(_curpath, "../../submodules/libcint/build/libcint.so")
+_libcint_path = os.path.join(_curpath, "../../lib/libcint/build/libcint.so")
 _libcgto_path = os.path.join(_curpath, "../../lib/libcgto.so")
 CINT = ctypes.cdll.LoadLibrary(_libcint_path)
 CGTO = ctypes.cdll.LoadLibrary(_libcgto_path)
@@ -165,7 +165,7 @@ class LibcintWrapper(object):
         return self._int1e("nuc", True)
 
     def elrep(self) -> torch.Tensor:
-        return self._int2e()
+        return self._int2e("ar12b")
 
     def eval_gto(self, rgrid: torch.Tensor) -> torch.Tensor:
         # rgrid: (ngrid, ndim)
@@ -190,8 +190,11 @@ class LibcintWrapper(object):
             self.allpos_params,
             self, shortname)
 
-    def _int2e(self) -> torch.Tensor:
-        return self.calc_all_int2e_internal("")
+    def _int2e(self, shortname: str) -> torch.Tensor:
+        # two electron integral (coulomb)
+        return _Int2eFunction.apply(
+            self.allcoeffs_params, self.allalphas_params, self.allpos_params,
+            self, shortname)
 
     ################ one electrons integral for all basis pairs ################
     def calc_all_int1e_internal(self, shortname: str) -> torch.Tensor:
@@ -255,6 +258,9 @@ class LibcintWrapper(object):
             self.bas_ctypes, self.nbas_ctypes,
             self.env_ctypes)
 
+        # # reverse the last 4 axes
+        # out = np.swapaxes(out, -4, -2)
+        # out = np.swapaxes(out, -3, -1)
         out_tensor = torch.as_tensor(out, dtype=self.dtype, device=self.device)
         return out_tensor
 
@@ -276,9 +282,7 @@ class LibcintWrapper(object):
         return opt
 
     def _get_all_intxe_outshape(self, x: int, shortname: str) -> Tuple[Tuple[int, ...], int]:
-        n_ip_start = _calc_pattern_occurence(shortname, "ip", at_start=True)
-        n_ip_end = _calc_pattern_occurence(shortname, "ip", at_start=False)
-        n_ip = n_ip_start + n_ip_end
+        n_ip = _calc_pattern_occurence(shortname, "ip")
         outshape = (NDIM, ) * n_ip + (self.nao_tot, ) * (2 * x)
         ncomp = NDIM ** n_ip
         return outshape, ncomp
@@ -415,7 +419,7 @@ class _Int1eFunction(torch.autograd.Function):
 
         grad_allposs: Optional[torch.Tensor] = None
         if allposs.requires_grad:
-            grad_allposs = torch.zeros(allposs.shape, dtype=allposs.dtype, device=allposs.device)  # (natom, ndim)
+            grad_allposs = torch.zeros_like(allposs)  # (natom, ndim)
             grad_allpossT = grad_allposs.transpose(-2, -1)  # (ndim, natom)
 
             deriv_shortname  = _get_int1e_deriv_shortname(shortname, "r1")
@@ -497,6 +501,100 @@ class _Int1eFunction(torch.autograd.Function):
         return grad_allcoeffs, grad_allalphas, grad_allposs, grad_ratoms, \
             None, None
 
+class _Int2eFunction(torch.autograd.Function):
+    # wrapper class to provide the gradient of the one-e integrals
+    @staticmethod
+    def forward(ctx,  # type: ignore
+                allcoeffs: torch.Tensor, allalphas: torch.Tensor, allposs: torch.Tensor,
+                wrapper: LibcintWrapper, shortname: str) -> torch.Tensor:
+        # allcoeffs: (ngauss_tot,)
+        # allalphas: (ngauss_tot,)
+        # allposs: (natom, ndim)
+
+        out_tensor = wrapper.calc_all_int2e_internal(shortname)  # (..., nao^4)
+        ctx.save_for_backward(allcoeffs, allalphas, allposs)
+        ctx.other_info = (wrapper, shortname)
+        return out_tensor  # (..., nao^4)
+
+    @staticmethod
+    def backward(ctx, grad_out: torch.Tensor) -> Tuple[Optional[torch.Tensor], ...]:  # type: ignore
+        allcoeffs, allalphas, allposs = ctx.saved_tensors
+        wrapper, shortname = ctx.other_info
+        nao = grad_out.shape[-1]
+
+        # TODO: to be completed (???)
+        grad_allcoeffs: Optional[torch.Tensor] = None
+        grad_allalphas: Optional[torch.Tensor] = None
+
+        # calculate the gradient w.r.t. positions
+        grad_allposs: Optional[torch.Tensor] = None
+        if allposs.requires_grad:
+            grad_allposs = torch.zeros_like(allposs)  # (natom, ndim)
+            grad_allpossT = grad_allposs.transpose(-2, -1)  # (ndim, natom)
+
+            sname_deriv_a1 = _get_int2e_deriv_shortname(shortname, "ra1")
+            sname_deriv_a2 = _get_int2e_deriv_shortname(shortname, "ra2")
+            sname_deriv_b1 = _get_int2e_deriv_shortname(shortname, "rb1")
+            sname_deriv_b2 = _get_int2e_deriv_shortname(shortname, "rb2")
+
+            dout_dpos_a1 = _Int2eFunction.apply(
+                *ctx.saved_tensors, wrapper, sname_deriv_a1)  # (ndim, ..., nao^4)
+
+            # calculate the derivative at the left's 2nd position
+            axes_relation_a12 = _int2e_shortname_equiv(sname_deriv_a1, sname_deriv_a2)
+            if axes_relation_a12 is not None:
+                dout_dpos_a2 = _transpose(dout_dpos_a1, axes_relation_a12)
+            else:
+                dout_dpos_a2 = _Int2eFunction.apply(
+                    *ctx.saved_tensors, wrapper, sname_deriv_a2)  # (ndim, ..., nao^4)
+
+            # calculate the derivative at the right's 1st position
+            axes_relation_a1b1 = _int2e_shortname_equiv(sname_deriv_a1, sname_deriv_b1)
+            axes_relation_a2b1 = _int2e_shortname_equiv(sname_deriv_a2, sname_deriv_b1)
+            if axes_relation_a1b1 is not None:
+                dout_dpos_b1 = _transpose(dout_dpos_a1, axes_relation_a1b1)
+            elif axes_relation_a2b1 is not None:
+                dout_dpos_b1 = _transpose(dout_dpos_a2, axes_relation_a2b1)
+            else:
+                dout_dpos_b1 = _Int2eFunction.apply(
+                    *ctx.saved_tensors, wrapper, sname_deriv_b1)  # (ndim, ..., nao^4)
+
+            # calculate the derivative at the right's 2nd
+            axes_relation_b12  = _int2e_shortname_equiv(sname_deriv_b1, sname_deriv_b2)
+            axes_relation_a1b2 = _int2e_shortname_equiv(sname_deriv_a1, sname_deriv_b2)
+            axes_relation_a2b2 = _int2e_shortname_equiv(sname_deriv_a2, sname_deriv_b2)
+            if axes_relation_b12 is not None:
+                dout_dpos_b2 = _transpose(dout_dpos_b1, axes_relation_b12)
+            elif axes_relation_a1b2 is not None:
+                dout_dpos_b2_2 = _transpose(dout_dpos_a1, axes_relation_a1b2)
+            elif axes_relation_a2b2 is not None:
+                dout_dpos_b2 = _transpose(dout_dpos_a2, axes_relation_a2b2)
+            else:
+                dout_dpos_b2 = _Int2eFunction.apply(
+                    *ctx.saved_tensors, wrapper, sname_deriv_b2)  # (ndim, ..., nao^4)
+
+            # negative because the integral calculates the nabla w.r.t. the
+            # spatial coordinate, not the basis central position
+            neg_grad_out = -grad_out
+            grad_dpos_a1 = neg_grad_out * dout_dpos_a1
+            grad_dpos_a2 = neg_grad_out * dout_dpos_a2
+            grad_dpos_b1 = neg_grad_out * dout_dpos_b1
+            grad_dpos_b2 = neg_grad_out * dout_dpos_b2
+            ndim = dout_dpos_a1.shape[0]
+            shape = (ndim, -1, nao, nao, nao, nao)
+            # (ndim, nao)
+            grad_pos_a1 = torch.einsum("dzijkl->di", grad_dpos_a1.reshape(*shape))
+            grad_pos_a2 = torch.einsum("dzijkl->dj", grad_dpos_a2.reshape(*shape))
+            grad_pos_b1 = torch.einsum("dzijkl->dk", grad_dpos_b1.reshape(*shape))
+            grad_pos_b2 = torch.einsum("dzijkl->dl", grad_dpos_b2.reshape(*shape))
+            grad_pos_all = grad_pos_a1 + grad_pos_a2 + grad_pos_b1 + grad_pos_b2
+
+            ao_to_atom = wrapper.ao_to_atom.expand(ndim, -1)
+            grad_allpossT.scatter_add_(dim=-1, index=ao_to_atom, src=grad_pos_all)
+
+        return grad_allcoeffs, grad_allalphas, grad_allposs, \
+            None, None
+
 class _EvalGTO(torch.autograd.Function):
     @staticmethod
     def forward(ctx,  # type: ignore
@@ -564,32 +662,99 @@ def _get_int1e_deriv_shortname(shortname: str, derivmode: str) -> str:
 def _int1e_shortname_equiv(s1: str, s2: str) -> bool:
     # check if the shortname 1 and 2 is actually a transpose of each other
     n_ip_start1 = _calc_pattern_occurence(s1, "ip", at_start=True)
-    n_ip_end1 = _calc_pattern_occurence(s1, "ip", at_start=False)
+    n_ip_end1 = _calc_pattern_occurence(s1, "ip", at_end=True)
     n_ip_start2 = _calc_pattern_occurence(s2, "ip", at_start=True)
-    n_ip_end2 = _calc_pattern_occurence(s2, "ip", at_start=False)
+    n_ip_end2 = _calc_pattern_occurence(s2, "ip", at_end=True)
     return min(n_ip_start1, n_ip_end1) == min(n_ip_start2, n_ip_end2) and \
         max(n_ip_start1, n_ip_end1) == max(n_ip_start2, n_ip_end2)
 
-def _calc_pattern_occurence(s: str, pattern: str, at_start: bool) -> int:
+def _get_int2e_deriv_shortname(shortname: str, derivmode: str) -> str:
+    if derivmode == "ra1":
+        return "ip%s" % shortname
+    elif derivmode == "ra2":
+        # insert after the first "a"
+        idx_a = shortname.find("a")
+        return shortname[:idx_a + 1] + "ip" + shortname[idx_a + 1:]
+    elif derivmode == "rb1":
+        # insert before the last "b"
+        idx_b = shortname.rfind("b")
+        return shortname[:idx_b] + "ip" + shortname[idx_b:]
+    elif derivmode == "rb2":
+        return "%sip" % shortname
+    else:
+        raise RuntimeError("Unknown derivmode: %s" % derivmode)
+
+def _int2e_shortname_equiv(s1: str, s2: str) -> Optional[List[Tuple[int, int]]]:
+    # check if the integration s2 can be achieved by transposing s1
+    # returns None if it cannot.
+    # returns the list of two dims if it can for the transpose-path of s1
+    # to get the same result as s2
+    p1 = _int2e_parse_pattern(s1, "ip")
+    p2 = _int2e_parse_pattern(s2, "ip")
+    res: List[Tuple[int, int]] = []
+    offset = 100
+    l1 = max(p1[0], p1[1]) * offset + min(p1[0], p1[1])
+    r1 = max(p1[2], p1[3]) * offset + min(p1[2], p1[3])
+    l2 = max(p2[0], p2[1]) * offset + min(p2[0], p2[1])
+    r2 = max(p2[2], p2[3]) * offset + min(p2[2], p2[3])
+    ll_equal = l1 == l2
+    rr_equal = r1 == r2
+    lr_equal = l1 == r2
+    rl_equal = r1 == l2
+
+    # check if it cannot be matched
+    if not ((ll_equal and rr_equal) or (lr_equal and rl_equal)):
+        return None
+
+    if not (ll_equal and rr_equal):  # (lr_equal and rl_equal)
+        # swap the right and half of pattern 2
+        res.extend([(-4, -2), (-3, -1)])
+        if p1[0] != p2[2]:
+            res.append((-1, -2))  # swap the right part
+        if p1[2] != p2[0]:
+            res.append((-3, -4))  # swap the left part
+    else:  # (ll_equal and rr_equal)
+        if p1[0] != p2[0]:
+            res.append((-3, -4))  # swap the left part
+        if p1[2] != p2[2]:
+            res.append((-1, -2))  # swap the right part
+    return res
+
+def _int2e_parse_pattern(s: str, pattern: str) -> List[int]:
+    s = s.replace("r12", "|").replace("a", "|").replace("b", "|")
+    return [_calc_pattern_occurence(c, pattern) for c in s.split("|")]
+
+def _calc_pattern_occurence(s: str, pattern: str,
+                            at_start: bool = False, at_end: bool = False) -> int:
     # calculate the occurence of a pattern in string s at the start or at the end
     # of the string
     if at_start:
         re_pattern = r"^(?:{pattern})*(?:{pattern})?".format(pattern=pattern)
-    else:
+        return len(re.findall(re_pattern, s)[0]) // len(pattern)
+    elif at_end:
         re_pattern = r"(?:{pattern})?(?:{pattern})*$".format(pattern=pattern)
-    return len(re.findall(re_pattern, s)[0]) // len(pattern)
+        return len(re.findall(re_pattern, s)[0]) // len(pattern)
+    else:
+        re_pattern = r"({pattern})".format(pattern=pattern)
+        return len(re.findall(re_pattern, s))
 
+def _transpose(a: torch.Tensor, axes: List[Tuple[int, int]]) -> torch.Tensor:
+    # perform the transpose of two axes for tensor a
+    for axis2 in axes:
+        a = a.transpose(*axis2)
+    return a
 
 if __name__ == "__main__":
-    from dqc.api.loadbasis import loadbasis
-    dtype = torch.float64
-    bases = loadbasis("3:6-311++G**", dtype=dtype)
-    pos1 = torch.tensor([0.0, 0.0, 0.0], dtype=dtype)
-    pos2 = torch.tensor([0.0, 0.0, 1.0], dtype=dtype)
-    atom1 = AtomCGTOBasis(atomz=3, bases=bases, pos=pos1)
-    atom2 = AtomCGTOBasis(atomz=3, bases=bases, pos=pos2)
-    wrapper = LibcintWrapper([atom1, atom2], spherical=True)
-
-    out = wrapper.calc_all_int1e_internal("ipovlp")
-    print(out)
-    print(out.shape)
+    print(_int2e_shortname_equiv("ipar12b", "ipar12b"))
+    # from dqc.api.loadbasis import loadbasis
+    # dtype = torch.float64
+    # bases = loadbasis("3:6-311++G**", dtype=dtype)
+    # pos1 = torch.tensor([0.0, 0.0, 0.0], dtype=dtype)
+    # pos2 = torch.tensor([0.0, 0.0, 1.0], dtype=dtype)
+    # atom1 = AtomCGTOBasis(atomz=3, bases=bases, pos=pos1)
+    # atom2 = AtomCGTOBasis(atomz=3, bases=bases, pos=pos2)
+    # wrapper = LibcintWrapper([atom1, atom2], spherical=True)
+    #
+    # out = wrapper.calc_all_int1e_internal("ipovlp")
+    # print(out)
+    # print(out.shape)
