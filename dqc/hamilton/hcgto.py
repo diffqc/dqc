@@ -169,7 +169,7 @@ class HamiltonCGTO(BaseHamilton):
             return [prefix + "basis_dvolume", prefix + "lapl_basis"]
         elif methodname == "get_vxc":
             params = self.getparamnames("_dm2densinfo", prefix=prefix) + \
-                     self.getparamnames("get_vext", prefix=prefix)
+                self.getparamnames("get_vext", prefix=prefix)
             if self.xcfamily >= 2:
                 params += self.getparamnames("get_grad_vext", prefix=prefix)
             if self.xcfamily >= 3:

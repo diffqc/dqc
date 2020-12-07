@@ -291,11 +291,11 @@ class LibcintWrapper(object):
     def _centre_on_r(self, ratom: torch.Tensor) -> Iterator:
         # ratom: (ndim,)
         try:
-            prev_centre = self._env[PTR_RINV_ORIG : PTR_RINV_ORIG + NDIM]
-            self._env[PTR_RINV_ORIG : PTR_RINV_ORIG + NDIM] = ratom.detach().numpy()
+            prev_centre = self._env[PTR_RINV_ORIG: PTR_RINV_ORIG + NDIM]
+            self._env[PTR_RINV_ORIG: PTR_RINV_ORIG + NDIM] = ratom.detach().numpy()
             yield
         finally:
-            self._env[PTR_RINV_ORIG : PTR_RINV_ORIG + NDIM] = prev_centre
+            self._env[PTR_RINV_ORIG: PTR_RINV_ORIG + NDIM] = prev_centre
 
     ################ evaluation of gto orbitals ################
     def _evalgto(self, shortname: str, rgrid: torch.Tensor) -> torch.Tensor:
