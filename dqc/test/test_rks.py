@@ -37,6 +37,9 @@ def test_rks_energy(xc, atomzs, dist, energy_true):
     [("lda,", *atomz_pos, grad2) for (atomz_pos, grad2) in product(atomzs_poss, [False, True])]
 )
 def test_rks_grad_pos(xc, atomzs, dist, grad2):
+    # test grad of energy w.r.t. atom's position
+
+    torch.manual_seed(123)
     # set stringent requirement for grad2
     bck_options = None if not grad2 else {
         "rtol": 1e-9,
