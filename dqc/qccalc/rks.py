@@ -68,9 +68,15 @@ class RKS(BaseQCCalc):
                 "method": "broyden1",
                 "alpha": -0.5,
                 "maxiter": 50,
+                # "verbose": True,
             }
         if bck_options is None:
-            bck_options = {}  # let xitorch decide
+            bck_options = {
+                # NOTE: it seems like in most cases the jacobian matrix is posdef
+                # if it is not the case, we can just remove the line below
+                "posdef": True,
+                # "verbose": True,
+            }
 
         # save the eigen_options for use in diagonalization
         self.eigen_options = eigen_options
@@ -85,8 +91,7 @@ class RKS(BaseQCCalc):
         scp = xitorch.optimize.equilibrium(
             fcn=self.__scp2scp,
             y0=scp0,
-            bck_options={"verbose": True, "posdef": True, **bck_options},
-            verbose=True,
+            bck_options={**bck_options},
             **fwd_options)
 
         # post-process parameters
