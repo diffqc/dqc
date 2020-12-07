@@ -575,18 +575,13 @@ class _Int2eFunction(torch.autograd.Function):
 
             # negative because the integral calculates the nabla w.r.t. the
             # spatial coordinate, not the basis central position
-            neg_grad_out = -grad_out
-            grad_dpos_a1 = neg_grad_out * dout_dpos_a1
-            grad_dpos_a2 = neg_grad_out * dout_dpos_a2
-            grad_dpos_b1 = neg_grad_out * dout_dpos_b1
-            grad_dpos_b2 = neg_grad_out * dout_dpos_b2
             ndim = dout_dpos_a1.shape[0]
             shape = (ndim, -1, nao, nao, nao, nao)
-            # (ndim, nao)
-            grad_pos_a1 = torch.einsum("dzijkl->di", grad_dpos_a1.reshape(*shape))
-            grad_pos_a2 = torch.einsum("dzijkl->dj", grad_dpos_a2.reshape(*shape))
-            grad_pos_b1 = torch.einsum("dzijkl->dk", grad_dpos_b1.reshape(*shape))
-            grad_pos_b2 = torch.einsum("dzijkl->dl", grad_dpos_b2.reshape(*shape))
+            grad_out2 = grad_out.reshape(*shape[1:])
+            grad_pos_a1 = -torch.einsum("dzijkl,zijkl->di", dout_dpos_a1.reshape(*shape), grad_out2)
+            grad_pos_a2 = -torch.einsum("dzijkl,zijkl->dj", dout_dpos_a2.reshape(*shape), grad_out2)
+            grad_pos_b1 = -torch.einsum("dzijkl,zijkl->dk", dout_dpos_b1.reshape(*shape), grad_out2)
+            grad_pos_b2 = -torch.einsum("dzijkl,zijkl->dl", dout_dpos_b2.reshape(*shape), grad_out2)
             grad_pos_all = grad_pos_a1 + grad_pos_a2 + grad_pos_b1 + grad_pos_b2
 
             ao_to_atom = wrapper.ao_to_atom.expand(ndim, -1)
