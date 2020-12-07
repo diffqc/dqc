@@ -3,7 +3,7 @@ import torch
 import pytest
 import warnings
 from dqc.api.loadbasis import loadbasis
-from dqc.hamilton.libcint_wrapper import LibcintWrapper
+from dqc.hamilton.lcintwrap import LibcintWrapper
 from dqc.utils.datastruct import AtomCGTOBasis
 
 # import pyscf

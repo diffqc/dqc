@@ -2,7 +2,7 @@ from typing import List, Union, Optional, Tuple
 import torch
 import numpy as np
 from dqc.hamilton.base_hamilton import BaseHamilton
-from dqc.hamilton.hamilton_cgto import HamiltonCGTO
+from dqc.hamilton.hcgto import HamiltonCGTO
 from dqc.system.base_system import BaseSystem
 from dqc.grid.base_grid import BaseGrid
 from dqc.grid.radial_grid import RadialGrid

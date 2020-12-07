@@ -2,7 +2,7 @@ from typing import List
 import torch
 import xitorch as xt
 from dqc.hamilton.base_hamilton import BaseHamilton
-from dqc.hamilton.libcint_wrapper import LibcintWrapper
+from dqc.hamilton.lcintwrap import LibcintWrapper
 from dqc.utils.datastruct import AtomCGTOBasis, ValGrad
 from dqc.grid.base_grid import BaseGrid
 from dqc.xc.base_xc import BaseXC
