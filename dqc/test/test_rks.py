@@ -3,6 +3,8 @@ import torch
 import pytest
 from dqc.qccalc.rks import RKS
 from dqc.system.mol import Mol
+from dqc.xc.base_xc import BaseXC
+from dqc.utils.datastruct import ValGrad
 
 dtype = torch.float64
 
@@ -80,6 +82,47 @@ def test_rks_grad_vext(xc, atomzs, dist, vext_p):
 
     vext_params = torch.tensor(vext_p, dtype=dtype).requires_grad_()
     torch.autograd.gradcheck(get_energy, (vext_params,))
+
+class PseudoLDA(BaseXC):
+    def __init__(self, a, p):
+        self.a = a
+        self.p = p
+
+    @property
+    def family(self):
+        return 1
+
+    def get_vxc(self, densinfo):
+        rho = densinfo.value.abs() + 1e-15  # safeguarding from nan
+        potval = self.a * self.p * rho ** (self.p - 1)
+        return ValGrad(value=potval)
+
+    def get_edensityxc(self, densinfo):
+        rho = densinfo.value.abs() + 1e-15  # safeguarding from nan
+        return self.a * rho ** self.p
+
+    def getparamnames(self, methodname, prefix=""):
+        return [prefix + "a", prefix + "p"]
+
+@pytest.mark.parametrize(
+    "xc,atomzs,dist,vxc_a0,vxc_p0",
+    [("lda,", *atomz_pos, -0.7385587663820223, 4. / 3) for atomz_pos in atomzs_poss]
+)
+def test_rks_grad_vxc(xc, atomzs, dist, vxc_a0, vxc_p0):
+    # check if the gradients w.r.t. vxc parameters are obtained correctly
+    poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist
+    mol = Mol((atomzs, poss), basis="3-21G", dtype=dtype, grid=3)
+    mol.setup_grid()
+
+    def get_energy(vxc_a, vxc_p):
+        xc = PseudoLDA(vxc_a, vxc_p)
+        qc = RKS(mol, xc=xc).run()
+        ene = qc.energy()
+        return ene
+
+    vxc_a = torch.tensor(vxc_a0, dtype=dtype).requires_grad_()
+    vxc_p = torch.tensor(vxc_p0, dtype=dtype).requires_grad_()
+    torch.autograd.gradcheck(get_energy, (vxc_a, vxc_p))
 
 if __name__ == "__main__":
     import time

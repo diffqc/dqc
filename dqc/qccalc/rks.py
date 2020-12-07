@@ -1,4 +1,4 @@
-from typing import Optional, Mapping, Any, Tuple, List
+from typing import Optional, Mapping, Any, Tuple, List, Union
 import torch
 import xitorch as xt
 import xitorch.linalg
@@ -23,17 +23,20 @@ class RKS(BaseQCCalc):
         ``(*BV, system.get_grid().shape[-2])``
     """
 
-    def __init__(self, system: BaseSystem, xc: str,
+    def __init__(self, system: BaseSystem, xc: Union[str, BaseXC],
                  vext: Optional[torch.Tensor] = None):
         # get the xc object
-        self.xc: BaseXC = get_xc(xc, polarized=False)
+        if isinstance(xc, str):
+            self.xc: BaseXC = get_xc(xc, polarized=False)
+        else:
+            self.xc = xc
         self.system = system
 
         # build and setup basis and grid
         self.system.setup_grid()
         self.hamilton = system.get_hamiltonian()
         self.hamilton.build()
-        self.hamilton.setup_grid(system.get_grid(), self.xc.family)
+        self.hamilton.setup_grid(system.get_grid(), self.xc)
 
         # get the orbital info
         self.orb_weight = system.get_orbweight()  # (norb,)
@@ -107,10 +110,10 @@ class RKS(BaseQCCalc):
         e_eivals = torch.sum(eivals * self.orb_weight, dim=-1)
 
         # get the energy from xc
-        e_exc = self.hamilton.get_exc(self.xc, self._dm)
+        e_exc = self.hamilton.get_exc(self._dm)
 
         # get the energy from xc potential
-        vxc = self.hamilton.get_vxc(self.xc, self._dm)
+        vxc = self.hamilton.get_vxc(self._dm)
         e_vxc = torch.einsum("...rc,c,...rc->...", vxc.mm(eivecs), self.orb_weight, eivecs)
 
         # get the energy from electron repulsion
@@ -127,7 +130,7 @@ class RKS(BaseQCCalc):
     def __dm2fock(self, dm: torch.Tensor) -> xt.LinearOperator:
         # construct the fock matrix from the density matrix
         elrep = self.hamilton.get_elrep(dm)  # (..., nao, nao)
-        vxc = self.hamilton.get_vxc(self.xc, dm)
+        vxc = self.hamilton.get_vxc(dm)
         return self.knvext_linop + elrep + vxc
 
     def __fock2dm(self, fock: xt.LinearOperator) -> torch.Tensor:

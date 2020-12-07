@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 import torch
 import xitorch as xt
 from dqc.hamilton.base_hamilton import BaseHamilton
@@ -18,7 +18,8 @@ class HamiltonCGTO(BaseHamilton):
         self.is_ao_set = False
         self.is_grad_ao_set = False
         self.is_lapl_ao_set = False
-        self.xcfamily = 0
+        self.xc: Optional[BaseXC] = None
+        self.xcfamily = 1
 
     def build(self):
         # get the matrices (all (nao, nao), except el_mat)
@@ -59,11 +60,15 @@ class HamiltonCGTO(BaseHamilton):
         return torch.matmul(orb, orb_w.transpose(-2, -1))  # (*BOW, nao, nao)
 
     ############### grid-related ###############
-    def setup_grid(self, grid: BaseGrid, xcfamily: int = 0) -> None:
-        # save the grid
-        assert 1 <= xcfamily <= 3
+    def setup_grid(self, grid: BaseGrid, xc: Optional[BaseXC] = None) -> None:
+        # save the family and save the xc
+        self.xc = xc
+        if xc is None:
+            self.xcfamily = 1
+        else:
+            self.xcfamily = xc.family
 
-        self.xcfamily = xcfamily
+        # save the grid
         self.grid = grid
         self.rgrid = grid.get_rgrid()
         assert grid.coord_type == "cart"
@@ -73,13 +78,13 @@ class HamiltonCGTO(BaseHamilton):
         self.basis = self.libcint_wrapper.eval_gto(self.rgrid)  # (nao, ngrid)
         self.basis_dvolume = self.basis * self.grid.get_dvolume()  # (nao, ngrid)
 
-        if xcfamily == 1:  # LDA
+        if self.xcfamily == 1:  # LDA
             return
 
         # setup the gradient of the basis
         self.is_grad_ao_set = True
         self.grad_basis = self.libcint_wrapper.eval_gradgto(self.rgrid)  # (ndim, nao, ngrid)
-        if xcfamily == 2:  # GGA
+        if self.xcfamily == 2:  # GGA
             return
 
         # setup the laplacian of the basis
@@ -110,12 +115,12 @@ class HamiltonCGTO(BaseHamilton):
         pass
 
     ################ xc-related ################
-    def get_vxc(self, xc: BaseXC, dm: torch.Tensor) -> xt.LinearOperator:
+    def get_vxc(self, dm: torch.Tensor) -> xt.LinearOperator:
         # dm: (*BD, nao, nao)
-        assert xc.family == self.xcfamily, "Please redo setup_grid with xcfamily %d" % xc.family
+        assert self.xc is not None, "Please call .setup_grid with the xc object"
 
-        densinfo = self._dm2densinfo(dm, xc.family)  # value: (*BD, nr)
-        potinfo = xc.get_vxc(densinfo)  # value: (*BD, nr)
+        densinfo = self._dm2densinfo(dm, self.xc.family)  # value: (*BD, nr)
+        potinfo = self.xc.get_vxc(densinfo)  # value: (*BD, nr)
 
         # get the linear operator from the potential
         vxc_linop = self.get_vext(potinfo.value)
@@ -126,9 +131,11 @@ class HamiltonCGTO(BaseHamilton):
 
         return vxc_linop
 
-    def get_exc(self, xc: BaseXC, dm: torch.Tensor) -> torch.Tensor:
-        densinfo = self._dm2densinfo(dm, xc.family)  # value: (*BD, nr)
-        edens = xc.get_edensityxc(densinfo)  # (*BD, nr)
+    def get_exc(self, dm: torch.Tensor) -> torch.Tensor:
+        assert self.xc is not None, "Please call .setup_grid with the xc object"
+
+        densinfo = self._dm2densinfo(dm, self.xc.family)  # value: (*BD, nr)
+        edens = self.xc.get_edensityxc(densinfo)  # (*BD, nr)
         return torch.sum(self.grid.get_dvolume() * edens, dim=-1)
 
     def _dm2densinfo(self, dm: torch.Tensor, family: int) -> ValGrad:
@@ -169,7 +176,8 @@ class HamiltonCGTO(BaseHamilton):
             return [prefix + "basis_dvolume", prefix + "lapl_basis"]
         elif methodname == "get_vxc":
             params = self.getparamnames("_dm2densinfo", prefix=prefix) + \
-                self.getparamnames("get_vext", prefix=prefix)
+                self.getparamnames("get_vext", prefix=prefix) + \
+                self.xc.getparamnames("get_vxc", prefix=prefix + "xc.")
             if self.xcfamily >= 2:
                 params += self.getparamnames("get_grad_vext", prefix=prefix)
             if self.xcfamily >= 3:

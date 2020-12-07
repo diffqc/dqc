@@ -1,7 +1,7 @@
 import torch
 import xitorch as xt
 from abc import abstractmethod
-from typing import List
+from typing import List, Optional
 from dqc.grid.base_grid import BaseGrid
 from dqc.xc.base_xc import BaseXC
 
@@ -55,9 +55,12 @@ class BaseHamilton(xt.EditableModule):
 
     ############### grid-related ###############
     @abstractmethod
-    def setup_grid(self, grid: BaseGrid, xcfamily: int = 0) -> None:
+    def setup_grid(self, grid: BaseGrid, xc: Optional[BaseXC] = None) -> None:
         """
-        Setup the basis (with its grad) in the spatial grid.
+        Setup the basis (with its grad) in the spatial grid and prepare the
+        gradient of atomic orbital according to the ones required by the xc.
+        If xc is not given, then only setup the grid with ao (without any gradients
+        of ao)
         """
         pass
 
@@ -98,7 +101,7 @@ class BaseHamilton(xt.EditableModule):
         pass
 
     @abstractmethod
-    def get_vxc(self, xc: BaseXC, dm: torch.Tensor) -> xt.LinearOperator:
+    def get_vxc(self, dm: torch.Tensor) -> xt.LinearOperator:
         """
         Returns a LinearOperator for the exchange-correlation potential.
         """
@@ -109,9 +112,10 @@ class BaseHamilton(xt.EditableModule):
         pass
 
     @abstractmethod
-    def get_exc(self, xc: BaseXC, dm: torch.Tensor) -> torch.Tensor:
+    def get_exc(self, dm: torch.Tensor) -> torch.Tensor:
         """
-        Returns the exchange-correlation energy
+        Returns the exchange-correlation energy using the xc object given in
+        ``.setup_grid()``
         """
         # dm: (*BD, nao, nao)
         # return: (*BDH)

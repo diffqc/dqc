@@ -12,7 +12,7 @@ def system1():
     m.setup_grid()
     hamilton = m.get_hamiltonian()
     hamilton.build()
-    hamilton.setup_grid(m.get_grid(), 1)
+    hamilton.setup_grid(m.get_grid())
     return m
 
 def test_cgto_ao2dm(system1):
