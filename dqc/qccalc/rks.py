@@ -57,7 +57,12 @@ class RKS(BaseQCCalc):
 
         # setup the default options
         if eigen_options is None:
-            eigen_options = {}
+            eigen_options = {
+                # NOTE: temporary solution before the gradient calculation in
+                # pytorch's symeig is fixed (for the degenerate case)
+                # see https://github.com/pytorch/pytorch/issues/47599
+                "method": "custom_exacteig"
+            }
         if fwd_options is None:
             fwd_options = {
                 "method": "broyden1",
@@ -80,7 +85,8 @@ class RKS(BaseQCCalc):
         scp = xitorch.optimize.equilibrium(
             fcn=self.__scp2scp,
             y0=scp0,
-            bck_options={**bck_options},
+            bck_options={"verbose": True, "posdef": True, **bck_options},
+            verbose=True,
             **fwd_options)
 
         # post-process parameters
@@ -151,20 +157,20 @@ class RKS(BaseQCCalc):
     def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
         if methodname == "__scp2scp":
             return self.getparamnames("__scp2dm", prefix=prefix) + \
-                   self.getparamnames("__dm2scp", prefix=prefix)
+                self.getparamnames("__dm2scp", prefix=prefix)
         elif methodname == "__scp2dm":
             return self.getparamnames("__fock2dm", prefix=prefix)
         elif methodname == "__dm2scp":
             return self.getparamnames("__dm2fock", prefix=prefix)
         elif methodname == "__fock2dm":
             return self.getparamnames("__diagonalize_fock", prefix=prefix) + \
-                   self.hamilton.getparamnames("ao_orb2dm", prefix=prefix + "hamilton.") + \
-                   [prefix + "orb_weight"]
+                self.hamilton.getparamnames("ao_orb2dm", prefix=prefix + "hamilton.") + \
+                [prefix + "orb_weight"]
         elif methodname == "__dm2fock":
             hprefix = prefix + "hamilton."
             return self.hamilton.getparamnames("get_elrep", prefix=hprefix) + \
-                   self.hamilton.getparamnames("get_vxc", prefix=hprefix) + \
-                   self.knvext_linop._getparamnames(prefix=prefix + "knvext_linop.")
+                self.hamilton.getparamnames("get_vxc", prefix=hprefix) + \
+                self.knvext_linop._getparamnames(prefix=prefix + "knvext_linop.")
         elif methodname == "__diagonalize_fock":
             return self.hamilton.getparamnames("get_overlap", prefix=prefix + "hamilton.")
         else:
