@@ -42,7 +42,7 @@ class RKS(BaseQCCalc):
         # set up the vext linear operator
         self.knvext_linop = self.hamilton.get_kinnucl()  # kinetic, nuclear, and external potential
         if vext is not None:
-            assert vext.shape[-1] == system.get_grid().shape[-2]
+            assert vext.shape[-1] == system.get_grid().get_rgrid().shape[-2]
             self.knvext_linop = self.knvext_linop + self.hamilton.get_vext(vext)
 
         # misc info

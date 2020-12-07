@@ -58,6 +58,29 @@ def test_rks_grad_pos(xc, atomzs, dist, grad2):
     else:
         torch.autograd.gradcheck(get_energy, (dist_tensor,))
 
+@pytest.mark.parametrize(
+    "xc,atomzs,dist,vext_p",
+    [("lda,", *atomz_pos, 0.1) for atomz_pos in atomzs_poss]
+)
+def test_rks_grad_vext(xc, atomzs, dist, vext_p):
+    # check if the gradient w.r.t. vext is obtained correctly (only check 1st
+    # grad because we don't need 2nd grad at the moment)
+
+    poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist
+    mol = Mol((atomzs, poss), basis="3-21G", dtype=dtype, grid=3)
+    mol.setup_grid()
+    rgrid = mol.get_grid().get_rgrid()  # (ngrid, ndim)
+    rgrid_norm = torch.norm(rgrid, dim=-1)  # (ngrid,)
+
+    def get_energy(vext_params):
+        vext = rgrid_norm * rgrid_norm * vext_params  # (ngrid,)
+        qc = RKS(mol, xc=xc, vext=vext).run()
+        ene = qc.energy()
+        return ene
+
+    vext_params = torch.tensor(vext_p, dtype=dtype).requires_grad_()
+    torch.autograd.gradcheck(get_energy, (vext_params,))
+
 if __name__ == "__main__":
     import time
     xc = "lda,"
