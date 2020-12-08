@@ -9,7 +9,7 @@ _dtype = torch.double
 _device = torch.device("cpu")
 
 def loadbasis(cmd: str, dtype: torch.dtype = _dtype,
-              device: torch.device = _device, requires_grad: bool = True) -> \
+              device: torch.device = _device, requires_grad: bool = False) -> \
         List[CGTOBasis]:
     """
     Load basis from a file and return the list of CGTOBasis.
