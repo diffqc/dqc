@@ -4,7 +4,7 @@ import pytest
 import warnings
 from dqc.api.loadbasis import loadbasis
 from dqc.hamilton.lcintwrap import LibcintWrapper
-from dqc.utils.datastruct import AtomCGTOBasis
+from dqc.utils.datastruct import AtomCGTOBasis, CGTOBasis
 
 # import pyscf
 try:
@@ -83,7 +83,6 @@ def test_integral_vs_pyscf(int_type):
 
     assert torch.allclose(torch.tensor(mat_scf, dtype=dtype), mat)
 
-# TODO: check nuclattr and elrep
 @pytest.mark.parametrize(
     "int_type",
     ["overlap", "kinetic", "nuclattr", "elrep"]
@@ -117,6 +116,51 @@ def test_integral_grad_pos(int_type):
     # integrals gradcheck
     torch.autograd.gradcheck(get_int1e, (pos1, pos2, int_type))
     torch.autograd.gradgradcheck(get_int1e, (pos1, pos2, int_type))
+
+@pytest.mark.parametrize(
+    "int_type",
+    ["overlap", "kinetic", "nuclattr"]
+)
+def test_integral_grad_basis(int_type):
+    dtype = torch.double
+    torch.manual_seed(123)
+
+    atomenv = get_atom_env(dtype)
+    pos1 = atomenv.poss[0]
+    pos2 = atomenv.poss[1]
+    def get_int1e(alphas1, alphas2, coeffs1, coeffs2, name):
+        # alphas*: (2, ngauss)
+        bases1 = [
+            CGTOBasis(angmom=0, alphas=alphas1[0], coeffs=coeffs1[0]),
+            CGTOBasis(angmom=1, alphas=alphas1[1], coeffs=coeffs1[1]),
+        ]
+        bases2 = [
+            CGTOBasis(angmom=0, alphas=alphas2[0], coeffs=coeffs2[0]),
+            CGTOBasis(angmom=1, alphas=alphas2[1], coeffs=coeffs2[1]),
+        ]
+        atombasis1 = AtomCGTOBasis(atomz=atomenv.atomzs[0], bases=bases1, pos=pos1)
+        atombasis2 = AtomCGTOBasis(atomz=atomenv.atomzs[1], bases=bases2, pos=pos2)
+        env = LibcintWrapper([atombasis1, atombasis2], spherical=True, basis_normalized=True)
+        if name == "overlap":
+            return env.overlap()
+        elif name == "kinetic":
+            return env.kinetic()
+        elif name == "nuclattr":
+            return env.nuclattr()
+        elif name == "elrep":
+            return env.elrep()
+        else:
+            raise RuntimeError()
+
+    # change the numbers to 1 for debugging
+    ncontr = 2
+    alphas1 = torch.rand((2, ncontr), dtype=dtype, requires_grad=True)
+    alphas2 = torch.rand((2, ncontr), dtype=dtype, requires_grad=True)
+    coeffs1 = torch.rand((2, ncontr), dtype=dtype, requires_grad=False)
+    coeffs2 = torch.rand((2, ncontr), dtype=dtype, requires_grad=False)
+
+    torch.autograd.gradcheck(get_int1e, (alphas1, alphas2, coeffs1, coeffs2, int_type))
+    # torch.autograd.gradcheck(get_int1e, (alphas1, alphas2, coeffs1, coeffs2, int_type))
 
 @pytest.mark.parametrize(
     "eval_type",
