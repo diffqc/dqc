@@ -88,7 +88,7 @@ def test_integral_vs_pyscf(int_type):
     "int_type",
     ["overlap", "kinetic", "nuclattr", "elrep"]
 )
-def test_integral_grad(int_type):
+def test_integral_grad_pos(int_type):
     dtype = torch.double
 
     atomenv = get_atom_env(dtype)
@@ -157,7 +157,7 @@ def test_eval_gto_vs_pyscf(eval_type):
     "eval_type",
     ["", "grad", "lapl"]
 )
-def test_eval_gto_grad(eval_type):
+def test_eval_gto_grad_pos(eval_type):
     dtype = torch.double
 
     atomenv = get_atom_env(dtype, ngrid=3)
