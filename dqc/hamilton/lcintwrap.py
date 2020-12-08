@@ -437,12 +437,11 @@ class _Int1eFunction(torch.autograd.Function):
 
             # negative because the integral calculates the nabla w.r.t. the
             # spatial coordinate, not the basis central position
-            neg_grad_out = -grad_out
-            grad_dpos  = neg_grad_out * dout_dpos
-            grad_dposT = neg_grad_out * dout_dposT
             ndim = dout_dpos.shape[0]
-            grad_dpos_j = grad_dpos .reshape(ndim, -1, nao, nao).sum(dim=-3).sum(dim=-1)  # (ndim, nao)
-            grad_dpos_i = grad_dposT.reshape(ndim, -1, nao).sum(dim=-2)
+            shape = (ndim, -1, *dout_dpos.shape[-2:])
+            grad_out2 = grad_out.reshape(shape[1:])
+            grad_dpos_i = -torch.einsum("sij,dsij->di", grad_out2, dout_dpos .reshape(shape))
+            grad_dpos_j = -torch.einsum("sij,dsij->dj", grad_out2, dout_dposT.reshape(shape))
             grad_dpos_ij = grad_dpos_i + grad_dpos_j
 
             # grad_allpossT is only a view of grad_allposs, so the operation below
