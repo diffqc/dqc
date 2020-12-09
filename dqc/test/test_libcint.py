@@ -156,8 +156,8 @@ def test_integral_grad_basis(int_type):
     ncontr = 2
     alphas1 = torch.rand((2, ncontr), dtype=dtype, requires_grad=True)
     alphas2 = torch.rand((2, ncontr), dtype=dtype, requires_grad=True)
-    coeffs1 = torch.rand((2, ncontr), dtype=dtype, requires_grad=False)
-    coeffs2 = torch.rand((2, ncontr), dtype=dtype, requires_grad=False)
+    coeffs1 = torch.rand((2, ncontr), dtype=dtype, requires_grad=True)
+    coeffs2 = torch.rand((2, ncontr), dtype=dtype, requires_grad=True)
 
     torch.autograd.gradcheck(get_int1e, (alphas1, alphas2, coeffs1, coeffs2, int_type))
     # torch.autograd.gradcheck(get_int1e, (alphas1, alphas2, coeffs1, coeffs2, int_type))

@@ -3,7 +3,7 @@ import os
 import re
 import ctypes
 from contextlib import contextmanager
-from typing import List, Tuple, Optional, Iterator
+from typing import List, Tuple, Optional, Iterator, Sequence
 import torch
 import numpy as np
 from dqc.utils.datastruct import AtomCGTOBasis, CGTOBasis
@@ -230,6 +230,11 @@ class LibcintWrapper(object):
         # rgrid: (ngrid, ndim)
         # return: (nao, ngrid)
         return self._evalgto("lapl", rgrid)
+
+    def get_params(self) -> List[torch.Tensor]:
+        # returns the parameters of the wrapper to be used in the
+        # torch.autograd.Function
+        return [self.allcoeffs_params, self.allalphas_params, self.allpos_params]
 
     ################ integrals to construct the operator ################
     def _int1e(self, shortname: str, nuc: bool = False) -> torch.Tensor:
@@ -462,53 +467,61 @@ class _Int1eFunction(torch.autograd.Function):
         wrapper, shortname = ctx.other_info
         nao = grad_out.shape[-1]
 
-        # TODO: to be completed (???)
         grad_allcoeffs: Optional[torch.Tensor] = None
-        if allcoeffs.requires_grad:
-            pass
-
         grad_allalphas: Optional[torch.Tensor] = None
-        if allalphas.requires_grad:
-            grad_allalphas = torch.zeros_like(allalphas)  # (nalphas)
-
+        if allcoeffs.requires_grad or allalphas.requires_grad:
             # obtain the uncontracted wrapper and mapping
             # uao2ao: (nu_ao)
             u_wrapper, uao2ao = wrapper.get_uncontracted_wrapper()
             nu_ao = uao2ao.shape[-1]
+            u_params = u_wrapper.get_params()
 
             # get the uncontracted (gathered) grad_out
-            uao2ao_1 = uao2ao.expand(*grad_out.shape[:-1], -1)  # (..., nao, nu_ao)
-            uao2ao_2 = uao2ao.unsqueeze(-1).expand(*grad_out.shape[:-2], -1, nu_ao)
-            u_grad_out_1 = torch.gather(grad_out, dim=-1, index=uao2ao_1)  # (..., nao, nu_ao)
-            u_grad_out = torch.gather(u_grad_out_1, dim=-2, index=uao2ao_2)  # (..., nu_ao, nu_ao)
+            u_grad_out = _gather_at_dims(grad_out, mapidx=uao2ao, dims=(-2, -1))
 
-            # get the uncontracted integrals
-            deriv_shortname  = _get_int1e_deriv_shortname(shortname, "a1")
-            deriv_shortnameT = _get_int1e_deriv_shortname(shortname, "a2")
-            u_allcoeffs = u_wrapper.allcoeffs_params
-            u_allalphas = u_wrapper.allalphas_params
-            u_allposs = u_wrapper.allpos_params
-            u_params = (u_allcoeffs, u_allalphas, u_allposs)
-            dout_dpos = _Int1eFunction.apply(*u_params, ratoms,
-                u_wrapper, deriv_shortname)  # (..., nu_ao, nu_ao)
+            # calculate the gradient w.r.t. coeffs
+            if allcoeffs.requires_grad:
+                grad_allcoeffs = torch.zeros_like(allcoeffs)  # (ngauss)
+                dout_dcoeff = _Int1eFunction.apply(*u_params, ratoms,
+                    u_wrapper, shortname)
+                dout_dcoeffT = dout_dcoeff.transpose(-2, -1)
 
-            # check if deriv_shortname and deriv_shortnameT can just be flipped
-            # TODO: remove the true statement
-            if True or _int1e_shortname_equiv(deriv_shortname, deriv_shortnameT):
-                dout_dposT = dout_dpos.transpose(-2, -1)
-            else:
-                dout_dposT = _Int1eFunction.apply(*u_params, ratoms,
-                    u_wrapper, deriv_shortnameT)
+                grad_dcoeff_i = torch.einsum("...ij,...ij->i", u_grad_out, dout_dcoeff)
+                grad_dcoeff_j = torch.einsum("...ij,...ij->j", u_grad_out, dout_dcoeffT)
+                grad_dcoeff = grad_dcoeff_i + grad_dcoeff_j
 
-            # (nu_ao)
-            grad_dalpha_i = torch.einsum("...ij,...ij->i", u_grad_out, dout_dpos)
-            grad_dalpha_j = torch.einsum("...ij,...ij->j", u_grad_out, dout_dposT)
-            # negative because the exponent is negative alpha * (r-ra)^2
-            grad_dalpha = -(grad_dalpha_i + grad_dalpha_j)  # (nu_ao)
+                # scatter the grad and divide with the coefficient
+                ao_to_shell = u_wrapper.ao_to_shell
+                grad_allcoeffs.scatter_add_(dim=-1, index=ao_to_shell, src=grad_dcoeff)
+                grad_allcoeffs = grad_allcoeffs / allcoeffs
 
-            # scatter the grad
-            ao_to_shell = u_wrapper.ao_to_shell  # (nu_ao)
-            grad_allalphas.scatter_add_(dim=-1, index=ao_to_shell, src=grad_dalpha)
+            # calculate the gradient w.r.t. alphas
+            if allalphas.requires_grad:
+                grad_allalphas = torch.zeros_like(allalphas)  # (ngauss)
+
+                # get the uncontracted integrals
+                deriv_shortname  = _get_int1e_deriv_shortname(shortname, "a1")
+                deriv_shortnameT = _get_int1e_deriv_shortname(shortname, "a2")
+                dout_dalpha = _Int1eFunction.apply(*u_params, ratoms,
+                    u_wrapper, deriv_shortname)  # (..., nu_ao, nu_ao)
+
+                # check if deriv_shortname and deriv_shortnameT can just be flipped
+                # TODO: remove the true statement for 2nd deriv and higher
+                if True or _int1e_shortname_equiv(deriv_shortname, deriv_shortnameT):
+                    dout_dalphaT = dout_dalpha.transpose(-2, -1)
+                else:
+                    dout_dalphaT = _Int1eFunction.apply(*u_params, ratoms,
+                        u_wrapper, deriv_shortnameT)
+
+                # (nu_ao)
+                grad_dalpha_i = torch.einsum("...ij,...ij->i", u_grad_out, dout_dalpha)
+                grad_dalpha_j = torch.einsum("...ij,...ij->j", u_grad_out, dout_dalphaT)
+                # negative because the exponent is negative alpha * (r-ra)^2
+                grad_dalpha = -(grad_dalpha_i + grad_dalpha_j)  # (nu_ao)
+
+                # scatter the grad
+                ao_to_shell = u_wrapper.ao_to_shell  # (nu_ao)
+                grad_allalphas.scatter_add_(dim=-1, index=ao_to_shell, src=grad_dalpha)
 
         grad_allposs: Optional[torch.Tensor] = None
         if allposs.requires_grad:
@@ -834,6 +847,27 @@ def _transpose(a: torch.Tensor, axes: List[Tuple[int, int]]) -> torch.Tensor:
     for axis2 in axes:
         a = a.transpose(*axis2)
     return a
+
+################# other helper functions #################
+def _gather_at_dims(inp: torch.Tensor, mapidx: torch.Tensor,
+                    dims: Union[int, Sequence[int]]) -> torch.Tensor:
+    # expand inp in the dimension dim by gathering values based on the given
+    # mapping indices
+
+    # mapidx: (nnew,) with value from 0 to nold - 1
+    # inp: (..., nold, ...)
+    # out: (..., nnew, ...)
+    if isinstance(dims, int):
+        if dims < 0:
+            dims = inp.ndim + dims
+        map2 = mapidx[(...,) + (None,) * (inp.ndim - 1 - dims)]
+        map2 = map2.expand(*inp.shape[:dims], -1, *inp.shape[dims + 1:])
+        out = torch.gather(inp, dim=dims, index=map2)
+        return out
+    else:
+        for dim in dims:
+            inp = _gather_at_dims(inp, mapidx, dims=dim)
+        return inp
 
 if __name__ == "__main__":
     print(_int2e_shortname_equiv("ipar12b", "ipar12b"))
