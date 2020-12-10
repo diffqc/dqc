@@ -513,8 +513,10 @@ class _Int1eFunction(torch.autograd.Function):
                     u_wrapper, deriv_shortname)  # (..., nu_ao, nu_ao)
 
                 # check if deriv_shortname and deriv_shortnameT can just be flipped
-                if _int1e_shortname_equiv(deriv_shortname, deriv_shortnameT):
-                    dout_dalphaT = dout_dalpha.transpose(-2, -1)
+                transpose_path = _int1e_shortname_equiv(deriv_shortname, deriv_shortnameT)
+                if transpose_path is not None:
+                    dout_dalphaT = _transpose(dout_dalpha, transpose_path)
+                    # dout_dalphaT = dout_dalpha.transpose(-2, -1)
                 else:
                     dout_dalphaT = _Int1eFunction.apply(*u_params, ratoms,
                         u_wrapper, deriv_shortnameT)
@@ -865,17 +867,14 @@ def _get_int1e_deriv_shortname(shortname: str, derivmode: str) -> str:
     else:
         raise RuntimeError("Unknown derivmode: %s" % derivmode)
 
-def _int1e_shortname_equiv(s1: str, s2: str) -> bool:
-    # check if the shortname 1 and 2 is actually a transpose of each other
+def _int1e_shortname_equiv(s0: str, s1: str) -> Optional[List[Tuple[int, int]]]:
+    # check if the shortname 0 and 1 is actually a transpose of each other
     int1e_patterns = ["nuc", "ovlp", "rinv", "kin"]
-    p1 = _intxe_parse_pattern(s1, int1e_patterns)
-    p2 = _intxe_parse_pattern(s2, int1e_patterns)
-    return (p1[0] == p2[1] and p1[1] == p2[0])
-
-def _intxe_parse_pattern(s: str, patterns: List[str]) -> List[str]:
-    for c in patterns:
-        s = s.replace(c, "|")
-    return s.split("|")
+    transpose_paths = [
+        [],
+        [(-1, -2)],
+    ]
+    return _intxe_shortname_equiv(s0, s1, int1e_patterns, transpose_paths)
 
 def _get_int2e_deriv_shortname(shortname: str, derivmode: str) -> str:
 
@@ -902,45 +901,48 @@ def _get_int2e_deriv_shortname(shortname: str, derivmode: str) -> str:
     else:
         raise RuntimeError("Unknown derivmode: %s" % derivmode)
 
-def _int2e_shortname_equiv(s1: str, s2: str) -> Optional[List[Tuple[int, int]]]:
-    # check if the integration s2 can be achieved by transposing s1
+def _int2e_shortname_equiv(s0: str, s1: str) -> Optional[List[Tuple[int, int]]]:
+    # check if the integration s1 can be achieved by transposing s0
     # returns None if it cannot.
-    # returns the list of two dims if it can for the transpose-path of s1
-    # to get the same result as s2
-    p1 = _int2e_parse_pattern(s1, "ip")
-    p2 = _int2e_parse_pattern(s2, "ip")
-    res: List[Tuple[int, int]] = []
-    offset = 100
-    l1 = max(p1[0], p1[1]) * offset + min(p1[0], p1[1])
-    r1 = max(p1[2], p1[3]) * offset + min(p1[2], p1[3])
-    l2 = max(p2[0], p2[1]) * offset + min(p2[0], p2[1])
-    r2 = max(p2[2], p2[3]) * offset + min(p2[2], p2[3])
-    ll_equal = l1 == l2
-    rr_equal = r1 == r2
-    lr_equal = l1 == r2
-    rl_equal = r1 == l2
+    # returns the list of two dims if it can for the transpose-path of s0
+    # to get the same result as s1
 
-    # check if it cannot be matched
-    if not ((ll_equal and rr_equal) or (lr_equal and rl_equal)):
-        return None
+    int2e_patterns = ["r12", "a", "b"]
+    transpose_paths = [
+        [],
+        [(-3, -4)],
+        [(-1, -2)],
+        [(-1, -3), (-2, -4)],
+        [(-1, -3), (-2, -4), (-2, -1)],
+        [(-1, -3), (-2, -4), (-3, -4)],
+    ]
+    return _intxe_shortname_equiv(s0, s1, int2e_patterns, transpose_paths)
 
-    if not (ll_equal and rr_equal):  # (lr_equal and rl_equal)
-        # swap the right and half of pattern 2
-        res.extend([(-4, -2), (-3, -1)])
-        if p1[0] != p2[2]:
-            res.append((-1, -2))  # swap the right part
-        if p1[2] != p2[0]:
-            res.append((-3, -4))  # swap the left part
-    else:  # (ll_equal and rr_equal)
-        if p1[0] != p2[0]:
-            res.append((-3, -4))  # swap the left part
-        if p1[2] != p2[2]:
-            res.append((-1, -2))  # swap the right part
-    return res
+def _intxe_shortname_equiv(s0: str, s1: str, patterns: List[str],
+                           transpose_paths: List[List[Tuple[int, int]]]) -> Optional[List[Tuple[int, int]]]:
+    # find the transpose path to get the s1 integral from s0.
+    # this function should return the transpose path from s0 to reach s1.
+    # returns None if it is not possible.
 
-def _int2e_parse_pattern(s: str, pattern: str) -> List[int]:
-    s = s.replace("r12", "|").replace("a", "|").replace("b", "|")
-    return [_calc_pattern_occurence(c, pattern) for c in s.split("|")]
+    def _parse_pattern(s: str, patterns: List[str]) -> List[str]:
+        for c in patterns:
+            s = s.replace(c, "|")
+        return s.split("|")
+
+    p0 = _parse_pattern(s0, patterns)
+    p1 = _parse_pattern(s1, patterns)
+
+    def _swap(p: List[str], path: List[Tuple[int, int]]):
+        # swap the pattern according to the given transpose path
+        r = p[:]  # make a copy
+        for i0, i1 in path:
+            r[i0], r[i1] = r[i1], r[i0]
+        return r
+
+    for transpose_path in transpose_paths:
+        if _swap(p0, transpose_path) == p1:
+            return transpose_path
+    return None
 
 def _calc_pattern_occurence(s: str, pattern: str,
                             at_start: bool = False, at_end: bool = False) -> int:
