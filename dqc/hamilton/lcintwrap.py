@@ -484,23 +484,22 @@ class _Int1eFunction(torch.autograd.Function):
                 grad_allcoeffs = torch.zeros_like(allcoeffs)  # (ngauss)
 
                 # get the uncontracted version of the integral
-                dout_dcoeff = _Int1eFunction.apply(*u_params, ratoms,
+                dout_dcoeff0 = _Int1eFunction.apply(*u_params, ratoms,
                     u_wrapper, shortname)  # (..., nu_ao, nu_ao)
-                dout_dcoeffT = dout_dcoeff.transpose(-2, -1)
 
                 # get the coefficients and spread it on the u_ao-length tensor
-                coeffs_i = torch.gather(allcoeffs, dim=-1, index=u_wrapper.ao_to_shell)  # (nu_ao)
-                dout_dcoeff = dout_dcoeff / coeffs_i.unsqueeze(-1)
-                dout_dcoeffT = dout_dcoeffT / coeffs_i.unsqueeze(-1)
+                coeffs_ao = torch.gather(allcoeffs, dim=-1, index=u_wrapper.ao_to_shell)  # (nu_ao)
+                dout_dcoeff_i = dout_dcoeff0 / coeffs_ao[:, None]
+                dout_dcoeff_j = dout_dcoeff0 / coeffs_ao
 
                 # (nu_ao)
-                grad_dcoeff_i = torch.einsum("...ij,...ij->i", u_grad_out, dout_dcoeff)
-                grad_dcoeff_j = torch.einsum("...ij,...ji->j", u_grad_out, dout_dcoeffT)
+                grad_dcoeff_i = torch.einsum("...ij,...ij->i", u_grad_out, dout_dcoeff_i)
+                grad_dcoeff_j = torch.einsum("...ij,...ij->j", u_grad_out, dout_dcoeff_j)
                 grad_dcoeff = grad_dcoeff_i + grad_dcoeff_j
 
                 # scatter the grad and divide with the coefficient
-                ao_to_shell = u_wrapper.ao_to_shell
-                grad_allcoeffs.scatter_add_(dim=-1, index=ao_to_shell, src=grad_dcoeff)
+                grad_allcoeffs.scatter_add_(dim=-1, index=u_wrapper.ao_to_shell,
+                                            src=grad_dcoeff)
 
             # calculate the gradient w.r.t. alphas
             if allalphas.requires_grad:
@@ -516,7 +515,6 @@ class _Int1eFunction(torch.autograd.Function):
                 transpose_path = _int1e_shortname_equiv(deriv_shortname, deriv_shortnameT)
                 if transpose_path is not None:
                     dout_dalphaT = _transpose(dout_dalpha, transpose_path)
-                    # dout_dalphaT = dout_dalpha.transpose(-2, -1)
                 else:
                     dout_dalphaT = _Int1eFunction.apply(*u_params, ratoms,
                         u_wrapper, deriv_shortnameT)
@@ -528,8 +526,8 @@ class _Int1eFunction(torch.autograd.Function):
                 grad_dalpha = -(grad_dalpha_i + grad_dalpha_j)  # (nu_ao)
 
                 # scatter the grad
-                ao_to_shell = u_wrapper.ao_to_shell  # (nu_ao)
-                grad_allalphas.scatter_add_(dim=-1, index=ao_to_shell, src=grad_dalpha)
+                grad_allalphas.scatter_add_(dim=-1, index=u_wrapper.ao_to_shell,
+                                            src=grad_dalpha)
 
         grad_allposs: Optional[torch.Tensor] = None
         if allposs.requires_grad:
@@ -652,10 +650,14 @@ class _Int2eFunction(torch.autograd.Function):
                 grad_allcoeffs = torch.zeros_like(allcoeffs)
 
                 # (..., nu_ao^4)
-                dout_dcoeff_a1 = _Int2eFunction.apply(*u_params, u_wrapper, shortname)
-                dout_dcoeff_a2 = dout_dcoeff_a1.transpose(-3, -4)
-                dout_dcoeff_b1 = dout_dcoeff_a1.transpose(-3, -1).transpose(-4, -2)
-                dout_dcoeff_b2 = dout_dcoeff_b1.transpose(-2, -1)  # TODO: or is it (-3, -4)?
+                dout_dcoeff0 = _Int2eFunction.apply(*u_params, u_wrapper, shortname)
+
+                # get the coefficients and spread it on the u_ao-length tensor
+                coeffs_ao = torch.gather(allcoeffs, dim=-1, index=u_wrapper.ao_to_shell)  # (nu_ao)
+                dout_dcoeff_a1 = dout_dcoeff0 / coeffs_ao[:, None, None, None]
+                dout_dcoeff_a2 = dout_dcoeff0 / coeffs_ao[:, None, None]
+                dout_dcoeff_b1 = dout_dcoeff0 / coeffs_ao[:, None]
+                dout_dcoeff_b2 = dout_dcoeff0 / coeffs_ao
 
                 # reduce the uncontracted integrations
                 grad_coeff_a1 = torch.einsum("...ijkl,...ijkl->i", dout_dcoeff_a1, u_grad_out)
@@ -665,9 +667,8 @@ class _Int2eFunction(torch.autograd.Function):
                 grad_coeff_all = grad_coeff_a1 + grad_coeff_a2 + grad_coeff_b1 + grad_coeff_b2
 
                 # scatter to the coefficients
-                ao_to_shell = u_wrapper.ao_to_shell
-                grad_allcoeffs.scatter_add_(dim=-1, index=ao_to_shell, src=grad_coeff_all)
-                grad_allcoeffs = grad_allcoeffs / allcoeffs
+                grad_allcoeffs.scatter_add_(dim=-1, index=u_wrapper.ao_to_shell,
+                                            src=grad_coeff_all)
 
             if allalphas.requires_grad:
                 grad_allalphas = torch.zeros_like(allalphas)  # (ngauss)
@@ -683,7 +684,6 @@ class _Int2eFunction(torch.autograd.Function):
 
                 # calculate the derivative at the left's 2nd position
                 axes_relation_a12 = _int2e_shortname_equiv(sname_deriv_a1, sname_deriv_a2)
-                axes_relation_a12 = [(-3, -4)]  # TODO: remove this for 2nd grad
                 if axes_relation_a12 is not None:
                     dout_dalpha_a2 = _transpose(dout_dalpha_a1, axes_relation_a12)
                 else:
@@ -693,7 +693,6 @@ class _Int2eFunction(torch.autograd.Function):
                 # calculate the derivative at the right's 1st position
                 axes_relation_a1b1 = _int2e_shortname_equiv(sname_deriv_a1, sname_deriv_b1)
                 axes_relation_a2b1 = _int2e_shortname_equiv(sname_deriv_a2, sname_deriv_b1)
-                axes_relation_a1b1 = [(-3, -1), (-4, -2)]  # TODO: remove this for 2nd grad
                 if axes_relation_a1b1 is not None:
                     dout_dalpha_b1 = _transpose(dout_dalpha_a1, axes_relation_a1b1)
                 elif axes_relation_a2b1 is not None:
@@ -706,7 +705,6 @@ class _Int2eFunction(torch.autograd.Function):
                 axes_relation_b12  = _int2e_shortname_equiv(sname_deriv_b1, sname_deriv_b2)
                 axes_relation_a1b2 = _int2e_shortname_equiv(sname_deriv_a1, sname_deriv_b2)
                 axes_relation_a2b2 = _int2e_shortname_equiv(sname_deriv_a2, sname_deriv_b2)
-                axes_relation_b12 = [(-1, -2)]  # TODO: remove this for 2nd grad
                 if axes_relation_b12 is not None:
                     dout_dalpha_b2 = _transpose(dout_dalpha_b1, axes_relation_b12)
                 elif axes_relation_a1b2 is not None:
@@ -727,8 +725,8 @@ class _Int2eFunction(torch.autograd.Function):
                 grad_alpha_all = -(grad_alpha_a1 + grad_alpha_a2 + grad_alpha_b1 + grad_alpha_b2)
 
                 # scatter the grad
-                ao_to_shell = u_wrapper.ao_to_shell  # (nu_ao)
-                grad_allalphas.scatter_add_(dim=-1, index=ao_to_shell, src=grad_alpha_all)
+                grad_allalphas.scatter_add_(dim=-1, index=u_wrapper.ao_to_shell,
+                                            src=grad_alpha_all)
 
         # calculate the gradient w.r.t. positions
         grad_allposs: Optional[torch.Tensor] = None

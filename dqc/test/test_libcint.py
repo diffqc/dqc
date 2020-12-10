@@ -163,8 +163,7 @@ def test_integral_grad_basis(int_type):
     coeffs2 = torch.rand((nangmom, ncontr), dtype=dtype, requires_grad=True)
 
     torch.autograd.gradcheck(get_int1e, (alphas1, alphas2, coeffs1, coeffs2, int_type))
-    if int_type != "elrep":
-        torch.autograd.gradgradcheck(get_int1e, (alphas1, alphas2, coeffs1, coeffs2, int_type))
+    torch.autograd.gradgradcheck(get_int1e, (alphas1, alphas2, coeffs1, coeffs2, int_type))
 
 @pytest.mark.parametrize(
     "eval_type",
