@@ -119,7 +119,7 @@ def test_integral_grad_pos(int_type):
 
 @pytest.mark.parametrize(
     "int_type",
-    ["overlap", "kinetic", "nuclattr"]
+    ["overlap", "kinetic", "nuclattr", "elrep"]
 )
 def test_integral_grad_basis(int_type):
     dtype = torch.double
@@ -129,14 +129,14 @@ def test_integral_grad_basis(int_type):
     pos1 = atomenv.poss[0]
     pos2 = atomenv.poss[1]
     def get_int1e(alphas1, alphas2, coeffs1, coeffs2, name):
-        # alphas*: (2, ngauss)
+        # alphas*: (nangmoms, ngauss)
         bases1 = [
-            CGTOBasis(angmom=0, alphas=alphas1[0], coeffs=coeffs1[0]),
-            CGTOBasis(angmom=1, alphas=alphas1[1], coeffs=coeffs1[1]),
+            CGTOBasis(angmom=i, alphas=alphas1[i], coeffs=coeffs1[i]) \
+            for i in range(len(alphas1))
         ]
         bases2 = [
-            CGTOBasis(angmom=0, alphas=alphas2[0], coeffs=coeffs2[0]),
-            CGTOBasis(angmom=1, alphas=alphas2[1], coeffs=coeffs2[1]),
+            CGTOBasis(angmom=i, alphas=alphas2[i], coeffs=coeffs2[i]) \
+            for i in range(len(alphas2))
         ]
         atombasis1 = AtomCGTOBasis(atomz=atomenv.atomzs[0], bases=bases1, pos=pos1)
         atombasis2 = AtomCGTOBasis(atomz=atomenv.atomzs[1], bases=bases2, pos=pos2)
@@ -153,11 +153,14 @@ def test_integral_grad_basis(int_type):
             raise RuntimeError()
 
     # change the numbers to 1 for debugging
-    ncontr = 2
-    alphas1 = torch.rand((2, ncontr), dtype=dtype, requires_grad=True)
-    alphas2 = torch.rand((2, ncontr), dtype=dtype, requires_grad=True)
-    coeffs1 = torch.rand((2, ncontr), dtype=dtype, requires_grad=True)
-    coeffs2 = torch.rand((2, ncontr), dtype=dtype, requires_grad=True)
+    if int_type != "elrep":
+        ncontr, nangmom = (2, 2)
+    else:
+        ncontr, nangmom = (1, 1) # saving time
+    alphas1 = torch.rand((nangmom, ncontr), dtype=dtype, requires_grad=True)
+    alphas2 = torch.rand((nangmom, ncontr), dtype=dtype, requires_grad=True)
+    coeffs1 = torch.rand((nangmom, ncontr), dtype=dtype, requires_grad=True)
+    coeffs2 = torch.rand((nangmom, ncontr), dtype=dtype, requires_grad=True)
 
     torch.autograd.gradcheck(get_int1e, (alphas1, alphas2, coeffs1, coeffs2, int_type))
     # torch.autograd.gradcheck(get_int1e, (alphas1, alphas2, coeffs1, coeffs2, int_type))

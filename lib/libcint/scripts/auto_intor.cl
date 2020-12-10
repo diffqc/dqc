@@ -53,6 +53,7 @@
 (gen-cint "intor2.c"
   ;'("int2e"                     ( \, \| \, ))
   '("int2e_ar12b"               ( \, \| r12 \| \, ))
+  '("int2e_rrar12b"             ( ri dot ri \, \| r12 \| \, ))
   '("int2e_ig1"                 (#C(0 1) g \, \| \, ))
   '("int2e_gg1"                 (g g \, \| \, ))
   '("int2e_g1g2"                (-1 g \, \| g \, ))
