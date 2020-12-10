@@ -479,6 +479,8 @@ class _Int1eFunction(torch.autograd.Function):
             # get the uncontracted (gathered) grad_out
             u_grad_out = _gather_at_dims(grad_out, mapidx=uao2ao, dims=(-2, -1))
 
+            u_int_fcn = lambda name: _Int1eFunction.apply(*u_params, ratoms, u_wrapper, name)
+
             # calculate the gradient w.r.t. coeffs
             if allcoeffs.requires_grad:
                 grad_allcoeffs = torch.zeros_like(allcoeffs)  # (ngauss)
@@ -506,22 +508,12 @@ class _Int1eFunction(torch.autograd.Function):
                 grad_allalphas = torch.zeros_like(allalphas)  # (ngauss)
 
                 # get the uncontracted integrals
-                deriv_shortname  = _get_int1e_deriv_shortname(shortname, "a1")
-                deriv_shortnameT = _get_int1e_deriv_shortname(shortname, "a2")
-                dout_dalpha = _Int1eFunction.apply(*u_params, ratoms,
-                    u_wrapper, deriv_shortname)  # (..., nu_ao, nu_ao)
-
-                # check if deriv_shortname and deriv_shortnameT can just be flipped
-                transpose_path = _int1e_shortname_equiv(deriv_shortname, deriv_shortnameT)
-                if transpose_path is not None:
-                    dout_dalphaT = _transpose(dout_dalpha, transpose_path)
-                else:
-                    dout_dalphaT = _Int1eFunction.apply(*u_params, ratoms,
-                        u_wrapper, deriv_shortnameT)
+                sname_derivs = [_get_intxe_deriv_shortname(shortname, s, 1) for s in ("a1", "a2")]
+                dout_dalphas = _get_integrals(sname_derivs, 1, u_int_fcn)
 
                 # (nu_ao)
-                grad_dalpha_i = torch.einsum("...ij,...ij->i", u_grad_out, dout_dalpha)
-                grad_dalpha_j = torch.einsum("...ij,...ij->j", u_grad_out, dout_dalphaT)
+                grad_dalpha_i = torch.einsum("...ij,...ij->i", u_grad_out, dout_dalphas[0])
+                grad_dalpha_j = torch.einsum("...ij,...ij->j", u_grad_out, dout_dalphas[1])
                 # negative because the exponent is negative alpha * (r-ra)^2
                 grad_dalpha = -(grad_dalpha_i + grad_dalpha_j)  # (nu_ao)
 
@@ -534,26 +526,18 @@ class _Int1eFunction(torch.autograd.Function):
             grad_allposs = torch.zeros_like(allposs)  # (natom, ndim)
             grad_allpossT = grad_allposs.transpose(-2, -1)  # (ndim, natom)
 
-            deriv_shortname  = _get_int1e_deriv_shortname(shortname, "r1")
-            deriv_shortnameT = _get_int1e_deriv_shortname(shortname, "r2")
-            dout_dpos = _Int1eFunction.apply(
-                *ctx.saved_tensors, wrapper, deriv_shortname)  # (ndim, ..., nao, nao)
-
-            # if deriv_shortname and deriv_shortnameT can be just flipped, then
-            # no need to calculate the other one
-            if _int1e_shortname_equiv(deriv_shortname, deriv_shortnameT):
-                dout_dposT = dout_dpos.transpose(-2, -1)
-            else:
-                dout_dposT = _Int1eFunction.apply(
-                    *ctx.saved_tensors, wrapper, deriv_shortnameT)
+            # get the integrals required for the derivatives
+            sname_derivs = [_get_intxe_deriv_shortname(shortname, s, 1) for s in ("r1", "r2")]
+            int_fcn = lambda name: _Int1eFunction.apply(*ctx.saved_tensors, wrapper, name)
+            dout_dposs = _get_integrals(sname_derivs, 1, int_fcn)  # list of (ndim, ..., nao, nao)
 
             # negative because the integral calculates the nabla w.r.t. the
             # spatial coordinate, not the basis central position
-            ndim = dout_dpos.shape[0]
-            shape = (ndim, -1, *dout_dpos.shape[-2:])
+            ndim = dout_dposs[0].shape[0]
+            shape = (ndim, -1, *dout_dposs[0].shape[-2:])
             grad_out2 = grad_out.reshape(shape[1:])
-            grad_dpos_i = -torch.einsum("sij,dsij->di", grad_out2, dout_dpos .reshape(shape))
-            grad_dpos_j = -torch.einsum("sij,dsij->dj", grad_out2, dout_dposT.reshape(shape))
+            grad_dpos_i = -torch.einsum("sij,dsij->di", grad_out2, dout_dposs[0].reshape(shape))
+            grad_dpos_j = -torch.einsum("sij,dsij->dj", grad_out2, dout_dposs[1].reshape(shape))
             grad_dpos_ij = grad_dpos_i + grad_dpos_j
 
             # grad_allpossT is only a view of grad_allposs, so the operation below
@@ -567,46 +551,30 @@ class _Int1eFunction(torch.autograd.Function):
             # ratoms: (natoms, ndim)
             natoms = ratoms.shape[0]
             sname_rinv = shortname.replace("nuc", "rinv")
-            sname_deriv1 = _get_int1e_deriv_shortname(sname_rinv, "r1")
-            sname_deriv2 = _get_int1e_deriv_shortname(sname_rinv, "r2")
-            sname12_equiv = _int1e_shortname_equiv(sname_deriv1, sname_deriv2)
+            sname_derivs = [_get_intxe_deriv_shortname(sname_rinv, s, 1) for s in ("r1", "r2")]
 
             grad_ratoms = torch.empty_like(ratoms)
             for i in range(natoms):
                 atomz = wrapper._atm[i, 0]  # 0 is the charge position in _atm
 
-                # calculate where the derivative is on the left basis
-                dout_datpos1 = _Int1eFunction.apply(
+                # get the integrals
+                int_fcn = lambda name: _Int1eFunction.apply(
                     allcoeffs, allalphas, allposs, ratoms[i],
-                    wrapper, sname_deriv1)  # (ndim, ..., nao, nao)
+                    wrapper, name)
+                dout_datposs = _get_integrals(sname_derivs, 1, int_fcn)  # (ndim, ..., nao, nao)
 
-                # calculate the factor where the derivative is on the right
-                if sname12_equiv:
-                    dout_datpos2 = dout_datpos1.transpose(-2, -1)
-                else:
-                    dout_datpos2 = _Int1eFunction.apply(
-                        allcoeffs, allalphas, allposs, ratoms[i],
-                        wrapper, sname_deriv2)
-
-                grad_datpos = grad_out * (dout_datpos1 + dout_datpos2)
+                grad_datpos = grad_out * (dout_datposs[0] + dout_datposs[1])
                 grad_datpos = grad_datpos.reshape(grad_datpos.shape[0], -1).sum(dim=-1)
                 grad_ratoms[i] = -atomz * grad_datpos
 
         elif ratoms.requires_grad and "rinv" in shortname:
             # ratoms: (ndim)
-            sname_deriv1 = _get_int1e_deriv_shortname(shortname, "r1")
-            sname_deriv2 = _get_int1e_deriv_shortname(shortname, "r2")
+            # get the integrals for the derivatives
+            sname_derivs = [_get_intxe_deriv_shortname(shortname, s, 1) for s in ("r1", "r2")]
+            int_fcn = lambda name: _Int1eFunction.apply(*ctx.saved_tensors, wrapper, name)
+            dout_datposs = _get_integrals(sname_derivs, 1, int_fcn)
 
-            dout_datpos1 = _Int1eFunction.apply(
-                *ctx.saved_tensors, wrapper, sname_deriv1)
-
-            if _int1e_shortname_equiv(sname_deriv1, sname_deriv2):
-                dout_datpos2 = dout_datpos1.transpose(-2, -1)
-            else:
-                dout_datpos2 = _Int1eFunction.apply(
-                    *ctx.saved_tensors, wrapper, sname_deriv2)
-
-            grad_datpos = grad_out * (dout_datpos1 + dout_datpos2)
+            grad_datpos = grad_out * (dout_datposs[0] + dout_datposs[1])
             grad_ratoms = grad_datpos.reshape(grad_datpos.shape[0], -1).sum(dim=-1)
 
         return grad_allcoeffs, grad_allalphas, grad_allposs, grad_ratoms, \
@@ -644,6 +612,7 @@ class _Int2eFunction(torch.autograd.Function):
             u_params = u_wrapper.get_params()
             # u_grad_out: (nu_ao^4)
             u_grad_out = _gather_at_dims(grad_out, mapidx=uao2ao, dims=(-4, -3, -2, -1))
+            u_int_fcn = lambda name: _Int2eFunction.apply(*u_params, u_wrapper, name)
 
             # calculate the grad w.r.t. coeffs
             if allcoeffs.requires_grad:
@@ -674,54 +643,16 @@ class _Int2eFunction(torch.autograd.Function):
                 grad_allalphas = torch.zeros_like(allalphas)  # (ngauss)
 
                 # get the uncontracted integrals
-                sname_deriv_a1 = _get_int2e_deriv_shortname(shortname, "aa1")
-                sname_deriv_a2 = _get_int2e_deriv_shortname(shortname, "aa2")
-                sname_deriv_b1 = _get_int2e_deriv_shortname(shortname, "ab1")
-                sname_deriv_b2 = _get_int2e_deriv_shortname(shortname, "ab2")
-
-                dout_dalpha_a1 = _Int2eFunction.apply(*u_params,
-                    u_wrapper, sname_deriv_a1)  # (..., nu_ao, nu_ao)
-
-                # calculate the derivative at the left's 2nd position
-                axes_relation_a12 = _int2e_shortname_equiv(sname_deriv_a1, sname_deriv_a2)
-                if axes_relation_a12 is not None:
-                    dout_dalpha_a2 = _transpose(dout_dalpha_a1, axes_relation_a12)
-                else:
-                    dout_dalpha_a2 = _Int2eFunction.apply(
-                        *ctx.saved_tensors, wrapper, sname_deriv_a2)  # (ndim, ..., nao^4)
-
-                # calculate the derivative at the right's 1st position
-                axes_relation_a1b1 = _int2e_shortname_equiv(sname_deriv_a1, sname_deriv_b1)
-                axes_relation_a2b1 = _int2e_shortname_equiv(sname_deriv_a2, sname_deriv_b1)
-                if axes_relation_a1b1 is not None:
-                    dout_dalpha_b1 = _transpose(dout_dalpha_a1, axes_relation_a1b1)
-                elif axes_relation_a2b1 is not None:
-                    dout_dalpha_b1 = _transpose(dout_dalpha_a2, axes_relation_a2b1)
-                else:
-                    dout_dalpha_b1 = _Int2eFunction.apply(
-                        *ctx.saved_tensors, wrapper, sname_deriv_b1)  # (ndim, ..., nao^4)
-
-                # calculate the derivative at the right's 2nd
-                axes_relation_b12  = _int2e_shortname_equiv(sname_deriv_b1, sname_deriv_b2)
-                axes_relation_a1b2 = _int2e_shortname_equiv(sname_deriv_a1, sname_deriv_b2)
-                axes_relation_a2b2 = _int2e_shortname_equiv(sname_deriv_a2, sname_deriv_b2)
-                if axes_relation_b12 is not None:
-                    dout_dalpha_b2 = _transpose(dout_dalpha_b1, axes_relation_b12)
-                elif axes_relation_a1b2 is not None:
-                    dout_dalpha_b2 = _transpose(dout_dalpha_a1, axes_relation_a1b2)
-                elif axes_relation_a2b2 is not None:
-                    dout_dalpha_b2 = _transpose(dout_dalpha_a2, axes_relation_a2b2)
-                else:
-                    dout_dalpha_b2 = _Int2eFunction.apply(
-                        *ctx.saved_tensors, wrapper, sname_deriv_b2)  # (ndim, ..., nao^4)
-
+                sname_derivs = [_get_intxe_deriv_shortname(shortname, sname, 2)
+                                for sname in ("aa1", "aa2", "ab1", "ab2")]
+                dout_dalphas = _get_integrals(sname_derivs, 2, u_int_fcn)
 
                 # (nu_ao)
-                grad_alpha_a1 = torch.einsum("...ijkl,...ijkl->i", dout_dalpha_a1, u_grad_out)
-                grad_alpha_a2 = torch.einsum("...ijkl,...ijkl->j", dout_dalpha_a2, u_grad_out)
-                grad_alpha_b1 = torch.einsum("...ijkl,...ijkl->k", dout_dalpha_b1, u_grad_out)
-                grad_alpha_b2 = torch.einsum("...ijkl,...ijkl->l", dout_dalpha_b2, u_grad_out)
                 # negative because the exponent is negative alpha * (r-ra)^2
+                grad_alpha_a1 = torch.einsum("...ijkl,...ijkl->i", dout_dalphas[0], u_grad_out)
+                grad_alpha_a2 = torch.einsum("...ijkl,...ijkl->j", dout_dalphas[1], u_grad_out)
+                grad_alpha_b1 = torch.einsum("...ijkl,...ijkl->k", dout_dalphas[2], u_grad_out)
+                grad_alpha_b2 = torch.einsum("...ijkl,...ijkl->l", dout_dalphas[3], u_grad_out)
                 grad_alpha_all = -(grad_alpha_a1 + grad_alpha_a2 + grad_alpha_b1 + grad_alpha_b2)
 
                 # scatter the grad
@@ -734,56 +665,20 @@ class _Int2eFunction(torch.autograd.Function):
             grad_allposs = torch.zeros_like(allposs)  # (natom, ndim)
             grad_allpossT = grad_allposs.transpose(-2, -1)  # (ndim, natom)
 
-            sname_deriv_a1 = _get_int2e_deriv_shortname(shortname, "ra1")
-            sname_deriv_a2 = _get_int2e_deriv_shortname(shortname, "ra2")
-            sname_deriv_b1 = _get_int2e_deriv_shortname(shortname, "rb1")
-            sname_deriv_b2 = _get_int2e_deriv_shortname(shortname, "rb2")
-
-            dout_dpos_a1 = _Int2eFunction.apply(
-                *ctx.saved_tensors, wrapper, sname_deriv_a1)  # (ndim, ..., nao^4)
-
-            # calculate the derivative at the left's 2nd position
-            axes_relation_a12 = _int2e_shortname_equiv(sname_deriv_a1, sname_deriv_a2)
-            if axes_relation_a12 is not None:
-                dout_dpos_a2 = _transpose(dout_dpos_a1, axes_relation_a12)
-            else:
-                dout_dpos_a2 = _Int2eFunction.apply(
-                    *ctx.saved_tensors, wrapper, sname_deriv_a2)  # (ndim, ..., nao^4)
-
-            # calculate the derivative at the right's 1st position
-            axes_relation_a1b1 = _int2e_shortname_equiv(sname_deriv_a1, sname_deriv_b1)
-            axes_relation_a2b1 = _int2e_shortname_equiv(sname_deriv_a2, sname_deriv_b1)
-            if axes_relation_a1b1 is not None:
-                dout_dpos_b1 = _transpose(dout_dpos_a1, axes_relation_a1b1)
-            elif axes_relation_a2b1 is not None:
-                dout_dpos_b1 = _transpose(dout_dpos_a2, axes_relation_a2b1)
-            else:
-                dout_dpos_b1 = _Int2eFunction.apply(
-                    *ctx.saved_tensors, wrapper, sname_deriv_b1)  # (ndim, ..., nao^4)
-
-            # calculate the derivative at the right's 2nd
-            axes_relation_b12  = _int2e_shortname_equiv(sname_deriv_b1, sname_deriv_b2)
-            axes_relation_a1b2 = _int2e_shortname_equiv(sname_deriv_a1, sname_deriv_b2)
-            axes_relation_a2b2 = _int2e_shortname_equiv(sname_deriv_a2, sname_deriv_b2)
-            if axes_relation_b12 is not None:
-                dout_dpos_b2 = _transpose(dout_dpos_b1, axes_relation_b12)
-            elif axes_relation_a1b2 is not None:
-                dout_dpos_b2_2 = _transpose(dout_dpos_a1, axes_relation_a1b2)
-            elif axes_relation_a2b2 is not None:
-                dout_dpos_b2 = _transpose(dout_dpos_a2, axes_relation_a2b2)
-            else:
-                dout_dpos_b2 = _Int2eFunction.apply(
-                    *ctx.saved_tensors, wrapper, sname_deriv_b2)  # (ndim, ..., nao^4)
+            sname_derivs = [_get_intxe_deriv_shortname(shortname, sname, 2)
+                            for sname in ("ra1", "ra2", "rb1", "rb2")]
+            int_fcn = lambda name: _Int2eFunction.apply(*ctx.saved_tensors, wrapper, name)
+            dout_dposs = _get_integrals(sname_derivs, 2, int_fcn)
 
             # negative because the integral calculates the nabla w.r.t. the
             # spatial coordinate, not the basis central position
-            ndim = dout_dpos_a1.shape[0]
+            ndim = dout_dposs[0].shape[0]
             shape = (ndim, -1, nao, nao, nao, nao)
             grad_out2 = grad_out.reshape(*shape[1:])
-            grad_pos_a1 = -torch.einsum("dzijkl,zijkl->di", dout_dpos_a1.reshape(*shape), grad_out2)
-            grad_pos_a2 = -torch.einsum("dzijkl,zijkl->dj", dout_dpos_a2.reshape(*shape), grad_out2)
-            grad_pos_b1 = -torch.einsum("dzijkl,zijkl->dk", dout_dpos_b1.reshape(*shape), grad_out2)
-            grad_pos_b2 = -torch.einsum("dzijkl,zijkl->dl", dout_dpos_b2.reshape(*shape), grad_out2)
+            grad_pos_a1 = -torch.einsum("dzijkl,zijkl->di", dout_dposs[0].reshape(*shape), grad_out2)
+            grad_pos_a2 = -torch.einsum("dzijkl,zijkl->dj", dout_dposs[1].reshape(*shape), grad_out2)
+            grad_pos_b1 = -torch.einsum("dzijkl,zijkl->dk", dout_dposs[2].reshape(*shape), grad_out2)
+            grad_pos_b2 = -torch.einsum("dzijkl,zijkl->dl", dout_dposs[3].reshape(*shape), grad_out2)
             grad_pos_all = grad_pos_a1 + grad_pos_a2 + grad_pos_b1 + grad_pos_b2
 
             ao_to_atom = wrapper.ao_to_atom.expand(ndim, -1)
@@ -847,16 +742,36 @@ class _EvalGTO(torch.autograd.Function):
             None, None, None, None, None
 
 ############### name derivation manager functions ###############
-def _get_int1e_deriv_shortname(shortname: str, derivmode: str) -> str:
+def _get_intxe_deriv_shortname(shortname: str, derivmode: str, x: int) -> str:
     # get the operation required for the derivation of the integration operator
 
-    def _insert_pattern(shortname: str, derivmode: str, pattern: str) -> str:
-        if derivmode == "1":
-            return "%s%s" % (pattern, shortname)
-        elif derivmode == "2":
-            return "%s%s" % (shortname, pattern)
-        else:
-            raise RuntimeError("Unknown derivmode: %s" % derivmode)
+    # get the _insert_pattern function
+    if x == 1:
+        def _insert_pattern(shortname: str, derivmode: str, pattern: str) -> str:
+            if derivmode == "1":
+                return "%s%s" % (pattern, shortname)
+            elif derivmode == "2":
+                return "%s%s" % (shortname, pattern)
+            else:
+                raise RuntimeError("Unknown derivmode: %s" % derivmode)
+    elif x == 2:
+        def _insert_pattern(shortname: str, derivmode: str, pattern: str) -> str:
+            if derivmode == "a1":
+                return "%s%s" % (pattern, shortname)
+            elif derivmode == "a2":
+                # insert after the first "a"
+                idx_a = shortname.find("a")
+                return shortname[:idx_a + 1] + pattern + shortname[idx_a + 1:]
+            elif derivmode == "b1":
+                # insert before the last "b"
+                idx_b = shortname.rfind("b")
+                return shortname[:idx_b] + pattern + shortname[idx_b:]
+            elif derivmode == "b2":
+                return "%s%s" % (shortname, pattern)
+            else:
+                raise RuntimeError("Unknown derivmode: %s" % derivmode)
+    else:
+        raise RuntimeError("x must be 1 or 2")
 
     if derivmode.startswith("r"):
         return _insert_pattern(shortname, derivmode[1:], "ip")
@@ -865,59 +780,35 @@ def _get_int1e_deriv_shortname(shortname: str, derivmode: str) -> str:
     else:
         raise RuntimeError("Unknown derivmode: %s" % derivmode)
 
-def _int1e_shortname_equiv(s0: str, s1: str) -> Optional[List[Tuple[int, int]]]:
-    # check if the shortname 0 and 1 is actually a transpose of each other
-    int1e_patterns = ["nuc", "ovlp", "rinv", "kin"]
-    transpose_paths = [
-        [],
-        [(-1, -2)],
-    ]
-    return _intxe_shortname_equiv(s0, s1, int1e_patterns, transpose_paths)
-
-def _get_int2e_deriv_shortname(shortname: str, derivmode: str) -> str:
-
-    def _insert_pattern(shortname: str, derivmode: str, pattern: str) -> str:
-        if derivmode == "a1":
-            return "%s%s" % (pattern, shortname)
-        elif derivmode == "a2":
-            # insert after the first "a"
-            idx_a = shortname.find("a")
-            return shortname[:idx_a + 1] + pattern + shortname[idx_a + 1:]
-        elif derivmode == "b1":
-            # insert before the last "b"
-            idx_b = shortname.rfind("b")
-            return shortname[:idx_b] + pattern + shortname[idx_b:]
-        elif derivmode == "b2":
-            return "%s%s" % (shortname, pattern)
-        else:
-            raise RuntimeError("Unknown derivmode: %s" % derivmode)
-
-    if derivmode.startswith("r"):
-        return _insert_pattern(shortname, derivmode[1:], "ip")
-    elif derivmode.startswith("a"):
-        return _insert_pattern(shortname, derivmode[1:], "rr")
-    else:
-        raise RuntimeError("Unknown derivmode: %s" % derivmode)
-
-def _int2e_shortname_equiv(s0: str, s1: str) -> Optional[List[Tuple[int, int]]]:
+def _intxe_shortname_equiv(s0: str, s1: str, x: int) -> Optional[List[Tuple[int, int]]]:
     # check if the integration s1 can be achieved by transposing s0
     # returns None if it cannot.
     # returns the list of two dims if it can for the transpose-path of s0
     # to get the same result as s1
 
-    int2e_patterns = ["r12", "a", "b"]
-    transpose_paths = [
-        [],
-        [(-3, -4)],
-        [(-1, -2)],
-        [(-1, -3), (-2, -4)],
-        [(-1, -3), (-2, -4), (-2, -1)],
-        [(-1, -3), (-2, -4), (-3, -4)],
-    ]
-    return _intxe_shortname_equiv(s0, s1, int2e_patterns, transpose_paths)
+    if x == 1:
+        patterns = ["nuc", "ovlp", "rinv", "kin"]
+        transpose_paths = [
+            [],
+            [(-1, -2)],
+        ]
+    elif x == 2:
+        patterns = ["r12", "a", "b"]
+        transpose_paths = [
+            [],
+            [(-3, -4)],
+            [(-1, -2)],
+            [(-1, -3), (-2, -4)],
+            [(-1, -3), (-2, -4), (-2, -1)],
+            [(-1, -3), (-2, -4), (-3, -4)],
+        ]
+    else:
+        raise RuntimeError("x must be 1 or 2")
 
-def _intxe_shortname_equiv(s0: str, s1: str, patterns: List[str],
-                           transpose_paths: List[List[Tuple[int, int]]]) -> Optional[List[Tuple[int, int]]]:
+    return _intxe_shortname_equiv_helper(s0, s1, patterns, transpose_paths)
+
+def _intxe_shortname_equiv_helper(s0: str, s1: str, patterns: List[str],
+                                  transpose_paths: List[List[Tuple[int, int]]]) -> Optional[List[Tuple[int, int]]]:
     # find the transpose path to get the s1 integral from s0.
     # this function should return the transpose path from s0 to reach s1.
     # returns None if it is not possible.
@@ -942,19 +833,31 @@ def _intxe_shortname_equiv(s0: str, s1: str, patterns: List[str],
             return transpose_path
     return None
 
-def _calc_pattern_occurence(s: str, pattern: str,
-                            at_start: bool = False, at_end: bool = False) -> int:
-    # calculate the occurence of a pattern in string s at the start or at the end
-    # of the string
-    if at_start:
-        re_pattern = r"^(?:{pattern})*(?:{pattern})?".format(pattern=pattern)
-        return len(re.findall(re_pattern, s)[0]) // len(pattern)
-    elif at_end:
-        re_pattern = r"(?:{pattern})?(?:{pattern})*$".format(pattern=pattern)
-        return len(re.findall(re_pattern, s)[0]) // len(pattern)
-    else:
-        re_pattern = r"({pattern})".format(pattern=pattern)
-        return len(re.findall(re_pattern, s))
+def _calc_pattern_occurence(s: str, pattern: str) -> int:
+    # calculate the occurence of a pattern in string s
+    re_pattern = r"({pattern})".format(pattern=pattern)
+    return len(re.findall(re_pattern, s))
+
+############### integral manager ###############
+
+def _get_integrals(int_names: List[str], xint: int, int_fcn) -> List[torch.Tensor]:
+    # return the list of tensors of the integrals given by the list of integral names.
+    # xint represent whether it is 1 or 2 electron integrals
+    # int_fcn is the integral function that receives the name and returns the results.
+
+    res: List[torch.Tensor] = []
+    for i in range(len(int_names)):
+        res_i: Optional[torch.Tensor] = None
+        for j in range(i - 1, -1, -1):
+            # check if the integral can be calculated from the previous results
+            transpose_path = _intxe_shortname_equiv(int_names[j], int_names[i], xint)
+            if transpose_path is not None:
+                res_i = _transpose(res[j], transpose_path)
+                break
+        if res_i is None:
+            res_i = int_fcn(int_names[i])
+        res.append(res_i)
+    return res
 
 def _transpose(a: torch.Tensor, axes: List[Tuple[int, int]]) -> torch.Tensor:
     # perform the transpose of two axes for tensor a
@@ -982,18 +885,3 @@ def _gather_at_dims(inp: torch.Tensor, mapidx: torch.Tensor,
         for dim in dims:
             inp = _gather_at_dims(inp, mapidx, dims=dim)
         return inp
-
-if __name__ == "__main__":
-    print(_int2e_shortname_equiv("ipar12b", "ipar12b"))
-    # from dqc.api.loadbasis import loadbasis
-    # dtype = torch.float64
-    # bases = loadbasis("3:6-311++G**", dtype=dtype)
-    # pos1 = torch.tensor([0.0, 0.0, 0.0], dtype=dtype)
-    # pos2 = torch.tensor([0.0, 0.0, 1.0], dtype=dtype)
-    # atom1 = AtomCGTOBasis(atomz=3, bases=bases, pos=pos1)
-    # atom2 = AtomCGTOBasis(atomz=3, bases=bases, pos=pos2)
-    # wrapper = LibcintWrapper([atom1, atom2], spherical=True)
-    #
-    # out = wrapper.calc_all_int1e_internal("ipovlp")
-    # print(out)
-    # print(out.shape)
