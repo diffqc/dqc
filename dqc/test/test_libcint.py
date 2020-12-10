@@ -15,10 +15,10 @@ except ImportError:
 
 AtomEnv = namedtuple("AtomEnv", ["poss", "basis", "rgrid", "atomzs"])
 
-def get_atom_env(dtype, basis="3-21G", ngrid=0):
+def get_atom_env(dtype, basis="3-21G", ngrid=0, pos_requires_grad=True):
     d = 0.8
-    pos1 = torch.tensor([0.0, 0.0, d], dtype=dtype, requires_grad=True)
-    pos2 = torch.tensor([0.0, 0.0, -d], dtype=dtype, requires_grad=True)
+    pos1 = torch.tensor([0.0, 0.0, d], dtype=dtype, requires_grad=pos_requires_grad)
+    pos2 = torch.tensor([0.0, 0.0, -d], dtype=dtype, requires_grad=pos_requires_grad)
     poss = [pos1, pos2]
     atomzs = [1, 1]
 
@@ -125,7 +125,7 @@ def test_integral_grad_basis(int_type):
     dtype = torch.double
     torch.manual_seed(123)
 
-    atomenv = get_atom_env(dtype)
+    atomenv = get_atom_env(dtype, pos_requires_grad=False)
     pos1 = atomenv.poss[0]
     pos2 = atomenv.poss[1]
     def get_int1e(alphas1, alphas2, coeffs1, coeffs2, name):
@@ -163,7 +163,8 @@ def test_integral_grad_basis(int_type):
     coeffs2 = torch.rand((nangmom, ncontr), dtype=dtype, requires_grad=True)
 
     torch.autograd.gradcheck(get_int1e, (alphas1, alphas2, coeffs1, coeffs2, int_type))
-    # torch.autograd.gradcheck(get_int1e, (alphas1, alphas2, coeffs1, coeffs2, int_type))
+    if int_type != "elrep":
+        torch.autograd.gradgradcheck(get_int1e, (alphas1, alphas2, coeffs1, coeffs2, int_type))
 
 @pytest.mark.parametrize(
     "eval_type",

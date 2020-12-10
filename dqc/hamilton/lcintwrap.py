@@ -482,18 +482,25 @@ class _Int1eFunction(torch.autograd.Function):
             # calculate the gradient w.r.t. coeffs
             if allcoeffs.requires_grad:
                 grad_allcoeffs = torch.zeros_like(allcoeffs)  # (ngauss)
+
+                # get the uncontracted version of the integral
                 dout_dcoeff = _Int1eFunction.apply(*u_params, ratoms,
-                    u_wrapper, shortname)
+                    u_wrapper, shortname)  # (..., nu_ao, nu_ao)
                 dout_dcoeffT = dout_dcoeff.transpose(-2, -1)
 
+                # get the coefficients and spread it on the u_ao-length tensor
+                coeffs_i = torch.gather(allcoeffs, dim=-1, index=u_wrapper.ao_to_shell)  # (nu_ao)
+                dout_dcoeff = dout_dcoeff / coeffs_i.unsqueeze(-1)
+                dout_dcoeffT = dout_dcoeffT / coeffs_i.unsqueeze(-1)
+
+                # (nu_ao)
                 grad_dcoeff_i = torch.einsum("...ij,...ij->i", u_grad_out, dout_dcoeff)
-                grad_dcoeff_j = torch.einsum("...ij,...ij->j", u_grad_out, dout_dcoeffT)
+                grad_dcoeff_j = torch.einsum("...ij,...ji->j", u_grad_out, dout_dcoeffT)
                 grad_dcoeff = grad_dcoeff_i + grad_dcoeff_j
 
                 # scatter the grad and divide with the coefficient
                 ao_to_shell = u_wrapper.ao_to_shell
                 grad_allcoeffs.scatter_add_(dim=-1, index=ao_to_shell, src=grad_dcoeff)
-                grad_allcoeffs = grad_allcoeffs / allcoeffs
 
             # calculate the gradient w.r.t. alphas
             if allalphas.requires_grad:
@@ -506,8 +513,7 @@ class _Int1eFunction(torch.autograd.Function):
                     u_wrapper, deriv_shortname)  # (..., nu_ao, nu_ao)
 
                 # check if deriv_shortname and deriv_shortnameT can just be flipped
-                # TODO: remove the true statement for 2nd deriv and higher
-                if True or _int1e_shortname_equiv(deriv_shortname, deriv_shortnameT):
+                if _int1e_shortname_equiv(deriv_shortname, deriv_shortnameT):
                     dout_dalphaT = dout_dalpha.transpose(-2, -1)
                 else:
                     dout_dalphaT = _Int1eFunction.apply(*u_params, ratoms,
@@ -861,12 +867,15 @@ def _get_int1e_deriv_shortname(shortname: str, derivmode: str) -> str:
 
 def _int1e_shortname_equiv(s1: str, s2: str) -> bool:
     # check if the shortname 1 and 2 is actually a transpose of each other
-    n_ip_start1 = _calc_pattern_occurence(s1, "ip", at_start=True)
-    n_ip_end1 = _calc_pattern_occurence(s1, "ip", at_end=True)
-    n_ip_start2 = _calc_pattern_occurence(s2, "ip", at_start=True)
-    n_ip_end2 = _calc_pattern_occurence(s2, "ip", at_end=True)
-    return min(n_ip_start1, n_ip_end1) == min(n_ip_start2, n_ip_end2) and \
-        max(n_ip_start1, n_ip_end1) == max(n_ip_start2, n_ip_end2)
+    int1e_patterns = ["nuc", "ovlp", "rinv", "kin"]
+    p1 = _intxe_parse_pattern(s1, int1e_patterns)
+    p2 = _intxe_parse_pattern(s2, int1e_patterns)
+    return (p1[0] == p2[1] and p1[1] == p2[0])
+
+def _intxe_parse_pattern(s: str, patterns: List[str]) -> List[str]:
+    for c in patterns:
+        s = s.replace(c, "|")
+    return s.split("|")
 
 def _get_int2e_deriv_shortname(shortname: str, derivmode: str) -> str:
 
