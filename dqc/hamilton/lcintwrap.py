@@ -630,6 +630,97 @@ class _Int2eFunction(torch.autograd.Function):
         # TODO: to be completed (???)
         grad_allcoeffs: Optional[torch.Tensor] = None
         grad_allalphas: Optional[torch.Tensor] = None
+        if allcoeffs.requires_grad or allalphas.requires_grad:
+            # obtain the uncontracted wrapper, and expanded grad_out
+            # uao2ao: (nu_ao)
+            u_wrapper, uao2ao = wrapper.get_uncontracted_wrapper()
+            nu_ao = uao2ao.shape[-1]
+            u_params = u_wrapper.get_params()
+            # u_grad_out: (nu_ao^4)
+            u_grad_out = _gather_at_dims(grad_out, mapidx=uao2ao, dims=(-4, -3, -2, -1))
+
+            # calculate the grad w.r.t. coeffs
+            if allcoeffs.requires_grad:
+                grad_allcoeffs = torch.zeros_like(allcoeffs)
+
+                # (..., nu_ao^4)
+                dout_dcoeff_a1 = _Int2eFunction.apply(*u_params, u_wrapper, shortname)
+                dout_dcoeff_a2 = dout_dcoeff_a1.transpose(-3, -4)
+                dout_dcoeff_b1 = dout_dcoeff_a1.transpose(-3, -1).transpose(-4, -2)
+                dout_dcoeff_b2 = dout_dcoeff_b1.transpose(-2, -1)  # TODO: or is it (-3, -4)?
+
+                # reduce the uncontracted integrations
+                grad_coeff_a1 = torch.einsum("...ijkl,...ijkl->i", dout_dcoeff_a1, u_grad_out)
+                grad_coeff_a2 = torch.einsum("...ijkl,...ijkl->j", dout_dcoeff_a2, u_grad_out)
+                grad_coeff_b1 = torch.einsum("...ijkl,...ijkl->k", dout_dcoeff_b1, u_grad_out)
+                grad_coeff_b2 = torch.einsum("...ijkl,...ijkl->l", dout_dcoeff_b2, u_grad_out)
+                grad_coeff_all = grad_coeff_a1 + grad_coeff_a2 + grad_coeff_b1 + grad_coeff_b2
+
+                # scatter to the coefficients
+                ao_to_shell = u_wrapper.ao_to_shell
+                grad_allcoeffs.scatter_add_(dim=-1, index=ao_to_shell, src=grad_coeff_all)
+                grad_allcoeffs = grad_allcoeffs / allcoeffs
+
+            if allalphas.requires_grad:
+                grad_allalphas = torch.zeros_like(allalphas)  # (ngauss)
+
+                # get the uncontracted integrals
+                sname_deriv_a1 = _get_int2e_deriv_shortname(shortname, "aa1")
+                sname_deriv_a2 = _get_int2e_deriv_shortname(shortname, "aa2")
+                sname_deriv_b1 = _get_int2e_deriv_shortname(shortname, "ab1")
+                sname_deriv_b2 = _get_int2e_deriv_shortname(shortname, "ab2")
+
+                dout_dalpha_a1 = _Int2eFunction.apply(*u_params,
+                    u_wrapper, sname_deriv_a1)  # (..., nu_ao, nu_ao)
+
+                # calculate the derivative at the left's 2nd position
+                axes_relation_a12 = _int2e_shortname_equiv(sname_deriv_a1, sname_deriv_a2)
+                axes_relation_a12 = [(-3, -4)]  # TODO: remove this for 2nd grad
+                if axes_relation_a12 is not None:
+                    dout_dalpha_a2 = _transpose(dout_dalpha_a1, axes_relation_a12)
+                else:
+                    dout_dalpha_a2 = _Int2eFunction.apply(
+                        *ctx.saved_tensors, wrapper, sname_deriv_a2)  # (ndim, ..., nao^4)
+
+                # calculate the derivative at the right's 1st position
+                axes_relation_a1b1 = _int2e_shortname_equiv(sname_deriv_a1, sname_deriv_b1)
+                axes_relation_a2b1 = _int2e_shortname_equiv(sname_deriv_a2, sname_deriv_b1)
+                axes_relation_a1b1 = [(-3, -1), (-4, -2)]  # TODO: remove this for 2nd grad
+                if axes_relation_a1b1 is not None:
+                    dout_dalpha_b1 = _transpose(dout_dalpha_a1, axes_relation_a1b1)
+                elif axes_relation_a2b1 is not None:
+                    dout_dalpha_b1 = _transpose(dout_dalpha_a2, axes_relation_a2b1)
+                else:
+                    dout_dalpha_b1 = _Int2eFunction.apply(
+                        *ctx.saved_tensors, wrapper, sname_deriv_b1)  # (ndim, ..., nao^4)
+
+                # calculate the derivative at the right's 2nd
+                axes_relation_b12  = _int2e_shortname_equiv(sname_deriv_b1, sname_deriv_b2)
+                axes_relation_a1b2 = _int2e_shortname_equiv(sname_deriv_a1, sname_deriv_b2)
+                axes_relation_a2b2 = _int2e_shortname_equiv(sname_deriv_a2, sname_deriv_b2)
+                axes_relation_b12 = [(-1, -2)]  # TODO: remove this for 2nd grad
+                if axes_relation_b12 is not None:
+                    dout_dalpha_b2 = _transpose(dout_dalpha_b1, axes_relation_b12)
+                elif axes_relation_a1b2 is not None:
+                    dout_dalpha_b2 = _transpose(dout_dalpha_a1, axes_relation_a1b2)
+                elif axes_relation_a2b2 is not None:
+                    dout_dalpha_b2 = _transpose(dout_dalpha_a2, axes_relation_a2b2)
+                else:
+                    dout_dalpha_b2 = _Int2eFunction.apply(
+                        *ctx.saved_tensors, wrapper, sname_deriv_b2)  # (ndim, ..., nao^4)
+
+
+                # (nu_ao)
+                grad_alpha_a1 = torch.einsum("...ijkl,...ijkl->i", dout_dalpha_a1, u_grad_out)
+                grad_alpha_a2 = torch.einsum("...ijkl,...ijkl->j", dout_dalpha_a2, u_grad_out)
+                grad_alpha_b1 = torch.einsum("...ijkl,...ijkl->k", dout_dalpha_b1, u_grad_out)
+                grad_alpha_b2 = torch.einsum("...ijkl,...ijkl->l", dout_dalpha_b2, u_grad_out)
+                # negative because the exponent is negative alpha * (r-ra)^2
+                grad_alpha_all = -(grad_alpha_a1 + grad_alpha_a2 + grad_alpha_b1 + grad_alpha_b2)
+
+                # scatter the grad
+                ao_to_shell = u_wrapper.ao_to_shell  # (nu_ao)
+                grad_allalphas.scatter_add_(dim=-1, index=ao_to_shell, src=grad_alpha_all)
 
         # calculate the gradient w.r.t. positions
         grad_allposs: Optional[torch.Tensor] = None
@@ -752,14 +843,19 @@ class _EvalGTO(torch.autograd.Function):
 ############### name derivation manager functions ###############
 def _get_int1e_deriv_shortname(shortname: str, derivmode: str) -> str:
     # get the operation required for the derivation of the integration operator
-    if derivmode == "r1":
-        return "ip%s" % shortname
-    elif derivmode == "r2":
-        return "%sip" % shortname
-    elif derivmode == "a1":
-        return "rr%s" % shortname
-    elif derivmode == "a2":
-        return "%srr" % shortname
+
+    def _insert_pattern(shortname: str, derivmode: str, pattern: str) -> str:
+        if derivmode == "1":
+            return "%s%s" % (pattern, shortname)
+        elif derivmode == "2":
+            return "%s%s" % (shortname, pattern)
+        else:
+            raise RuntimeError("Unknown derivmode: %s" % derivmode)
+
+    if derivmode.startswith("r"):
+        return _insert_pattern(shortname, derivmode[1:], "ip")
+    elif derivmode.startswith("a"):
+        return _insert_pattern(shortname, derivmode[1:], "rr")
     else:
         raise RuntimeError("Unknown derivmode: %s" % derivmode)
 
@@ -773,18 +869,27 @@ def _int1e_shortname_equiv(s1: str, s2: str) -> bool:
         max(n_ip_start1, n_ip_end1) == max(n_ip_start2, n_ip_end2)
 
 def _get_int2e_deriv_shortname(shortname: str, derivmode: str) -> str:
-    if derivmode == "ra1":
-        return "ip%s" % shortname
-    elif derivmode == "ra2":
-        # insert after the first "a"
-        idx_a = shortname.find("a")
-        return shortname[:idx_a + 1] + "ip" + shortname[idx_a + 1:]
-    elif derivmode == "rb1":
-        # insert before the last "b"
-        idx_b = shortname.rfind("b")
-        return shortname[:idx_b] + "ip" + shortname[idx_b:]
-    elif derivmode == "rb2":
-        return "%sip" % shortname
+
+    def _insert_pattern(shortname: str, derivmode: str, pattern: str) -> str:
+        if derivmode == "a1":
+            return "%s%s" % (pattern, shortname)
+        elif derivmode == "a2":
+            # insert after the first "a"
+            idx_a = shortname.find("a")
+            return shortname[:idx_a + 1] + pattern + shortname[idx_a + 1:]
+        elif derivmode == "b1":
+            # insert before the last "b"
+            idx_b = shortname.rfind("b")
+            return shortname[:idx_b] + pattern + shortname[idx_b:]
+        elif derivmode == "b2":
+            return "%s%s" % (shortname, pattern)
+        else:
+            raise RuntimeError("Unknown derivmode: %s" % derivmode)
+
+    if derivmode.startswith("r"):
+        return _insert_pattern(shortname, derivmode[1:], "ip")
+    elif derivmode.startswith("a"):
+        return _insert_pattern(shortname, derivmode[1:], "rr")
     else:
         raise RuntimeError("Unknown derivmode: %s" % derivmode)
 
