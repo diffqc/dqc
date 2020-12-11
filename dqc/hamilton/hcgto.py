@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Union, Tuple, overload
 import torch
 import xitorch as xt
 from dqc.hamilton.base_hamilton import BaseHamilton
@@ -115,29 +115,66 @@ class HamiltonCGTO(BaseHamilton):
         pass
 
     ################ xc-related ################
+    @overload
+    def get_vxc(self, dm: Tuple[torch.Tensor, torch.Tensor]) -> Tuple[xt.LinearOperator, xt.LinearOperator]:
+        ...
+
+    @overload
     def get_vxc(self, dm: torch.Tensor) -> xt.LinearOperator:
+        ...
+
+    def get_vxc(self, dm):
         # dm: (*BD, nao, nao)
         assert self.xc is not None, "Please call .setup_grid with the xc object"
 
-        densinfo = self._dm2densinfo(dm, self.xc.family)  # value: (*BD, nr)
-        potinfo = self.xc.get_vxc(densinfo)  # value: (*BD, nr)
+        if isinstance(dm, torch.Tensor):  # unpolarized case
+            densinfo = self._dm2densinfo(dm, self.xc.family)  # value: (*BD, nr)
+            potinfo = self.xc.get_vxc(densinfo)  # value: (*BD, nr)
 
-        # get the linear operator from the potential
-        vxc_linop = self.get_vext(potinfo.value)
-        if self.xcfamily >= 2:  # GGA or MGGA
-            assert potinfo.grad is not None
-            vxc_linop = vxc_linop + self.get_grad_vext(potinfo.grad)
-        if self.xcfamily >= 3:  # MGGA
-            assert potinfo.lapl is not None
-            vxc_linop = vxc_linop + self.get_lapl_vext(potinfo.lapl)
+            # get the linear operator from the potential
+            vxc_linop = self.get_vext(potinfo.value)
+            if self.xcfamily >= 2:  # GGA or MGGA
+                assert potinfo.grad is not None
+                vxc_linop = vxc_linop + self.get_grad_vext(potinfo.grad)
+            if self.xcfamily >= 3:  # MGGA
+                assert potinfo.lapl is not None
+                vxc_linop = vxc_linop + self.get_lapl_vext(potinfo.lapl)
 
-        return vxc_linop
+            return vxc_linop
 
-    def get_exc(self, dm: torch.Tensor) -> torch.Tensor:
+        else:  # polarized case
+            densinfo_u = self._dm2densinfo(dm[0], self.xc.family)
+            densinfo_d = self._dm2densinfo(dm[1], self.xc.family)
+            potinfo_u, potinfo_d = self.xc.get_vxc((densinfo_u, densinfo_d))
+
+            # get the linear operator from the potential
+            vxc_linop_u = self.get_vext(potinfo_u.value)
+            vxc_linop_d = self.get_vext(potinfo_d.value)
+            if self.xcfamily >= 2:  # GGA or MGGA
+                assert potinfo_u.grad is not None
+                assert potinfo_d.grad is not None
+                vxc_linop_u = vxc_linop_u + self.get_grad_vext(potinfo_u.grad)
+                vxc_linop_d = vxc_linop_d + self.get_grad_vext(potinfo_d.grad)
+            if self.xcfamily >= 3:  # MGGA
+                assert potinfo_u.lapl is not None
+                assert potinfo_d.lapl is not None
+                vxc_linop_u = vxc_linop_u + self.get_lapl_vext(potinfo_u.lapl)
+                vxc_linop_d = vxc_linop_d + self.get_lapl_vext(potinfo_d.lapl)
+
+            return vxc_linop_u, vxc_linop_d
+
+    def get_exc(self, dm: Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]) -> torch.Tensor:
         assert self.xc is not None, "Please call .setup_grid with the xc object"
 
-        densinfo = self._dm2densinfo(dm, self.xc.family)  # value: (*BD, nr)
-        edens = self.xc.get_edensityxc(densinfo)  # (*BD, nr)
+        # obtain the energy density per unit volume
+        if isinstance(dm, torch.Tensor):  # unpolarized case
+            densinfo = self._dm2densinfo(dm, self.xc.family)  # value: (*BD, nr)
+            edens = self.xc.get_edensityxc(densinfo)  # (*BD, nr)
+        else:  # polarized case
+            densinfo_u = self._dm2densinfo(dm[0], self.xc.family)
+            densinfo_d = self._dm2densinfo(dm[1], self.xc.family)
+            edens = self.xc.get_edensityxc((densinfo_u, densinfo_d))
+
         return torch.sum(self.grid.get_dvolume() * edens, dim=-1)
 
     def _dm2densinfo(self, dm: torch.Tensor, family: int) -> ValGrad:

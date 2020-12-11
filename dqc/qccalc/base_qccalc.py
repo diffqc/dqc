@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import List
+from typing import List, Union, Tuple
 import torch
 import xitorch as xt
 
@@ -21,9 +21,11 @@ class BaseQCCalc(xt.EditableModule):
         pass
 
     @abstractmethod
-    def aodm(self) -> torch.Tensor:
+    def aodm(self) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """
-        Returns the density matrix in atomic orbital.
+        Returns the density matrix in atomic orbital. For polarized case, it
+        returns a tuple of 2 tensors representing the density matrices for
+        spin-up and spin-down.
         """
         # return: (nao, nao)
         pass

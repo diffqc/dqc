@@ -8,9 +8,9 @@ from dqc.qccalc.base_qccalc import BaseQCCalc
 from dqc.xc.base_xc import BaseXC
 from dqc.api.getxc import get_xc
 
-class RKS(BaseQCCalc):
+class UKS(BaseQCCalc):
     """
-    Performing Restricted Kohn-Sham DFT calculation.
+    Performing Unrestricted Kohn-Sham DFT calculation.
 
     Arguments
     ---------
@@ -27,7 +27,7 @@ class RKS(BaseQCCalc):
                  vext: Optional[torch.Tensor] = None):
         # get the xc object
         if isinstance(xc, str):
-            self.xc: BaseXC = get_xc(xc, polarized=False)
+            self.xc: BaseXC = get_xc(xc, polarized=True)
         else:
             self.xc = xc
         self.system = system
@@ -39,9 +39,12 @@ class RKS(BaseQCCalc):
         self.hamilton.setup_grid(system.get_grid(), self.xc)
 
         # get the orbital info
-        self.orb_weight = system.get_orbweight(polarized=False)  # (norb,)
-        assert isinstance(self.orb_weight, torch.Tensor)
-        self.norb = self.orb_weight.shape[-1]
+        # UKS RKS diff
+        orb_weights = system.get_orbweight(polarized=True)  # (norb,)
+        assert isinstance(orb_weights, tuple)
+        self.orb_weight = orb_weights
+        self.norb = self.orb_weight[0].shape[-1]
+        assert self.orb_weight[0].shape[-1] == self.orb_weight[1].shape[-1]
 
         # set up the vext linear operator
         self.knvext_linop = self.hamilton.get_kinnucl()  # kinetic, nuclear, and external potential
@@ -54,10 +57,13 @@ class RKS(BaseQCCalc):
         self.device = self.knvext_linop.device
         self.has_run = True
 
-    def run(self, dm0: Optional[torch.Tensor] = None,  # type: ignore
+    def run(self, dm0_u: Optional[torch.Tensor] = None,  # type: ignore
+            dm0_d: Optional[torch.Tensor] = None,
             eigen_options: Optional[Mapping[str, Any]] = None,
             fwd_options: Optional[Mapping[str, Any]] = None,
             bck_options: Optional[Mapping[str, Any]] = None) -> BaseQCCalc:
+
+        assert (dm0_u is None) == (dm0_d is None)
 
         # setup the default options
         if eigen_options is None:
@@ -86,10 +92,14 @@ class RKS(BaseQCCalc):
         self.eigen_options = eigen_options
 
         # set up the initial self-consistent param guess
-        if dm0 is None:
-            dm0 = torch.zeros(self.knvext_linop.shape, dtype=self.dtype,
-                              device=self.device)
-        scp0 = self.__dm2scp(dm0)
+        # UKS RKS diff
+        if dm0_u is None:
+            dm0_u = torch.zeros(self.knvext_linop.shape, dtype=self.dtype,
+                                device=self.device)
+        if dm0_d is None:
+            dm0_d = torch.zeros(self.knvext_linop.shape, dtype=self.dtype,
+                                device=self.device)
+        scp0 = self.__dm2scp((dm0_u, dm0_d))
 
         # do the self-consistent iteration
         scp = xitorch.optimize.equilibrium(
@@ -105,41 +115,63 @@ class RKS(BaseQCCalc):
 
     def energy(self) -> torch.Tensor:
         # calculate the total energy from the diagonalization
-        fock = self.__dm2fock(self._dm)
+        # UKS RKS diff
+        fock_u, fock_d = self.__dm2fock(self._dm)
+
         # eivals: (..., norb), eivecs: (..., nao, norb)
-        eivals, eivecs = self.__diagonalize_fock(fock)
-        e_eivals = torch.sum(eivals * self.orb_weight, dim=-1)
+        eivals_u, eivecs_u = self.__diagonalize_fock(fock_u)
+        eivals_d, eivecs_d = self.__diagonalize_fock(fock_d)
+        e_eivals_u = torch.sum(eivals_u * self.orb_weight[0], dim=-1)
+        e_eivals_d = torch.sum(eivals_d * self.orb_weight[1], dim=-1)
+        e_eivals = e_eivals_u + e_eivals_d
 
         # get the energy from xc
         e_exc = self.hamilton.get_exc(self._dm)
 
         # get the energy from xc potential
-        vxc = self.hamilton.get_vxc(self._dm)
-        e_vxc = torch.einsum("...rc,c,...rc->...", vxc.mm(eivecs), self.orb_weight, eivecs)
+        vxc_u, vxc_d = self.hamilton.get_vxc(self._dm)
+        e_vxc_u = torch.einsum("...rc,c,...rc->...", vxc_u.mm(eivecs_u), self.orb_weight[0], eivecs_u)
+        e_vxc_d = torch.einsum("...rc,c,...rc->...", vxc_d.mm(eivecs_d), self.orb_weight[1], eivecs_d)
+        e_vxc = e_vxc_u + e_vxc_d
 
         # get the energy from electron repulsion
-        elrep = self.hamilton.get_elrep(self._dm)
-        e_elrep = 0.5 * torch.einsum("...rc,c,...rc->...", elrep.mm(eivecs), self.orb_weight, eivecs)
+        elrep = self.hamilton.get_elrep(self._dm[0] + self._dm[1])
+        e_elrep_u = 0.5 * torch.einsum("...rc,c,...rc->...", elrep.mm(eivecs_u), self.orb_weight[0], eivecs_u)
+        e_elrep_d = 0.5 * torch.einsum("...rc,c,...rc->...", elrep.mm(eivecs_d), self.orb_weight[1], eivecs_d)
+        e_elrep = e_elrep_u + e_elrep_d
 
         # compute the total energy
+        print("e_eivals:", e_eivals)
+        print("e_exc:", e_exc)
+        print("e_vxc:", e_vxc)
+        print("e_elrep:", e_elrep)
         e_tot = e_eivals + (e_exc - e_vxc) - e_elrep + self.system.get_nuclei_energy()
         return e_tot
 
-    def aodm(self) -> torch.Tensor:
+    def aodm(self) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         return self._dm
 
-    def __dm2fock(self, dm: torch.Tensor) -> xt.LinearOperator:
+    def __dm2fock(self, dm: Tuple[torch.Tensor, torch.Tensor]) -> Tuple[xt.LinearOperator, xt.LinearOperator]:
         # construct the fock matrix from the density matrix
-        elrep = self.hamilton.get_elrep(dm)  # (..., nao, nao)
-        vxc = self.hamilton.get_vxc(dm)
-        return self.knvext_linop + elrep + vxc
+        # UKS RKS diff
 
-    def __fock2dm(self, fock: xt.LinearOperator) -> torch.Tensor:
+        elrep = self.hamilton.get_elrep(dm[0] + dm[1])  # (..., nao, nao)
+        vext_elrep = self.knvext_linop + elrep
+
+        vxc_u, vxc_d = self.hamilton.get_vxc(dm)
+
+        fock_u = vext_elrep + vxc_u
+        fock_d = vext_elrep + vxc_d
+        return fock_u, fock_d
+
+    def __fock2dm(self, fock: Tuple[xt.LinearOperator, xt.LinearOperator]) -> Tuple[torch.Tensor, torch.Tensor]:
         # diagonalize the fock matrix and obtain the density matrix
-        eigvals, eigvecs = self.__diagonalize_fock(fock)
-        assert isinstance(self.orb_weight, torch.Tensor)
-        dm = self.hamilton.ao_orb2dm(eigvecs, self.orb_weight)
-        return dm
+        # UKS RKS diff
+        eigvals_u, eigvecs_u = self.__diagonalize_fock(fock[0])
+        eigvals_d, eigvecs_d = self.__diagonalize_fock(fock[1])
+        dm_u = self.hamilton.ao_orb2dm(eigvecs_u, self.orb_weight[0])
+        dm_d = self.hamilton.ao_orb2dm(eigvecs_d, self.orb_weight[1])
+        return dm_u, dm_d
 
     def __diagonalize_fock(self, fock: xt.LinearOperator) -> Tuple[torch.Tensor, torch.Tensor]:
         return xitorch.linalg.lsymeig(
@@ -152,13 +184,21 @@ class RKS(BaseQCCalc):
     # the functions below are created so that it is easy to change which
     # parameters is involved in the self-consistent iterations
 
-    def __dm2scp(self, dm: torch.Tensor) -> torch.Tensor:
-        # scp is the fock matrix
-        return self.__dm2fock(dm).fullmatrix()
+    def __dm2scp(self, dm: Tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
+        # UKS RKS diff
+        # scp is the concatenated fock matrix
+        fock_u, fock_d = self.__dm2fock(dm)
+        mat_u = fock_u.fullmatrix().unsqueeze(0)
+        mat_d = fock_d.fullmatrix().unsqueeze(0)
+        return torch.cat((mat_u, mat_d), dim=0)
 
-    def __scp2dm(self, scp: torch.Tensor) -> torch.Tensor:
-        fock = xt.LinearOperator.m(scp, is_hermitian=True)
-        return self.__fock2dm(fock)
+    def __scp2dm(self, scp: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        # UKS RKS diff
+        mat_u = scp[0]
+        mat_d = scp[1]
+        fock_u = xt.LinearOperator.m(mat_u, is_hermitian=True)
+        fock_d = xt.LinearOperator.m(mat_d, is_hermitian=True)
+        return self.__fock2dm((fock_u, fock_d))
 
     def __scp2scp(self, scp: torch.Tensor) -> torch.Tensor:
         dm = self.__scp2dm(scp)
