@@ -2,7 +2,7 @@ from itertools import product
 import numpy as np
 import torch
 import pytest
-from dqc.qccalc.rks import RKS
+from dqc.qccalc.rks import KS
 from dqc.system.mol import Mol
 from dqc.xc.base_xc import BaseXC
 from dqc.utils.datastruct import ValGrad
@@ -32,7 +32,7 @@ energies = [
 def test_rks_energy(xc, atomzs, dist, energy_true):
     poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist
     mol = Mol((atomzs, poss), basis="6-311++G**", dtype=dtype)
-    qc = RKS(mol, xc=xc).run()
+    qc = KS(mol, xc=xc, restricted=True).run()
     ene = qc.energy()
     assert torch.allclose(ene, ene * 0 + energy_true)
 
@@ -53,7 +53,7 @@ def test_rks_grad_pos(xc, atomzs, dist, grad2):
     def get_energy(dist_tensor):
         poss_tensor = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist_tensor
         mol = Mol((atomzs, poss_tensor), basis="3-21G", dtype=dtype, grid=3)
-        qc = RKS(mol, xc=xc).run(bck_options=bck_options)
+        qc = KS(mol, xc=xc, restricted=True).run(bck_options=bck_options)
         return qc.energy()
     dist_tensor = torch.tensor(dist, dtype=dtype, requires_grad=True)
     if grad2:
@@ -78,7 +78,7 @@ def test_rks_grad_vext(xc, atomzs, dist, vext_p):
 
     def get_energy(vext_params):
         vext = rgrid_norm * rgrid_norm * vext_params  # (ngrid,)
-        qc = RKS(mol, xc=xc, vext=vext).run()
+        qc = KS(mol, xc=xc, vext=vext, restricted=True).run()
         ene = qc.energy()
         return ene
 
@@ -137,7 +137,7 @@ def test_rks_grad_vxc(xccls, xcparams, atomzs, dist):
 
     def get_energy(*params):
         xc = xccls(*params)
-        qc = RKS(mol, xc=xc).run()
+        qc = KS(mol, xc=xc, restricted=True).run()
         ene = qc.energy()
         return ene
 
@@ -157,7 +157,7 @@ if __name__ == "__main__":
     with torch.autograd.profiler.profile(enabled=profiler, with_stack=True, record_shapes=True) as prof, \
             torch.autograd.detect_anomaly():
         t0 = time.time()
-        qc = RKS(mol, xc=xc).run()
+        qc = KS(mol, xc=xc, restricted=True).run()
         ene = qc.energy()
         t1 = time.time()
         print(ene)

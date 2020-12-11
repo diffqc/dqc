@@ -2,8 +2,7 @@ from itertools import product
 import numpy as np
 import torch
 import pytest
-from dqc.qccalc.uks import UKS
-from dqc.qccalc.rks import RKS
+from dqc.qccalc.rks import KS
 from dqc.system.mol import Mol
 from dqc.xc.base_xc import BaseXC
 from dqc.utils.datastruct import ValGrad
@@ -28,6 +27,6 @@ def test_uks_energy_same_as_rks(xc, atomzs, dist, energy_true):
     # test to see if uks energy gets the same energy as rks for non-polarized systems
     poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist
     mol = Mol((atomzs, poss), basis="6-311++G**", dtype=dtype)
-    qc = UKS(mol, xc=xc).run()
+    qc = KS(mol, xc=xc, restricted=False).run()
     ene = qc.energy()
     assert torch.allclose(ene, ene * 0 + energy_true)
