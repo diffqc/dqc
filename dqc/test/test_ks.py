@@ -2,7 +2,7 @@ from itertools import product
 import numpy as np
 import torch
 import pytest
-from dqc.qccalc.rks import KS
+from dqc.qccalc.ks import KS
 from dqc.system.mol import Mol
 from dqc.xc.base_xc import BaseXC
 from dqc.utils.datastruct import ValGrad
@@ -143,6 +143,19 @@ def test_rks_grad_vxc(xccls, xcparams, atomzs, dist):
 
     params = tuple(torch.tensor(p, dtype=dtype).requires_grad_() for p in xcparams)
     torch.autograd.gradcheck(get_energy, params)
+
+@pytest.mark.parametrize(
+    "xc,atomzs,dist,energy_true",
+    [("lda,", *atomz_pos, energy) for (atomz_pos, energy) in zip(atomzs_poss[:2], energies[:2])]
+)
+def test_uks_energy_same_as_rks(xc, atomzs, dist, energy_true):
+    # test to see if uks energy gets the same energy as rks for non-polarized systems
+    poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist
+    mol = Mol((atomzs, poss), basis="6-311++G**", dtype=dtype)
+    qc = KS(mol, xc=xc, restricted=False).run()
+    ene = qc.energy()
+    assert torch.allclose(ene, ene * 0 + energy_true)
+
 
 if __name__ == "__main__":
     import time
