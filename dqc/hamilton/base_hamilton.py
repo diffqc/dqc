@@ -1,9 +1,10 @@
 import torch
 import xitorch as xt
 from abc import abstractmethod
-from typing import List, Optional, Tuple, Union, overload
+from typing import List, Optional, Union, overload
 from dqc.grid.base_grid import BaseGrid
 from dqc.xc.base_xc import BaseXC
+from dqc.utils.datastruct import SpinParam
 
 class BaseHamilton(xt.EditableModule):
     """
@@ -101,7 +102,7 @@ class BaseHamilton(xt.EditableModule):
         pass
 
     @overload
-    def get_vxc(self, dm: Tuple[torch.Tensor, torch.Tensor]) -> Tuple[xt.LinearOperator, xt.LinearOperator]:
+    def get_vxc(self, dm: SpinParam[torch.Tensor]) -> SpinParam[xt.LinearOperator]:
         ...
 
     @overload
@@ -120,7 +121,7 @@ class BaseHamilton(xt.EditableModule):
         pass
 
     @abstractmethod
-    def get_exc(self, dm: Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]) -> torch.Tensor:
+    def get_exc(self, dm: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
         """
         Returns the exchange-correlation energy using the xc object given in
         ``.setup_grid()``

@@ -7,6 +7,7 @@ from dqc.system.base_system import BaseSystem
 from dqc.qccalc.base_qccalc import BaseQCCalc
 from dqc.xc.base_xc import BaseXC
 from dqc.api.getxc import get_xc
+from dqc.utils.datastruct import SpinParam
 
 class KS(BaseQCCalc):
     """
@@ -48,9 +49,9 @@ class KS(BaseQCCalc):
         # get the orbital info
         self.orb_weight = system.get_orbweight(polarized=self.polarized)  # (norb,)
         if self.polarized:
-            assert isinstance(self.orb_weight, tuple)
-            assert self.orb_weight[0].shape[-1] == self.orb_weight[1].shape[-1]
-            self.norb = self.orb_weight[0].shape[-1]
+            assert isinstance(self.orb_weight, SpinParam)
+            assert self.orb_weight.u.shape[-1] == self.orb_weight.d.shape[-1]
+            self.norb = self.orb_weight.u.shape[-1]
         else:
             assert isinstance(self.orb_weight, torch.Tensor)
             self.norb = self.orb_weight.shape[-1]
@@ -66,7 +67,7 @@ class KS(BaseQCCalc):
         self.device = self.knvext_linop.device
         self.has_run = True
 
-    def run(self, dm0: Optional[Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]] = None,  # type: ignore
+    def run(self, dm0: Optional[Union[torch.Tensor, SpinParam[torch.Tensor]]] = None,  # type: ignore
             eigen_options: Optional[Mapping[str, Any]] = None,
             fwd_options: Optional[Mapping[str, Any]] = None,
             bck_options: Optional[Mapping[str, Any]] = None) -> BaseQCCalc:
@@ -107,7 +108,7 @@ class KS(BaseQCCalc):
                                     device=self.device)
                 dm0_d = torch.zeros(self.knvext_linop.shape, dtype=self.dtype,
                                     device=self.device)
-                dm0 = (dm0_u, dm0_d)
+                dm0 = SpinParam(u=dm0_u, d=dm0_d)
 
         scp0 = self.__dm2scp(dm0)
 
@@ -127,10 +128,12 @@ class KS(BaseQCCalc):
         # calculate the total energy from the diagonalization
         fock = self.__dm2fock(self._dm)
 
-        # get the energy from xc
+        # get the energy from xc and get the potential
         e_exc = self.hamilton.get_exc(self._dm)
+        vxc = self.hamilton.get_vxc(self._dm)
 
         if not self.polarized:
+            assert isinstance(vxc, xt.LinearOperator)
             assert isinstance(self.orb_weight, torch.Tensor)
             assert isinstance(self._dm, torch.Tensor)
 
@@ -139,40 +142,39 @@ class KS(BaseQCCalc):
             e_eivals = torch.sum(eivals * self.orb_weight, dim=-1)
 
             # get the energy from xc potential
-            vxc = self.hamilton.get_vxc(self._dm)
             e_vxc = torch.einsum("...rc,c,...rc->...", vxc.mm(eivecs), self.orb_weight, eivecs)
 
             # get the energy from electron repulsion
             elrep = self.hamilton.get_elrep(self._dm)
             e_elrep = 0.5 * torch.einsum("...rc,c,...rc->...", elrep.mm(eivecs), self.orb_weight, eivecs)
         else:
-            assert isinstance(self.orb_weight, tuple)
-            assert isinstance(self._dm, tuple)
+            assert isinstance(vxc, SpinParam)
+            assert isinstance(self.orb_weight, SpinParam)
+            assert isinstance(self._dm, SpinParam)
 
             # eivals: (..., norb), eivecs: (..., nao, norb)
-            eivals_u, eivecs_u = self.__diagonalize_fock(fock[0])
-            eivals_d, eivecs_d = self.__diagonalize_fock(fock[1])
-            e_eivals_u = torch.sum(eivals_u * self.orb_weight[0], dim=-1)
-            e_eivals_d = torch.sum(eivals_d * self.orb_weight[1], dim=-1)
+            eivals_u, eivecs_u = self.__diagonalize_fock(fock.u)
+            eivals_d, eivecs_d = self.__diagonalize_fock(fock.d)
+            e_eivals_u = torch.sum(eivals_u * self.orb_weight.u, dim=-1)
+            e_eivals_d = torch.sum(eivals_d * self.orb_weight.d, dim=-1)
             e_eivals = e_eivals_u + e_eivals_d
 
             # get the energy from xc potential
-            vxc_u, vxc_d = self.hamilton.get_vxc(self._dm)
-            e_vxc_u = torch.einsum("...rc,c,...rc->...", vxc_u.mm(eivecs_u), self.orb_weight[0], eivecs_u)
-            e_vxc_d = torch.einsum("...rc,c,...rc->...", vxc_d.mm(eivecs_d), self.orb_weight[1], eivecs_d)
+            e_vxc_u = torch.einsum("...rc,c,...rc->...", vxc.u.mm(eivecs_u), self.orb_weight.u, eivecs_u)
+            e_vxc_d = torch.einsum("...rc,c,...rc->...", vxc.d.mm(eivecs_d), self.orb_weight.d, eivecs_d)
             e_vxc = e_vxc_u + e_vxc_d
 
             # get the energy from electron repulsion
-            elrep = self.hamilton.get_elrep(self._dm[0] + self._dm[1])
-            e_elrep_u = 0.5 * torch.einsum("...rc,c,...rc->...", elrep.mm(eivecs_u), self.orb_weight[0], eivecs_u)
-            e_elrep_d = 0.5 * torch.einsum("...rc,c,...rc->...", elrep.mm(eivecs_d), self.orb_weight[1], eivecs_d)
+            elrep = self.hamilton.get_elrep(self._dm.u + self._dm.d)
+            e_elrep_u = 0.5 * torch.einsum("...rc,c,...rc->...", elrep.mm(eivecs_u), self.orb_weight.u, eivecs_u)
+            e_elrep_d = 0.5 * torch.einsum("...rc,c,...rc->...", elrep.mm(eivecs_d), self.orb_weight.d, eivecs_d)
             e_elrep = e_elrep_u + e_elrep_d
 
         # compute the total energy
         e_tot = e_eivals + (e_exc - e_vxc) - e_elrep + self.system.get_nuclei_energy()
         return e_tot
 
-    def aodm(self) -> torch.Tensor:
+    def aodm(self) -> Union[torch.Tensor, SpinParam[torch.Tensor]]:
         return self._dm
 
     @overload
@@ -180,7 +182,7 @@ class KS(BaseQCCalc):
         ...
 
     @overload
-    def __dm2fock(self, dm: Tuple[torch.Tensor, torch.Tensor]) -> Tuple[xt.LinearOperator, xt.LinearOperator]:
+    def __dm2fock(self, dm: SpinParam[torch.Tensor]) -> SpinParam[xt.LinearOperator]:
         ...
 
     def __dm2fock(self, dm):
@@ -190,18 +192,18 @@ class KS(BaseQCCalc):
             vxc = self.hamilton.get_vxc(dm)
             return self.knvext_linop + elrep + vxc
         else:
-            elrep = self.hamilton.get_elrep(dm[0] + dm[1])  # (..., nao, nao)
+            elrep = self.hamilton.get_elrep(dm.u + dm.d)  # (..., nao, nao)
             vext_elrep = self.knvext_linop + elrep
 
             vxc_ud = self.hamilton.get_vxc(dm)
-            return vext_elrep + vxc_ud[0], vext_elrep + vxc_ud[1]
+            return SpinParam(u=vext_elrep + vxc_ud.u, d=vext_elrep + vxc_ud.d)
 
     @overload
     def __fock2dm(self, fock: xt.LinearOperator) -> torch.Tensor:
         ...
 
     @overload
-    def __fock2dm(self, fock: Tuple[xt.LinearOperator, xt.LinearOperator]) -> Tuple[torch.Tensor, torch.Tensor]:
+    def __fock2dm(self, fock: SpinParam[xt.LinearOperator]) -> SpinParam[torch.Tensor]:
         ...
 
     def __fock2dm(self, fock):
@@ -212,12 +214,12 @@ class KS(BaseQCCalc):
             dm = self.hamilton.ao_orb2dm(eigvecs, self.orb_weight)
             return dm
         else:  # polarized
-            assert isinstance(self.orb_weight, tuple)
-            eigvals_u, eigvecs_u = self.__diagonalize_fock(fock[0])
-            eigvals_d, eigvecs_d = self.__diagonalize_fock(fock[1])
-            dm_u = self.hamilton.ao_orb2dm(eigvecs_u, self.orb_weight[0])
-            dm_d = self.hamilton.ao_orb2dm(eigvecs_d, self.orb_weight[1])
-            return dm_u, dm_d
+            assert isinstance(self.orb_weight, SpinParam)
+            eigvals_u, eigvecs_u = self.__diagonalize_fock(fock.u)
+            eigvals_d, eigvecs_d = self.__diagonalize_fock(fock.d)
+            dm_u = self.hamilton.ao_orb2dm(eigvecs_u, self.orb_weight.u)
+            dm_d = self.hamilton.ao_orb2dm(eigvecs_d, self.orb_weight.d)
+            return SpinParam(u=dm_u, d=dm_d)
 
     def __diagonalize_fock(self, fock: xt.LinearOperator) -> Tuple[torch.Tensor, torch.Tensor]:
         return xitorch.linalg.lsymeig(
@@ -230,25 +232,25 @@ class KS(BaseQCCalc):
     # the functions below are created so that it is easy to change which
     # parameters is involved in the self-consistent iterations
 
-    def __dm2scp(self, dm: Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]) -> torch.Tensor:
+    def __dm2scp(self, dm: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
         if isinstance(dm, torch.Tensor):  # unpolarized
             # scp is the fock matrix
             return self.__dm2fock(dm).fullmatrix()
         else:  # polarized
             # scp is the concatenated fock matrix
-            fock_u, fock_d = self.__dm2fock(dm)
-            mat_u = fock_u.fullmatrix().unsqueeze(0)
-            mat_d = fock_d.fullmatrix().unsqueeze(0)
+            fock = self.__dm2fock(dm)
+            mat_u = fock.u.fullmatrix().unsqueeze(0)
+            mat_d = fock.d.fullmatrix().unsqueeze(0)
             return torch.cat((mat_u, mat_d), dim=0)
 
-    def __scp2dm(self, scp: torch.Tensor) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+    def __scp2dm(self, scp: torch.Tensor) -> Union[torch.Tensor, SpinParam[torch.Tensor]]:
         if not self.polarized:
             fock = xt.LinearOperator.m(scp, is_hermitian=True)
             return self.__fock2dm(fock)
         else:
             fock_u = xt.LinearOperator.m(scp[0], is_hermitian=True)
             fock_d = xt.LinearOperator.m(scp[1], is_hermitian=True)
-            return self.__fock2dm((fock_u, fock_d))
+            return self.__fock2dm(SpinParam(u=fock_u, d=fock_d))
 
     def __scp2scp(self, scp: torch.Tensor) -> torch.Tensor:
         dm = self.__scp2dm(scp)

@@ -4,7 +4,7 @@ from typing import List, Tuple, Union, overload
 from dqc.xc.base_xc import BaseXC
 from dqc.xc.libxc_wrapper import CalcLDALibXCPol, CalcLDALibXCUnpol, \
     CalcGGALibXCPol, CalcGGALibXCUnpol
-from dqc.utils.datastruct import ValGrad
+from dqc.utils.datastruct import ValGrad, SpinParam
 
 
 ERRMSG = "This function cannot do broadcasting. " \
@@ -27,7 +27,7 @@ class LibXCLDA(BaseXC):
         ...
 
     @overload
-    def get_vxc(self, densinfo: Tuple[ValGrad, ValGrad]) -> Tuple[ValGrad, ValGrad]:
+    def get_vxc(self, densinfo: SpinParam[ValGrad]) -> SpinParam[ValGrad]:
         ...
 
     def get_vxc(self, densinfo):
@@ -37,10 +37,9 @@ class LibXCLDA(BaseXC):
 
         # polarized case
         if not isinstance(densinfo, ValGrad):
-            densinfo_u, densinfo_d = densinfo
-            assert _all_same_shape(densinfo_u, densinfo_d), ERRMSG
-            rho_u = densinfo_u.value
-            rho_d = densinfo_d.value
+            assert _all_same_shape(densinfo.u, densinfo.d), ERRMSG
+            rho_u = densinfo.u.value
+            rho_d = densinfo.d.value
 
             # calculate the dE/dn
             dedn = CalcLDALibXCPol.apply(
@@ -50,7 +49,7 @@ class LibXCLDA(BaseXC):
             # split dE/dn into 2 different potential info
             potinfo_u = ValGrad(value=dedn[0])
             potinfo_d = ValGrad(value=dedn[1])
-            return potinfo_u, potinfo_d
+            return SpinParam(u=potinfo_u, d=potinfo_d)
 
         # unpolarized case
         else:
@@ -60,7 +59,7 @@ class LibXCLDA(BaseXC):
             potinfo = ValGrad(value=dedn)
             return potinfo
 
-    def get_edensityxc(self, densinfo: Union[ValGrad, Tuple[ValGrad, ValGrad]]) -> \
+    def get_edensityxc(self, densinfo: Union[ValGrad, SpinParam[ValGrad]]) -> \
             torch.Tensor:
         # densinfo.value & lapl: (*BD, nr)
         # densinfo.grad: (*BD, nr, ndim)
@@ -68,10 +67,9 @@ class LibXCLDA(BaseXC):
 
         # polarized case
         if not isinstance(densinfo, ValGrad):
-            densinfo_u, densinfo_d = densinfo
-            assert _all_same_shape(densinfo_u, densinfo_d), ERRMSG
-            rho_u = densinfo_u.value
-            rho_d = densinfo_d.value
+            assert _all_same_shape(densinfo.u, densinfo.d), ERRMSG
+            rho_u = densinfo.u.value
+            rho_d = densinfo.d.value
 
             # calculate the energy density
             edens = CalcLDALibXCPol.apply(
@@ -103,7 +101,7 @@ class LibXCGGA(BaseXC):
         ...
 
     @overload
-    def get_vxc(self, densinfo: Tuple[ValGrad, ValGrad]) -> Tuple[ValGrad, ValGrad]:
+    def get_vxc(self, densinfo: SpinParam[ValGrad]) -> SpinParam[ValGrad]:
         ...
 
     def get_vxc(self, densinfo):
@@ -115,12 +113,11 @@ class LibXCGGA(BaseXC):
 
         # polarized case
         if not isinstance(densinfo, ValGrad):
-            densinfo_u, densinfo_d = densinfo
-            grad_u = densinfo_u.grad
-            grad_d = densinfo_d.grad
+            grad_u = densinfo.u.grad
+            grad_d = densinfo.d.grad
 
             # calculate the dE/dn
-            vrho, vsigma = self._calc_pol(densinfo_u, densinfo_d, 1)  # tuple of (nderiv, *BD, nr)
+            vrho, vsigma = self._calc_pol(densinfo.u, densinfo.d, 1)  # tuple of (nderiv, *BD, nr)
 
             # calculate the grad_vxc
             grad_vxc_u = 2 * vsigma[0].unsqueeze(-1) * grad_u + \
@@ -131,7 +128,7 @@ class LibXCGGA(BaseXC):
             # split dE/dn into 2 different potential info
             potinfo_u = ValGrad(value=vrho[0], grad=grad_vxc_u)
             potinfo_d = ValGrad(value=vrho[1], grad=grad_vxc_d)
-            return potinfo_u, potinfo_d
+            return SpinParam(u=potinfo_u, d=potinfo_d)
 
         # unpolarized case
         else:
@@ -144,7 +141,7 @@ class LibXCGGA(BaseXC):
             potinfo = ValGrad(value=vrho, grad=grad_vxc)
             return potinfo
 
-    def get_edensityxc(self, densinfo: Union[ValGrad, Tuple[ValGrad, ValGrad]]) -> \
+    def get_edensityxc(self, densinfo: Union[ValGrad, SpinParam[ValGrad]]) -> \
             torch.Tensor:
         # densinfo.value & lapl: (*BD, nr)
         # densinfo.grad: (*BD, nr, ndim)
@@ -152,10 +149,9 @@ class LibXCGGA(BaseXC):
 
         # polarized case
         if not isinstance(densinfo, ValGrad):
-            densinfo_u, densinfo_d = densinfo
-            rho_u = densinfo_u.value
+            rho_u = densinfo.u.value
 
-            edens = self._calc_pol(densinfo_u, densinfo_d, 0)[0]  # (*BD, nr)
+            edens = self._calc_pol(densinfo.u, densinfo.d, 0)[0]  # (*BD, nr)
             edens = edens.reshape(rho_u.shape)
             return edens
 

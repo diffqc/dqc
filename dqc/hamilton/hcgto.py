@@ -1,9 +1,9 @@
-from typing import List, Optional, Union, Tuple, overload
+from typing import List, Optional, Union, overload
 import torch
 import xitorch as xt
 from dqc.hamilton.base_hamilton import BaseHamilton
 from dqc.hamilton.lcintwrap import LibcintWrapper
-from dqc.utils.datastruct import AtomCGTOBasis, ValGrad
+from dqc.utils.datastruct import AtomCGTOBasis, ValGrad, SpinParam
 from dqc.grid.base_grid import BaseGrid
 from dqc.xc.base_xc import BaseXC
 
@@ -116,7 +116,7 @@ class HamiltonCGTO(BaseHamilton):
 
     ################ xc-related ################
     @overload
-    def get_vxc(self, dm: Tuple[torch.Tensor, torch.Tensor]) -> Tuple[xt.LinearOperator, xt.LinearOperator]:
+    def get_vxc(self, dm: SpinParam[torch.Tensor]) -> SpinParam[xt.LinearOperator]:
         ...
 
     @overload
@@ -143,13 +143,13 @@ class HamiltonCGTO(BaseHamilton):
             return vxc_linop
 
         else:  # polarized case
-            densinfo_u = self._dm2densinfo(dm[0], self.xc.family)
-            densinfo_d = self._dm2densinfo(dm[1], self.xc.family)
-            potinfo_u, potinfo_d = self.xc.get_vxc((densinfo_u, densinfo_d))
+            densinfo_u = self._dm2densinfo(dm.u, self.xc.family)
+            densinfo_d = self._dm2densinfo(dm.d, self.xc.family)
+            potinfo = self.xc.get_vxc(SpinParam(u=densinfo_u, d=densinfo_d))
 
             # get the linear operator from the potential
-            vxc_linop_u = self.get_vext(potinfo_u.value)
-            vxc_linop_d = self.get_vext(potinfo_d.value)
+            vxc_linop_u = self.get_vext(potinfo.u.value)
+            vxc_linop_d = self.get_vext(potinfo.d.value)
             if self.xcfamily >= 2:  # GGA or MGGA
                 assert potinfo_u.grad is not None
                 assert potinfo_d.grad is not None
@@ -161,9 +161,9 @@ class HamiltonCGTO(BaseHamilton):
                 vxc_linop_u = vxc_linop_u + self.get_lapl_vext(potinfo_u.lapl)
                 vxc_linop_d = vxc_linop_d + self.get_lapl_vext(potinfo_d.lapl)
 
-            return vxc_linop_u, vxc_linop_d
+            return SpinParam(u=vxc_linop_u, d=vxc_linop_d)
 
-    def get_exc(self, dm: Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]) -> torch.Tensor:
+    def get_exc(self, dm: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
         assert self.xc is not None, "Please call .setup_grid with the xc object"
 
         # obtain the energy density per unit volume
@@ -171,9 +171,9 @@ class HamiltonCGTO(BaseHamilton):
             densinfo = self._dm2densinfo(dm, self.xc.family)  # value: (*BD, nr)
             edens = self.xc.get_edensityxc(densinfo)  # (*BD, nr)
         else:  # polarized case
-            densinfo_u = self._dm2densinfo(dm[0], self.xc.family)
-            densinfo_d = self._dm2densinfo(dm[1], self.xc.family)
-            edens = self.xc.get_edensityxc((densinfo_u, densinfo_d))
+            densinfo_u = self._dm2densinfo(dm.u, self.xc.family)
+            densinfo_d = self._dm2densinfo(dm.d, self.xc.family)
+            edens = self.xc.get_edensityxc(SpinParam(u=densinfo_u, d=densinfo_d))
 
         return torch.sum(self.grid.get_dvolume() * edens, dim=-1)
 

@@ -8,7 +8,7 @@ from dqc.grid.base_grid import BaseGrid
 from dqc.grid.radial_grid import RadialGrid
 from dqc.grid.lebedev_grid import LebedevGrid
 from dqc.grid.becke_grid import BeckeGrid
-from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis
+from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, SpinParam
 from dqc.utils.periodictable import get_atomz
 from dqc.utils.safeops import eps as util_eps
 from dqc.api.loadbasis import loadbasis
@@ -91,16 +91,17 @@ class Mol(BaseSystem):
 
         # get the polarized orbital weights
         self._orb_weights_u = torch.ones((nspin_up,), dtype=dtype, device=device)
-        self._orb_weights_d = torch.ones((nspin_dn,), dtype=dtype, device=device)
+        self._orb_weights_d = torch.zeros((nspin_up,), dtype=dtype, device=device)
+        self._orb_weights_d[:nspin_dn] = 1.0
 
     def get_hamiltonian(self) -> BaseHamilton:
         return self._hamilton
 
-    def get_orbweight(self, polarized: bool = False) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+    def get_orbweight(self, polarized: bool = False) -> Union[torch.Tensor, SpinParam[torch.Tensor]]:
         if not polarized:
             return self._orb_weights
         else:
-            return self._orb_weights_u, self._orb_weights_d
+            return SpinParam(u=self._orb_weights_u, d=self._orb_weights_d)
 
     def get_nuclei_energy(self) -> torch.Tensor:
         # atomzs: (natoms,)

@@ -1,8 +1,10 @@
 import torch
 from dataclasses import dataclass
-from typing import Optional, Union, List
+from typing import Optional, Union, List, TypeVar, Generic
 
 __all__ = ["CGTOBasis", "AtomCGTOBasis", "ValGrad"]
+
+T = TypeVar('T')
 
 @dataclass
 class CGTOBasis:
@@ -15,6 +17,11 @@ class AtomCGTOBasis:
     atomz: int
     bases: List[CGTOBasis]
     pos: torch.Tensor  # (ndim,)
+
+@dataclass
+class SpinParam(Generic[T]):
+    u: T
+    d: T
 
 @dataclass
 class ValGrad:

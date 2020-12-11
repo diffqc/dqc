@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 from dqc.api.getxc import get_libxc
 from dqc.xc.base_xc import BaseXC
-from dqc.utils.datastruct import ValGrad
+from dqc.utils.datastruct import ValGrad, SpinParam
 from dqc.utils.safeops import safepow, safenorm
 
 def test_libxc_lda_gradcheck():
@@ -27,13 +27,13 @@ def test_libxc_lda_gradcheck():
     def get_edens_pol(xc, rho_u, rho_d):
         densinfo_u = ValGrad(value=rho_u)
         densinfo_d = ValGrad(value=rho_d)
-        return xc.get_edensityxc((densinfo_u, densinfo_d))
+        return xc.get_edensityxc(SpinParam(u=densinfo_u, d=densinfo_d))
 
     def get_vxc_pol(xc, rho_u, rho_d):
         densinfo_u = ValGrad(value=rho_u)
         densinfo_d = ValGrad(value=rho_d)
-        vxc = xc.get_vxc((densinfo_u, densinfo_d))
-        return tuple(vg.value for vg in vxc)
+        vxc = xc.get_vxc(SpinParam(u=densinfo_u, d=densinfo_d))
+        return vxc.u.value, vxc.d.value
 
     param_unpol = (xcunpol, rho_u)
     param_pol   = (xcpol, rho_u, rho_d)
@@ -71,13 +71,13 @@ def test_libxc_gga_gradcheck():
     def get_edens_pol(xc, rho_u, rho_d, grad_u, grad_d):
         densinfo_u = ValGrad(value=rho_u, grad=grad_u)
         densinfo_d = ValGrad(value=rho_d, grad=grad_d)
-        return xc.get_edensityxc((densinfo_u, densinfo_d))
+        return xc.get_edensityxc(SpinParam(u=densinfo_u, d=densinfo_d))
 
     def get_vxc_pol(xc, rho_u, rho_d, grad_u, grad_d):
         densinfo_u = ValGrad(value=rho_u, grad=grad_u)
         densinfo_d = ValGrad(value=rho_d, grad=grad_d)
-        vxc = xc.get_vxc((densinfo_u, densinfo_d))
-        return tuple(vg.value for vg in vxc)
+        vxc = xc.get_vxc(SpinParam(u=densinfo_u, d=densinfo_d))
+        return vxc.u.value, vxc.d.value
 
     param_unpol = (xcunpol, rho_u, grad_u)
     param_pol   = (xcpol, rho_u, rho_d, grad_u, grad_d)
@@ -107,7 +107,7 @@ def test_libxc_lda_value():
 
     densinfo_u = ValGrad(value=rho_u)
     densinfo_d = ValGrad(value=rho_d)
-    densinfo = (densinfo_u, densinfo_d)
+    densinfo = SpinParam(u=densinfo_u, d=densinfo_d)
     densinfo_tot = ValGrad(value=rho_tot)
 
     # calculate the energy and compare with analytic
@@ -123,11 +123,11 @@ def test_libxc_lda_value():
     vxc_unpol_value_true = lda_v_true(rho_tot)
     assert torch.allclose(vxc_unpol.value, vxc_unpol_value_true)
 
-    vxc_pol_u, vxc_pol_d = xcpol.get_vxc(densinfo)
+    vxc_pol = xcpol.get_vxc(densinfo)
     vxc_pol_u_value_true = lda_v_true(2 * rho_u)
     vxc_pol_d_value_true = lda_v_true(2 * rho_d)
-    assert torch.allclose(vxc_pol_u.value, vxc_pol_u_value_true)
-    assert torch.allclose(vxc_pol_d.value, vxc_pol_d_value_true)
+    assert torch.allclose(vxc_pol.u.value, vxc_pol_u_value_true)
+    assert torch.allclose(vxc_pol.d.value, vxc_pol_d_value_true)
 
 def test_libxc_gga_value():
     # compare the calculated value of GGA potential
@@ -149,7 +149,7 @@ def test_libxc_gga_value():
     densinfo_u = ValGrad(value=rho_u, grad=gradn_u)
     densinfo_d = ValGrad(value=rho_d, grad=gradn_d)
     densinfo_tot = densinfo_u + densinfo_d
-    densinfo = (densinfo_u, densinfo_d)
+    densinfo = SpinParam(u=densinfo_u, d=densinfo_d)
 
     # calculate the energy and compare with analytical expression
     edens_unpol = xcunpol.get_edensityxc(densinfo_tot)
@@ -172,8 +172,8 @@ class PseudoLDA(BaseXC):
             e_unif = -3.0 / (4 * np.pi) * kf_rho
             return e_unif
         else:  # polarized case
-            eu = self.get_edensityxc(densinfo[0] * 2)
-            ed = self.get_edensityxc(densinfo[1] * 2)
+            eu = self.get_edensityxc(densinfo.u * 2)
+            ed = self.get_edensityxc(densinfo.d * 2)
             return 0.5 * (eu + ed)
 
 class PseudoPBE(BaseXC):
@@ -193,8 +193,8 @@ class PseudoPBE(BaseXC):
             fx = 1 + kappa - kappa / (1 + mu * s * s / kappa)
             return fx * e_unif
         else:  # polarized case
-            eu = self.get_edensityxc(densinfo[0] * 2)
-            ed = self.get_edensityxc(densinfo[1] * 2)
+            eu = self.get_edensityxc(densinfo.u * 2)
+            ed = self.get_edensityxc(densinfo.d * 2)
             return 0.5 * (eu + ed)
 
 @pytest.mark.parametrize(
@@ -224,7 +224,7 @@ def test_xc_default_vxc(xccls, libxcname):
     densinfo_u = ValGrad(value=rho_u, grad=gradn_u)
     densinfo_d = ValGrad(value=rho_d, grad=gradn_d)
     densinfo_tot = densinfo_u + densinfo_d
-    densinfo = (densinfo_u, densinfo_d)
+    densinfo = SpinParam(u=densinfo_u, d=densinfo_d)
 
     def assert_valgrad(vg1, vg2):
         assert torch.allclose(vg1.value, vg2.value)
@@ -249,10 +249,11 @@ def test_xc_default_vxc(xccls, libxcname):
     lxcpotinfo_unpol = libxcunpol.get_vxc(densinfo_tot)
     assert_valgrad(xcpotinfo_unpol, lxcpotinfo_unpol)
 
-    xcpotinfo_pol_u, xcpotinfo_pol_d = xc.get_vxc(densinfo)
-    lxcpotinfo_pol_u, lxcpotinfo_pol_d = libxcpol.get_vxc(densinfo)
-    assert_valgrad(xcpotinfo_pol_u, lxcpotinfo_pol_u)
-    assert_valgrad(xcpotinfo_pol_d, lxcpotinfo_pol_d)
+    xcpotinfo_pol = xc.get_vxc(densinfo)
+    lxcpotinfo_pol = libxcpol.get_vxc(densinfo)
+    # print(type(xcpotinfo_pol), type(lxcpotinfo_unpol))
+    assert_valgrad(xcpotinfo_pol.u, lxcpotinfo_pol.u)
+    assert_valgrad(xcpotinfo_pol.d, lxcpotinfo_pol.d)
 
 def lda_e_true(rho):
     return -0.75 * (3 / np.pi) ** (1. / 3) * rho ** (4. / 3)
