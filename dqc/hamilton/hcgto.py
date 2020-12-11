@@ -125,8 +125,10 @@ class HamiltonCGTO(BaseHamilton):
         # get the linear operator from the potential
         vxc_linop = self.get_vext(potinfo.value)
         if self.xcfamily >= 2:  # GGA or MGGA
+            assert potinfo.grad is not None
             vxc_linop = vxc_linop + self.get_grad_vext(potinfo.grad)
         if self.xcfamily >= 3:  # MGGA
+            assert potinfo.lapl is not None
             vxc_linop = vxc_linop + self.get_lapl_vext(potinfo.lapl)
 
         return vxc_linop
@@ -175,6 +177,7 @@ class HamiltonCGTO(BaseHamilton):
         elif methodname == "get_lapl_vext":
             return [prefix + "basis_dvolume", prefix + "lapl_basis"]
         elif methodname == "get_vxc":
+            assert self.xc is not None
             params = self.getparamnames("_dm2densinfo", prefix=prefix) + \
                 self.getparamnames("get_vext", prefix=prefix) + \
                 self.xc.getparamnames("get_vxc", prefix=prefix + "xc.")

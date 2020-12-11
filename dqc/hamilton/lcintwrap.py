@@ -3,7 +3,7 @@ import os
 import re
 import ctypes
 from contextlib import contextmanager
-from typing import List, Tuple, Optional, Iterator, Sequence
+from typing import List, Tuple, Optional, Iterator, Sequence, Union
 import torch
 import numpy as np
 from dqc.utils.datastruct import AtomCGTOBasis, CGTOBasis
@@ -109,8 +109,7 @@ class LibcintWrapper(object):
             self.ao_to_atom[idx: idx + shell_to_nao[i]] = self.shell_to_atom[i]
 
         # caches
-        self._uncontr_wrapper: Optional[LibcintWrapper] = None
-        self._uao2ao: Optional[torch.Tensor] = None
+        self._uncontr_wrapper_set: bool = False
 
     def _add_atom_and_basis(self, iatom: int, atombasis: AtomCGTOBasis) -> int:
         # construct the atom first
@@ -175,7 +174,7 @@ class LibcintWrapper(object):
         # returns the libcint wrapper for uncontracted basis and the uao2ao mapping
         # (i.e. the mapping from uncontracted ao to contracted ao indices)
 
-        if self._uncontr_wrapper is None:
+        if not self._uncontr_wrapper_set:
             new_atombases = []
             for atombasis in self._atombases:
                 atomz = atombasis.atomz
@@ -487,7 +486,7 @@ class _Int1eFunction(torch.autograd.Function):
 
                 # get the uncontracted version of the integral
                 dout_dcoeff0 = _Int1eFunction.apply(*u_params, ratoms,
-                    u_wrapper, shortname)  # (..., nu_ao, nu_ao)
+                                                    u_wrapper, shortname)  # (..., nu_ao, nu_ao)
 
                 # get the coefficients and spread it on the u_ao-length tensor
                 coeffs_ao = torch.gather(allcoeffs, dim=-1, index=u_wrapper.ao_to_shell)  # (nu_ao)
@@ -808,7 +807,7 @@ def _intxe_shortname_equiv(s0: str, s1: str, x: int) -> Optional[List[Tuple[int,
     return _intxe_shortname_equiv_helper(s0, s1, patterns, transpose_paths)
 
 def _intxe_shortname_equiv_helper(s0: str, s1: str, patterns: List[str],
-                                  transpose_paths: List[List[Tuple[int, int]]]) -> Optional[List[Tuple[int, int]]]:
+                                  transpose_paths: List) -> Optional[List[Tuple[int, int]]]:
     # find the transpose path to get the s1 integral from s0.
     # this function should return the transpose path from s0 to reach s1.
     # returns None if it is not possible.

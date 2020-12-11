@@ -128,14 +128,15 @@ def test_integral_grad_basis(int_type):
     atomenv = get_atom_env(dtype, pos_requires_grad=False)
     pos1 = atomenv.poss[0]
     pos2 = atomenv.poss[1]
+
     def get_int1e(alphas1, alphas2, coeffs1, coeffs2, name):
         # alphas*: (nangmoms, ngauss)
         bases1 = [
-            CGTOBasis(angmom=i, alphas=alphas1[i], coeffs=coeffs1[i]) \
+            CGTOBasis(angmom=i, alphas=alphas1[i], coeffs=coeffs1[i])
             for i in range(len(alphas1))
         ]
         bases2 = [
-            CGTOBasis(angmom=i, alphas=alphas2[i], coeffs=coeffs2[i]) \
+            CGTOBasis(angmom=i, alphas=alphas2[i], coeffs=coeffs2[i])
             for i in range(len(alphas2))
         ]
         atombasis1 = AtomCGTOBasis(atomz=atomenv.atomzs[0], bases=bases1, pos=pos1)
@@ -156,7 +157,7 @@ def test_integral_grad_basis(int_type):
     if int_type != "elrep":
         ncontr, nangmom = (2, 2)
     else:
-        ncontr, nangmom = (1, 1) # saving time
+        ncontr, nangmom = (1, 1)  # saving time
     alphas1 = torch.rand((nangmom, ncontr), dtype=dtype, requires_grad=True)
     alphas2 = torch.rand((nangmom, ncontr), dtype=dtype, requires_grad=True)
     coeffs1 = torch.rand((nangmom, ncontr), dtype=dtype, requires_grad=True)
