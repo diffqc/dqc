@@ -66,7 +66,7 @@ class KS(BaseQCCalc):
         self.device = self.knvext_linop.device
         self.has_run = True
 
-    def run(self, dm0: Optional[Union[torch.Tensor, Tuple[torch.Tensor]]] = None,  # type: ignore
+    def run(self, dm0: Optional[Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]] = None,  # type: ignore
             eigen_options: Optional[Mapping[str, Any]] = None,
             fwd_options: Optional[Mapping[str, Any]] = None,
             bck_options: Optional[Mapping[str, Any]] = None) -> BaseQCCalc:
