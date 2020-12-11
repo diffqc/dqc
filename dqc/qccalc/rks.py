@@ -39,7 +39,8 @@ class RKS(BaseQCCalc):
         self.hamilton.setup_grid(system.get_grid(), self.xc)
 
         # get the orbital info
-        self.orb_weight = system.get_orbweight()  # (norb,)
+        self.orb_weight = system.get_orbweight(polarized=False)  # (norb,)
+        assert isinstance(self.orb_weight, torch.Tensor)
         self.norb = self.orb_weight.shape[-1]
 
         # set up the vext linear operator

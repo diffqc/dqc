@@ -89,11 +89,18 @@ class Mol(BaseSystem):
         _orb_weights[:nspin_dn] = 2.0
         self._orb_weights = _orb_weights
 
+        # get the polarized orbital weights
+        self._orb_weights_u = torch.ones((nspin_up,), dtype=dtype, device=device)
+        self._orb_weights_d = torch.ones((nspin_dn,), dtype=dtype, device=device)
+
     def get_hamiltonian(self) -> BaseHamilton:
         return self._hamilton
 
-    def get_orbweight(self) -> torch.Tensor:
-        return self._orb_weights
+    def get_orbweight(self, polarized: bool = False) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        if not polarized:
+            return self._orb_weights
+        else:
+            return self._orb_weights_u, self._orb_weights_d
 
     def get_nuclei_energy(self) -> torch.Tensor:
         # atomzs: (natoms,)

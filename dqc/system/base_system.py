@@ -1,7 +1,7 @@
 from abc import abstractmethod
 import torch
 import xitorch as xt
-from typing import List
+from typing import List, Union, Tuple
 from dqc.hamilton.base_hamilton import BaseHamilton
 from dqc.grid.base_grid import BaseGrid
 
@@ -18,9 +18,11 @@ class BaseSystem(xt.EditableModule):
         pass
 
     @abstractmethod
-    def get_orbweight(self) -> torch.Tensor:
+    def get_orbweight(self, polarized: bool = False) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """
-        Returns the atomic orbital weights.
+        Returns the atomic orbital weights. If polarized == False, then it
+        returns the total orbital weights. Otherwise, it returns a tuple of
+        orbital weights for spin-up and spin-down.
         """
         # returns: (*BS, norb)
         pass
