@@ -144,6 +144,23 @@ def test_rks_grad_vxc(xccls, xcparams, atomzs, dist):
     params = tuple(torch.tensor(p, dtype=dtype).requires_grad_() for p in xcparams)
     torch.autograd.gradcheck(get_energy, params)
 
+############### Unrestricted Kohn-Sham ###############
+u_atomzs = [1, 3, 5]
+u_atom_energies = [
+    # numbers from pyscf with basis 6-311++G** with grid level 4 and LDA x
+    -0.456918307830999,  # H
+    -7.19137615551071,  # Li
+    -24.0638478157822,  # B
+]
+u_mols_dists_spins = [
+    # atomzs,dist,spin
+    ([8, 8], 2.0, 2),
+]
+u_mols_energies = [
+    # numbers from pyscf with basis 6-311++G** with grid level 3 and LDA x
+    -148.149998931489,  # O2
+]
+
 @pytest.mark.parametrize(
     "xc,atomzs,dist,energy_true",
     [("lda,", *atomz_pos, energy) for (atomz_pos, energy) in zip(atomzs_poss[:2], energies[:2])]
@@ -156,6 +173,30 @@ def test_uks_energy_same_as_rks(xc, atomzs, dist, energy_true):
     ene = qc.energy()
     assert torch.allclose(ene, ene * 0 + energy_true)
 
+@pytest.mark.parametrize(
+    "xc,atomz,energy_true",
+    [("lda,", atomz, energy) for (atomz, energy) in zip(u_atomzs, u_atom_energies)]
+)
+def test_uks_energy_atoms(xc, atomz, energy_true):
+    # check the energy of atoms with non-0 spins
+    poss = torch.tensor([[0.0, 0.0, 0.0]], dtype=dtype)
+    mol = Mol(([atomz], poss), basis="6-311++G**", grid=4, dtype=dtype)
+    qc = KS(mol, xc=xc, restricted=False).run()
+    ene = qc.energy()
+    assert torch.allclose(ene, ene * 0 + energy_true)
+
+@pytest.mark.parametrize(
+    "xc,atomzs,dist,spin,energy_true",
+    [("lda,", atomzs, dist, spin, energy) for ((atomzs, dist, spin), energy) \
+        in zip(u_mols_dists_spins, u_mols_energies)]
+)
+def test_uks_energy_mols(xc, atomzs, dist, spin, energy_true):
+    # check the energy of molecules with non-0 spins
+    poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist
+    mol = Mol((atomzs, poss), basis="6-311++G**", grid=3, dtype=dtype, spin=spin)
+    qc = KS(mol, xc=xc, restricted=False).run()
+    ene = qc.energy()
+    assert torch.allclose(ene, ene * 0 + energy_true)
 
 if __name__ == "__main__":
     import time
