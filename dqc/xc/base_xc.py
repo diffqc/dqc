@@ -174,7 +174,7 @@ class AddBaseXC(BaseXC):
         if isinstance(densinfo, ValGrad):
             return avxc + bvxc
         else:
-            return SpinParam(u = avxc.u + bvxc.u, d = avxc.d + bvxc.d)
+            return SpinParam(u=avxc.u + bvxc.u, d=avxc.d + bvxc.d)
 
     def get_edensityxc(self, densinfo: Union[ValGrad, SpinParam[ValGrad]]) -> \
             torch.Tensor:

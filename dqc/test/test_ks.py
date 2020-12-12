@@ -5,7 +5,6 @@ import pytest
 from dqc.qccalc.ks import KS
 from dqc.system.mol import Mol
 from dqc.xc.base_xc import BaseXC
-from dqc.utils.datastruct import ValGrad
 from dqc.utils.safeops import safepow, safenorm
 
 dtype = torch.float64
@@ -187,7 +186,7 @@ def test_uks_energy_atoms(xc, atomz, energy_true):
 
 @pytest.mark.parametrize(
     "xc,atomzs,dist,spin,energy_true",
-    [("lda,", atomzs, dist, spin, energy) for ((atomzs, dist, spin), energy) \
+    [("lda,", atomzs, dist, spin, energy) for ((atomzs, dist, spin), energy)
         in zip(u_mols_dists_spins, u_mols_energies)]
 )
 def test_uks_energy_mols(xc, atomzs, dist, spin, energy_true):

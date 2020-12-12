@@ -168,7 +168,15 @@ class HamiltonCGTO(BaseHamilton):
 
         return torch.sum(self.grid.get_dvolume() * edens, dim=-1)
 
-    def _dm2densinfo(self, dm: Union[torch.Tensor, SpinParam[torch.Tensor]], family: int) -> ValGrad:
+    @overload
+    def _dm2densinfo(self, dm: torch.Tensor, family: int) -> ValGrad:
+        ...
+
+    @overload
+    def _dm2densinfo(self, dm: SpinParam[torch.Tensor], family: int) -> SpinParam[ValGrad]:
+        ...
+
+    def _dm2densinfo(self, dm, family):
         # dm: (*BD, nao, nao)
         # family: 1 for LDA, 2 for GGA, 3 for MGGA
         # self.basis: (nao, ngrid)

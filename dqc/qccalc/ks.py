@@ -203,7 +203,7 @@ class KS(BaseQCCalc):
         ...
 
     @overload
-    def __fock2dm(self, fock: SpinParam[xt.LinearOperator]) -> SpinParam[torch.Tensor]:
+    def __fock2dm(self, fock: SpinParam[xt.LinearOperator]) -> SpinParam[torch.Tensor]:  # type: ignore
         ...
 
     def __fock2dm(self, fock):
