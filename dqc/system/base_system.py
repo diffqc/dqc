@@ -11,6 +11,13 @@ class BaseSystem(xt.EditableModule):
     System is a class describing the environment before doing the quantum
     chemistry calculation.
     """
+    @abstractproperty
+    def spin(self) -> int:
+        """
+        Returns the total spin of the system.
+        """
+        pass
+
     @abstractmethod
     def get_hamiltonian(self) -> BaseHamilton:
         """

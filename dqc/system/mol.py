@@ -83,6 +83,7 @@ class Mol(BaseSystem):
         assert spin >= 0
         assert (nelecs - spin) % 2 == 0, \
             "Spin %d is not suited for %d electrons" % (spin, nelecs)
+        self._spin = spin
         nspin_dn = (nelecs - spin) // 2
         nspin_up = nspin_dn + spin
         _orb_weights = torch.ones((nspin_up,), dtype=dtype, device=device)
@@ -93,6 +94,10 @@ class Mol(BaseSystem):
         self._orb_weights_u = torch.ones((nspin_up,), dtype=dtype, device=device)
         self._orb_weights_d = torch.zeros((nspin_up,), dtype=dtype, device=device)
         self._orb_weights_d[:nspin_dn] = 1.0
+
+    @property
+    def spin(self):
+        return self._spin
 
     def get_hamiltonian(self) -> BaseHamilton:
         return self._hamilton

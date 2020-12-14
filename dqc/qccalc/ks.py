@@ -22,16 +22,22 @@ class KS(BaseQCCalc):
     vext: torch.Tensor or None
         The external potential applied to the system. It must have the shape of
         ``(*BV, system.get_grid().shape[-2])``
-    restricted: bool
+    restricted: bool or None
         If True, performing restricted Kohn-Sham DFT. If False, it performs
         the unrestricted Kohn-Sham DFT.
+        If None, it will choose True if the system is unpolarized and False if
+        it is polarized
     """
 
     def __init__(self, system: BaseSystem, xc: Union[str, BaseXC],
                  vext: Optional[torch.Tensor] = None,
-                 restricted: bool = True):
+                 restricted: Optional[bool] = None):
 
-        self.polarized = not restricted
+        # decide if this is restricted or not
+        if restricted is None:
+            self.polarized = system.spin != 0
+        else:
+            self.polarized = not restricted
 
         # get the xc object
         if isinstance(xc, str):
