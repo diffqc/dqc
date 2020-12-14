@@ -271,9 +271,13 @@ class KS(BaseQCCalc):
         elif methodname == "__dm2scp":
             return self.getparamnames("__dm2fock", prefix=prefix)
         elif methodname == "__fock2dm":
+            if self.polarized:
+                params = [prefix + "orb_weight.u", prefix + "orb_weight.d"]
+            else:
+                params = [prefix + "orb_weight"]
             return self.getparamnames("__diagonalize_fock", prefix=prefix) + \
                 self.hamilton.getparamnames("ao_orb2dm", prefix=prefix + "hamilton.") + \
-                [prefix + "orb_weight"]
+                 params
         elif methodname == "__dm2fock":
             hprefix = prefix + "hamilton."
             return self.hamilton.getparamnames("get_elrep", prefix=hprefix) + \
