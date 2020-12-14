@@ -41,7 +41,7 @@ class KS(BaseQCCalc):
 
         # get the xc object
         if isinstance(xc, str):
-            self.xc: BaseXC = get_xc(xc, polarized=self.polarized)
+            self.xc: BaseXC = get_xc(xc)
         else:
             self.xc = xc
         self.system = system

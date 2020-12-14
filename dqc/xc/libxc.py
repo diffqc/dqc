@@ -14,9 +14,9 @@ N_VSIGMA = 3  # number of energy derivative w.r.t. contracted gradient (i.e. 3: 
 
 
 class LibXCLDA(BaseXC):
-    def __init__(self, name: str, polarized: bool) -> None:
-        polstr = _get_polstr(polarized)
-        self.libxc = pylibxc.LibXCFunctional(name, polstr)
+    def __init__(self, name: str) -> None:
+        self.libxc_unpol = pylibxc.LibXCFunctional(name, "unpolarized")
+        self.libxc_pol = pylibxc.LibXCFunctional(name, "polarized")
 
     @property
     def family(self):
@@ -43,7 +43,7 @@ class LibXCLDA(BaseXC):
 
             # calculate the dE/dn
             dedn = CalcLDALibXCPol.apply(
-                rho_u.reshape(-1), rho_d.reshape(-1), 1, self.libxc)  # (2, ninps)
+                rho_u.reshape(-1), rho_d.reshape(-1), 1, self.libxc_pol)  # (2, ninps)
             dedn = dedn.reshape(N_VRHO, *rho_u.shape)
 
             # split dE/dn into 2 different potential info
@@ -54,7 +54,7 @@ class LibXCLDA(BaseXC):
         # unpolarized case
         else:
             rho = densinfo.value  # (*BD, nr)
-            dedn = CalcLDALibXCUnpol.apply(rho.reshape(-1), 1, self.libxc)
+            dedn = CalcLDALibXCUnpol.apply(rho.reshape(-1), 1, self.libxc_unpol)
             dedn = dedn.reshape(rho.shape)
             potinfo = ValGrad(value=dedn)
             return potinfo
@@ -73,14 +73,14 @@ class LibXCLDA(BaseXC):
 
             # calculate the energy density
             edens = CalcLDALibXCPol.apply(
-                rho_u.reshape(-1), rho_d.reshape(-1), 0, self.libxc)  # (ninps)
+                rho_u.reshape(-1), rho_d.reshape(-1), 0, self.libxc_pol)  # (ninps)
             edens = edens.reshape(rho_u.shape)
             return edens
 
         # unpolarized case
         else:
             rho = densinfo.value
-            edens = CalcLDALibXCUnpol.apply(rho.reshape(-1), 0, self.libxc)
+            edens = CalcLDALibXCUnpol.apply(rho.reshape(-1), 0, self.libxc_unpol)
             edens = edens.reshape(rho.shape)
             return edens
 
@@ -88,9 +88,9 @@ class LibXCLDA(BaseXC):
         return []
 
 class LibXCGGA(BaseXC):
-    def __init__(self, name: str, polarized: bool) -> None:
-        polstr = _get_polstr(polarized)
-        self.libxc = pylibxc.LibXCFunctional(name, polstr)
+    def __init__(self, name: str) -> None:
+        self.libxc_unpol = pylibxc.LibXCFunctional(name, "unpolarized")
+        self.libxc_pol = pylibxc.LibXCFunctional(name, "polarized")
 
     @property
     def family(self):
@@ -180,7 +180,7 @@ class LibXCGGA(BaseXC):
         outs = CalcGGALibXCPol.apply(
             rho_u.reshape(-1), rho_d.reshape(-1),
             sigma_uu.reshape(-1), sigma_ud.reshape(-1), sigma_dd.reshape(-1),
-            deriv, self.libxc)  # tuple of (nderiv, ninps) if deriv == 1 or (ninps) if 0
+            deriv, self.libxc_pol)  # tuple of (nderiv, ninps) if deriv == 1 or (ninps) if 0
         outs = tuple(out.reshape(-1, *rho_u.shape) for out in outs)
         return outs
 
@@ -194,7 +194,7 @@ class LibXCGGA(BaseXC):
 
         # calculate the derivative w.r.t density and grad density
         outs = CalcGGALibXCUnpol.apply(
-            rho.reshape(-1), sigma.reshape(-1), deriv, self.libxc)  # tuple of (*BD, nr)
+            rho.reshape(-1), sigma.reshape(-1), deriv, self.libxc_unpol)  # tuple of (*BD, nr)
         return tuple(out.reshape(rho.shape) for out in outs)
 
     def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:

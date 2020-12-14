@@ -8,8 +8,7 @@ from dqc.utils.safeops import safepow, safenorm
 
 def test_libxc_lda_gradcheck():
     name = "lda_c_pw"
-    xcunpol = get_libxc(name, False)
-    xcpol = get_libxc(name, True)
+    xc = get_libxc(name)
 
     torch.manual_seed(123)
     n = 2
@@ -35,8 +34,8 @@ def test_libxc_lda_gradcheck():
         vxc = xc.get_vxc(SpinParam(u=densinfo_u, d=densinfo_d))
         return vxc.u.value, vxc.d.value
 
-    param_unpol = (xcunpol, rho_u)
-    param_pol   = (xcpol, rho_u, rho_d)
+    param_unpol = (xc, rho_u)
+    param_pol   = (xc, rho_u, rho_d)
 
     torch.autograd.gradcheck(get_edens_unpol, param_unpol)
     torch.autograd.gradcheck(get_vxc_unpol, param_unpol)
@@ -50,8 +49,7 @@ def test_libxc_lda_gradcheck():
 
 def test_libxc_gga_gradcheck():
     name = "gga_x_pbe"
-    xcunpol = get_libxc(name, False)
-    xcpol = get_libxc(name, True)
+    xc = get_libxc(name)
 
     torch.manual_seed(123)
     n = 2
@@ -79,8 +77,8 @@ def test_libxc_gga_gradcheck():
         vxc = xc.get_vxc(SpinParam(u=densinfo_u, d=densinfo_d))
         return vxc.u.value, vxc.d.value
 
-    param_unpol = (xcunpol, rho_u, grad_u)
-    param_pol   = (xcpol, rho_u, rho_d, grad_u, grad_d)
+    param_unpol = (xc, rho_u, grad_u)
+    param_pol   = (xc, rho_u, rho_d, grad_u, grad_d)
 
     torch.autograd.gradcheck(get_edens_unpol, param_unpol)
     torch.autograd.gradcheck(get_vxc_unpol, param_unpol)
@@ -94,10 +92,9 @@ def test_libxc_gga_gradcheck():
 
 def test_libxc_lda_value():
     # check if the value is consistent
-    xcunpol = get_libxc("lda_x", False)
-    xcpol   = get_libxc("lda_x", True)
-    assert xcunpol.family == 1
-    assert xcpol.family == 1
+    xc = get_libxc("lda_x")
+    assert xc.family == 1
+    assert xc.family == 1
 
     torch.manual_seed(123)
     n = 100
@@ -111,19 +108,19 @@ def test_libxc_lda_value():
     densinfo_tot = ValGrad(value=rho_tot)
 
     # calculate the energy and compare with analytic
-    edens_unpol = xcunpol.get_edensityxc(densinfo_tot)
+    edens_unpol = xc.get_edensityxc(densinfo_tot)
     edens_unpol_true = lda_e_true(rho_tot)
     assert torch.allclose(edens_unpol, edens_unpol_true)
 
-    edens_pol = xcpol.get_edensityxc(densinfo)
+    edens_pol = xc.get_edensityxc(densinfo)
     edens_pol_true = 0.5 * (lda_e_true(2 * rho_u) + lda_e_true(2 * rho_d))
     assert torch.allclose(edens_pol, edens_pol_true)
 
-    vxc_unpol = xcunpol.get_vxc(densinfo_tot)
+    vxc_unpol = xc.get_vxc(densinfo_tot)
     vxc_unpol_value_true = lda_v_true(rho_tot)
     assert torch.allclose(vxc_unpol.value, vxc_unpol_value_true)
 
-    vxc_pol = xcpol.get_vxc(densinfo)
+    vxc_pol = xc.get_vxc(densinfo)
     vxc_pol_u_value_true = lda_v_true(2 * rho_u)
     vxc_pol_d_value_true = lda_v_true(2 * rho_d)
     assert torch.allclose(vxc_pol.u.value, vxc_pol_u_value_true)
@@ -132,10 +129,9 @@ def test_libxc_lda_value():
 def test_libxc_gga_value():
     # compare the calculated value of GGA potential
     dtype = torch.float64
-    xcunpol = get_libxc("gga_x_pbe", False)
-    xcpol   = get_libxc("gga_x_pbe", True)
-    assert xcunpol.family == 2
-    assert xcpol.family == 2
+    xc = get_libxc("gga_x_pbe")
+    assert xc.family == 2
+    assert xc.family == 2
 
     torch.manual_seed(123)
     n = 100
@@ -152,11 +148,11 @@ def test_libxc_gga_value():
     densinfo = SpinParam(u=densinfo_u, d=densinfo_d)
 
     # calculate the energy and compare with analytical expression
-    edens_unpol = xcunpol.get_edensityxc(densinfo_tot)
+    edens_unpol = xc.get_edensityxc(densinfo_tot)
     edens_unpol_true = pbe_e_true(rho_tot, gradn_tot)
     assert torch.allclose(edens_unpol, edens_unpol_true)
 
-    edens_pol = xcpol.get_edensityxc(densinfo)
+    edens_pol = xc.get_edensityxc(densinfo)
     edens_pol_true = 0.5 * (pbe_e_true(2 * rho_u, 2 * gradn_u) + pbe_e_true(2 * rho_d, 2 * gradn_d))
     assert torch.allclose(edens_pol, edens_pol_true)
 
@@ -209,8 +205,7 @@ def test_xc_default_vxc(xccls, libxcname):
 
     dtype = torch.float64
     xc = xccls()
-    libxcunpol = get_libxc(libxcname, False)
-    libxcpol   = get_libxc(libxcname, True)
+    libxc = get_libxc(libxcname)
 
     torch.manual_seed(123)
     n = 100
@@ -237,20 +232,20 @@ def test_xc_default_vxc(xccls, libxcname):
 
     # check if the energy is the same (implementation check)
     xc_edens_unpol = xc.get_edensityxc(densinfo_tot)
-    lxc_edens_unpol = libxcunpol.get_edensityxc(densinfo_tot)
+    lxc_edens_unpol = libxc.get_edensityxc(densinfo_tot)
     assert torch.allclose(xc_edens_unpol, lxc_edens_unpol)
 
     xc_edens_pol = xc.get_edensityxc(densinfo)
-    lxc_edens_pol = libxcpol.get_edensityxc(densinfo)
+    lxc_edens_pol = libxc.get_edensityxc(densinfo)
     assert torch.allclose(xc_edens_pol, lxc_edens_pol)
 
     # calculate the potential and compare with analytical expression
     xcpotinfo_unpol = xc.get_vxc(densinfo_tot)
-    lxcpotinfo_unpol = libxcunpol.get_vxc(densinfo_tot)
+    lxcpotinfo_unpol = libxc.get_vxc(densinfo_tot)
     assert_valgrad(xcpotinfo_unpol, lxcpotinfo_unpol)
 
     xcpotinfo_pol = xc.get_vxc(densinfo)
-    lxcpotinfo_pol = libxcpol.get_vxc(densinfo)
+    lxcpotinfo_pol = libxc.get_vxc(densinfo)
     # print(type(xcpotinfo_pol), type(lxcpotinfo_unpol))
     assert_valgrad(xcpotinfo_pol.u, lxcpotinfo_pol.u)
     assert_valgrad(xcpotinfo_pol.d, lxcpotinfo_pol.d)
