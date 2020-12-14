@@ -149,6 +149,17 @@ class BaseXC(xt.EditableModule):
     def __add__(self, other):
         return AddBaseXC(self, other)
 
+    def __mul__(self, other: Union[float, int, torch.Tensor]):
+        if isinstance(other, float) or isinstance(other, int):
+            return MulBaseXC(self, float(other))
+        elif isinstance(other, torch.Tensor):
+            return MulBaseXC(self, other)
+        else:
+            raise ValueError("BaseXC can only be multiplied with float or tensor")
+
+    def __rmul__(self, other: Union[float, int, torch.Tensor]):
+        return self.__mul__(other)
+
 class AddBaseXC(BaseXC):
     def __init__(self, a: BaseXC, b: BaseXC) -> None:
         self.a = a
@@ -183,3 +194,41 @@ class AddBaseXC(BaseXC):
     def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
         return self.a.getparamnames(methodname, prefix=prefix + "a.") + \
             self.b.getparamnames(methodname, prefix=prefix + "b.")
+
+class MulBaseXC(BaseXC):
+    def __init__(self, a: BaseXC, b: Union[float, torch.Tensor]) -> None:
+        self.a = a
+        self.b = b
+        if isinstance(b, torch.Tensor):
+            msg = "XC multiplication with tensor can only be done with 1-element tensor"
+            assert b.numel() == 1, msg
+
+    @property
+    def family(self):
+        return self.a.family
+
+    @overload
+    def get_vxc(self, densinfo: ValGrad) -> ValGrad:
+        ...
+
+    @overload
+    def get_vxc(self, densinfo: SpinParam[ValGrad]) -> SpinParam[ValGrad]:
+        ...
+
+    def get_vxc(self, densinfo):
+        avxc = self.a.get_vxc(densinfo)
+
+        if isinstance(densinfo, ValGrad):
+            return avxc * self.b
+        else:
+            return SpinParam(u=avxc.u * self.b, d=avxc.d * self.b)
+
+    def get_edensityxc(self, densinfo: Union[ValGrad, SpinParam[ValGrad]]) -> \
+            torch.Tensor:
+        return self.a.get_edensityxc(densinfo) * self.b
+
+    def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
+        params = self.a.getparamnames(methodname, prefix=prefix + "a.")
+        if isinstance(self.b, torch.Tensor):
+            params = params + [prefix + "b"]
+        return params

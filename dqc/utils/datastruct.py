@@ -37,7 +37,10 @@ def _add_densinfo(a: ValGrad, b: ValGrad) -> ValGrad:
         lapl=a.lapl + b.lapl if a.lapl is not None else None,
     )
 
-def _mul_densinfo(a: ValGrad, f: Union[float, int]) -> ValGrad:
+def _mul_densinfo(a: ValGrad, f: Union[float, int, torch.Tensor]) -> ValGrad:
+    if isinstance(f, torch.Tensor):
+        assert f.numel() == 1, "ValGrad multiplication with tensor can only be done with 1-element tensor"
+
     return ValGrad(
         value=a.value * f,
         grad=a.grad * f if a.grad is not None else None,
