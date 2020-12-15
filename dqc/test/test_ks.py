@@ -87,7 +87,6 @@ def test_rks_grad_vext(xc, atomzs, dist, vext_p):
 
 class PseudoLDA(BaseXC):
     def __init__(self, a, p):
-        super().__init__()
         self.a = a
         self.p = p
 
@@ -107,7 +106,6 @@ class PseudoLDA(BaseXC):
 
 class PseudoPBE(BaseXC):
     def __init__(self, kappa, mu):
-        super().__init__()
         self.kappa = kappa
         self.mu = mu
 
