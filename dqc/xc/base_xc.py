@@ -5,7 +5,7 @@ import xitorch as xt
 from typing import List, Union, overload, Iterator
 from dqc.utils.datastruct import ValGrad, SpinParam
 
-class BaseXC(xt.EditableModule):
+class BaseXC(torch.nn.Module, xt.EditableModule):
     """
     XC is class that calculates the components of xc potential and energy
     density given the density.
@@ -95,9 +95,9 @@ class BaseXC(xt.EditableModule):
                 else:
                     raise NotImplementedError("Default vxc for family %d is not implemented" % self.family)
 
-    @abstractmethod
     def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
-        pass
+        nnprefix = prefix if prefix == "" else prefix[:-1]
+        return [name for (name, v) in self.named_parameters(prefix=nnprefix)]
 
     @contextmanager
     def _enable_grad_densinfo(self, densinfo: Union[ValGrad, SpinParam[ValGrad]]) -> Iterator:

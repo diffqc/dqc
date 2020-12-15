@@ -15,6 +15,7 @@ N_VSIGMA = 3  # number of energy derivative w.r.t. contracted gradient (i.e. 3: 
 
 class LibXCLDA(BaseXC):
     def __init__(self, name: str) -> None:
+        super().__init__()
         self.libxc_unpol = pylibxc.LibXCFunctional(name, "unpolarized")
         self.libxc_pol = pylibxc.LibXCFunctional(name, "polarized")
 
@@ -84,11 +85,9 @@ class LibXCLDA(BaseXC):
             edens = edens.reshape(rho.shape)
             return edens
 
-    def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
-        return []
-
 class LibXCGGA(BaseXC):
     def __init__(self, name: str) -> None:
+        super().__init__()
         self.libxc_unpol = pylibxc.LibXCFunctional(name, "unpolarized")
         self.libxc_pol = pylibxc.LibXCFunctional(name, "polarized")
 
@@ -196,9 +195,6 @@ class LibXCGGA(BaseXC):
         outs = CalcGGALibXCUnpol.apply(
             rho.reshape(-1), sigma.reshape(-1), deriv, self.libxc_unpol)  # tuple of (*BD, nr)
         return tuple(out.reshape(rho.shape) for out in outs)
-
-    def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
-        return []
 
 def _all_same_shape(densinfo_u: ValGrad, densinfo_d: ValGrad) -> bool:
     # TODO: check the grad shape as well
