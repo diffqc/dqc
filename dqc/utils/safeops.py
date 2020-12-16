@@ -10,4 +10,4 @@ def safepow(a: torch.Tensor, p: torch.Tensor, eps: float = 1e-12) -> torch.Tenso
 
 def safenorm(a: torch.Tensor, dim: int, eps: float = 1e-15) -> torch.Tensor:
     # calculate the 2-norm safely
-    return torch.sqrt(torch.sum(a * a + eps, dim=dim))
+    return torch.sqrt(torch.sum(a * a + eps * eps, dim=dim))
