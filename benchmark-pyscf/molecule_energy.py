@@ -53,5 +53,10 @@ def get_atoms_energy():
         print("Atom %s: %.8e (%.3e)" % (atomname, energy, t1-t0))
 
 if __name__ == "__main__":
+    # mol = gto.M(atom="O 0 0 0", basis="6-311++G**", spin=2)
+    # mf = dft.UKS(mol)
+    # mf.xc = "lda"
+    # mf.grids.level = 4
+    # print(mf.kernel())
     get_molecules_energy()
     get_atoms_energy()

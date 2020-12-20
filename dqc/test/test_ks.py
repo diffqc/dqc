@@ -151,12 +151,19 @@ def test_rks_grad_vxc(xccls, xcparams, atomzs, dist):
     torch.autograd.gradcheck(get_energy, params)
 
 ############### Unrestricted Kohn-Sham ###############
-u_atomzs = [1, 3, 5]
+u_atomzs_spins = [
+    # atomz, spin
+    (1, 1),
+    (3, 1),
+    (5, 1),
+    (8, 2),
+]
 u_atom_energies = [
     # numbers from pyscf with basis 6-311++G** with grid level 4 and LDA x
     -0.456918307830999,  # H
     -7.19137615551071,  # Li
     -24.0638478157822,  # B
+    -73.987463670134,  # O
 ]
 u_mols_dists_spins = [
     # atomzs,dist,spin
@@ -180,16 +187,16 @@ def test_uks_energy_same_as_rks(xc, atomzs, dist, energy_true):
     assert torch.allclose(ene, ene * 0 + energy_true)
 
 @pytest.mark.parametrize(
-    "xc,atomz,energy_true",
-    [("lda,", atomz, energy) for (atomz, energy) in zip(u_atomzs, u_atom_energies)]
+    "xc,atomz,spin,energy_true",
+    [("lda,", atomz, spin, energy) for ((atomz, spin), energy) in zip(u_atomzs_spins, u_atom_energies)]
 )
-def test_uks_energy_atoms(xc, atomz, energy_true):
+def test_uks_energy_atoms(xc, atomz, spin, energy_true):
     # check the energy of atoms with non-0 spins
     poss = torch.tensor([[0.0, 0.0, 0.0]], dtype=dtype)
-    mol = Mol(([atomz], poss), basis="6-311++G**", grid=4, dtype=dtype)
+    mol = Mol(([atomz], poss), basis="6-311++G**", grid=4, dtype=dtype, spin=spin)
     qc = KS(mol, xc=xc, restricted=False).run()
     ene = qc.energy()
-    assert torch.allclose(ene, ene * 0 + energy_true)
+    assert torch.allclose(ene, ene * 0 + energy_true, rtol=0.0, atol=1e-6)
 
 @pytest.mark.parametrize(
     "xc,atomzs,dist,spin,energy_true",
@@ -207,8 +214,8 @@ def test_uks_energy_mols(xc, atomzs, dist, spin, energy_true):
 @pytest.mark.parametrize(
     "xccls,xcparams,atomz",
     [
-        (PseudoLDA, (-0.7385587663820223, 4. / 3), u_atomzs[0]),
-        (PseudoPBE, (0.804, 0.21951), u_atomzs[0]),
+        (PseudoLDA, (-0.7385587663820223, 4. / 3), u_atomzs_spins[0][0]),
+        (PseudoPBE, (0.804, 0.21951), u_atomzs_spins[0][0]),
     ]
 )
 def test_uks_grad_vxc(xccls, xcparams, atomz):
