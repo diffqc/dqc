@@ -98,8 +98,10 @@ class Mol(BaseSystem):
 
         # get the polarized orbital weights
         self._orb_weights_u = torch.ones((nspin_up,), dtype=dtype, device=device)
-        self._orb_weights_d = torch.zeros((nspin_up,), dtype=dtype, device=device)
-        self._orb_weights_d[:nspin_dn] = 1.0
+        if nspin_dn > 0:
+            self._orb_weights_d = torch.ones((nspin_dn,), dtype=dtype, device=device)
+        else:
+            self._orb_weights_d = torch.zeros((1,), dtype=dtype, device=device)
 
     def get_hamiltonian(self) -> BaseHamilton:
         return self._hamilton

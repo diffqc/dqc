@@ -56,8 +56,9 @@ class KS(BaseQCCalc):
         self.orb_weight = system.get_orbweight(polarized=self.polarized)  # (norb,)
         if self.polarized:
             assert isinstance(self.orb_weight, SpinParam)
-            assert self.orb_weight.u.shape[-1] == self.orb_weight.d.shape[-1]
-            self.norb = self.orb_weight.u.shape[-1]
+            self.norb: Union[int, SpinParam[int]] = SpinParam(
+                u=self.orb_weight.u.shape[-1],
+                d=self.orb_weight.d.shape[-1])
         else:
             assert isinstance(self.orb_weight, torch.Tensor)
             self.norb = self.orb_weight.shape[-1]
@@ -159,21 +160,20 @@ class KS(BaseQCCalc):
             assert isinstance(self._dm, SpinParam)
 
             # eivals: (..., norb), eivecs: (..., nao, norb)
-            eivals_u, eivecs_u = self.__diagonalize_fock(fock.u)
-            eivals_d, eivecs_d = self.__diagonalize_fock(fock.d)
-            e_eivals_u = torch.sum(eivals_u * self.orb_weight.u, dim=-1)
-            e_eivals_d = torch.sum(eivals_d * self.orb_weight.d, dim=-1)
+            eivals, eivecs = self.__diagonalize_fock(fock)
+            e_eivals_u = torch.sum(eivals.u * self.orb_weight.u, dim=-1)
+            e_eivals_d = torch.sum(eivals.d * self.orb_weight.d, dim=-1)
             e_eivals = e_eivals_u + e_eivals_d
 
             # get the energy from xc potential
-            e_vxc_u = torch.einsum("...rc,c,...rc->...", vxc.u.mm(eivecs_u), self.orb_weight.u, eivecs_u)
-            e_vxc_d = torch.einsum("...rc,c,...rc->...", vxc.d.mm(eivecs_d), self.orb_weight.d, eivecs_d)
+            e_vxc_u = torch.einsum("...rc,c,...rc->...", vxc.u.mm(eivecs.u), self.orb_weight.u, eivecs.u)
+            e_vxc_d = torch.einsum("...rc,c,...rc->...", vxc.d.mm(eivecs.d), self.orb_weight.d, eivecs.d)
             e_vxc = e_vxc_u + e_vxc_d
 
             # get the energy from electron repulsion
             elrep = self.hamilton.get_elrep(self._dm.u + self._dm.d)
-            e_elrep_u = 0.5 * torch.einsum("...rc,c,...rc->...", elrep.mm(eivecs_u), self.orb_weight.u, eivecs_u)
-            e_elrep_d = 0.5 * torch.einsum("...rc,c,...rc->...", elrep.mm(eivecs_d), self.orb_weight.d, eivecs_d)
+            e_elrep_u = 0.5 * torch.einsum("...rc,c,...rc->...", elrep.mm(eivecs.u), self.orb_weight.u, eivecs.u)
+            e_elrep_d = 0.5 * torch.einsum("...rc,c,...rc->...", elrep.mm(eivecs.d), self.orb_weight.d, eivecs.d)
             e_elrep = e_elrep_u + e_elrep_d
 
         # compute the total energy
@@ -214,25 +214,47 @@ class KS(BaseQCCalc):
 
     def __fock2dm(self, fock):
         # diagonalize the fock matrix and obtain the density matrix
-        if isinstance(fock, xt.LinearOperator):  # unpolarized
+        eigvals, eigvecs = self.__diagonalize_fock(fock)
+        if isinstance(eigvecs, torch.Tensor):  # unpolarized
             assert isinstance(self.orb_weight, torch.Tensor)
-            eigvals, eigvecs = self.__diagonalize_fock(fock)
             dm = self.hamilton.ao_orb2dm(eigvecs, self.orb_weight)
             return dm
         else:  # polarized
             assert isinstance(self.orb_weight, SpinParam)
-            eigvals_u, eigvecs_u = self.__diagonalize_fock(fock.u)
-            eigvals_d, eigvecs_d = self.__diagonalize_fock(fock.d)
-            dm_u = self.hamilton.ao_orb2dm(eigvecs_u, self.orb_weight.u)
-            dm_d = self.hamilton.ao_orb2dm(eigvecs_d, self.orb_weight.d)
+            dm_u = self.hamilton.ao_orb2dm(eigvecs.u, self.orb_weight.u)
+            dm_d = self.hamilton.ao_orb2dm(eigvecs.d, self.orb_weight.d)
             return SpinParam(u=dm_u, d=dm_d)
 
+    @overload
     def __diagonalize_fock(self, fock: xt.LinearOperator) -> Tuple[torch.Tensor, torch.Tensor]:
-        return xitorch.linalg.lsymeig(
-            A=fock,
-            neig=self.norb,
-            M=self.hamilton.get_overlap(),
-            **self.eigen_options)
+        ...
+
+    @overload
+    def __diagonalize_fock(self, fock: SpinParam[xt.LinearOperator]  # type: ignore
+                           ) -> Tuple[SpinParam[torch.Tensor], SpinParam[torch.Tensor]]:
+        ...
+
+    def __diagonalize_fock(self, fock):
+        ovlp = self.hamilton.get_overlap()
+        if isinstance(fock, SpinParam):
+            assert isinstance(self.norb, SpinParam)
+            eivals_u, eivecs_u = xitorch.linalg.lsymeig(
+                A=fock.u,
+                neig=self.norb.u,
+                M=ovlp,
+                **self.eigen_options)
+            eivals_d, eivecs_d = xitorch.linalg.lsymeig(
+                A=fock.d,
+                neig=self.norb.d,
+                M=ovlp,
+                **self.eigen_options)
+            return SpinParam(u=eivals_u, d=eivals_d), SpinParam(u=eivecs_u, d=eivecs_d)
+        else:
+            return xitorch.linalg.lsymeig(
+                A=fock,
+                neig=self.norb,
+                M=ovlp,
+                **self.eigen_options)
 
     ######### self-consistent-param related #########
     # the functions below are created so that it is easy to change which
@@ -277,7 +299,7 @@ class KS(BaseQCCalc):
                 params = [prefix + "orb_weight"]
             return self.getparamnames("__diagonalize_fock", prefix=prefix) + \
                 self.hamilton.getparamnames("ao_orb2dm", prefix=prefix + "hamilton.") + \
-                 params
+                params
         elif methodname == "__dm2fock":
             hprefix = prefix + "hamilton."
             return self.hamilton.getparamnames("get_elrep", prefix=hprefix) + \
