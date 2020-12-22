@@ -82,10 +82,7 @@ class KS(BaseQCCalc):
         # setup the default options
         if eigen_options is None:
             eigen_options = {
-                # NOTE: temporary solution before the gradient calculation in
-                # pytorch's symeig is fixed (for the degenerate case)
-                # see https://github.com/pytorch/pytorch/issues/47599
-                "method": "custom_exacteig"
+                "method": "exacteig"
             }
         if fwd_options is None:
             fwd_options = {
