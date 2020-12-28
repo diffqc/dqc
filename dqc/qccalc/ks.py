@@ -74,6 +74,9 @@ class KS(BaseQCCalc):
         self.device = self.knvext_linop.device
         self.has_run = True
 
+    def get_system(self) -> BaseSystem:
+        return self.system
+
     def run(self, dm0: Optional[Union[torch.Tensor, SpinParam[torch.Tensor]]] = None,  # type: ignore
             eigen_options: Optional[Mapping[str, Any]] = None,
             fwd_options: Optional[Mapping[str, Any]] = None,

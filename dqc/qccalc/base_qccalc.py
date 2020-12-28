@@ -3,8 +3,16 @@ from typing import List, Union
 import torch
 import xitorch as xt
 from dqc.utils.datastruct import SpinParam
+from dqc.system.base_system import BaseSystem
 
 class BaseQCCalc(xt.EditableModule):
+    @abstractmethod
+    def get_system(self) -> BaseSystem:
+        """
+        Returns the system in the QC calculation
+        """
+        pass
+
     @abstractmethod
     def run(self, **kwargs):
         """
