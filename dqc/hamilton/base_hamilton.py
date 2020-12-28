@@ -54,6 +54,16 @@ class BaseHamilton(xt.EditableModule):
         # return: (*BOWH, nao, nao)
         pass
 
+    @abstractmethod
+    def aodm2dens(self, dm: torch.Tensor, xyz: torch.Tensor) -> torch.Tensor:
+        """
+        Get the density value in the Cartesian coordinate.
+        """
+        # dm: (*BD, nao, nao)
+        # xyz: (*BR, ndim)
+        # return: (*BRD)
+        pass
+
     ############### grid-related ###############
     @abstractmethod
     def setup_grid(self, grid: BaseGrid, xc: Optional[BaseXC] = None) -> None:

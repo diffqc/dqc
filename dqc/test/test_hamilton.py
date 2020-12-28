@@ -43,6 +43,40 @@ def test_cgto_ao2dm(system1):
     assert tuple(dm.shape) == (*nbatch_res, nao, nao)
     assert torch.allclose(dm, dm_true)
 
+def test_cgto_dm2grid(system1):
+    # test the function aodm2dens in hamilton cgto
+
+    hamilton1 = system1.get_hamiltonian()
+    nao = hamilton1.get_kinnucl().shape[-1]
+    nb = 4
+
+    # prepare the density matrix
+    # 0: zeros
+    # 1: half of 2nd row (random symmetric)
+    # 2: double the 1st row (random symmetric)
+    # 3: eye
+    dm = torch.rand((nb, nao, nao), dtype=dtype)
+    dm = dm + dm.transpose(-2, -1)  # (nb, nao, nao)
+    dm[0] = 0
+    dm[2] = 2 * dm[1]
+    dm[3] = 0
+    dm3_diag = dm[3].diagonal(dim1=-2, dim2=-1)
+    dm3_diag[:] = 1.0
+
+    # prepare the grids
+    # 0th row: middle point between two atoms
+    # 1st row: position of the first atom
+    # 2nd row: position of the second atom
+    grids = torch.tensor(
+        [[0.0, 0.0, 0.0], [0.0, 0.0, 0.8], [0.0, 0.0, -0.8]],
+        dtype=dtype).unsqueeze(1)  # (3, 1, ndim)
+
+    dens = hamilton1.aodm2dens(dm, grids)  # (3, nb)
+    assert list(dens.shape) == [3, nb]
+    assert torch.allclose(dens[..., 0], dens[..., 0] * 0)
+    assert torch.allclose(dens[..., 2], dens[..., 1] * 2)
+    assert torch.allclose(dens[..., 3], torch.tensor([0.8778, 2.1428, 2.1428], dtype=dtype))
+
 def test_cgto_vext(system1):
     # test the external potential integration
     hamilton1 = system1.get_hamiltonian()

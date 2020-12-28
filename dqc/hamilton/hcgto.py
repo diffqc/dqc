@@ -59,6 +59,22 @@ class HamiltonCGTO(BaseHamilton):
         orb_w = orb * orb_weight.unsqueeze(-2)  # (*BOW, nao, norb)
         return torch.matmul(orb, orb_w.transpose(-2, -1))  # (*BOW, nao, nao)
 
+    def aodm2dens(self, dm: torch.Tensor, xyz: torch.Tensor) -> torch.Tensor:
+        # xyz: (*BR, ndim)
+        # dm: (*BD, nao, nao)
+        # returns: (*BRD)
+
+        nao = dm.shape[-1]
+        xyzshape = xyz.shape
+        # basis: (nao, *BR)
+        basis = self.libcint_wrapper.eval_gto(xyz.reshape(-1, xyzshape[-1])).reshape((nao, *xyzshape[:-1]))
+        basis = torch.movedim(basis, 0, -1)  # (*BR, nao)
+
+        # torch.einsum("...ij,...i,...j->...", dm, basis, basis)
+        dens = torch.matmul(dm, basis.unsqueeze(-1))  # (*BRD, nao, 1)
+        dens = torch.matmul(basis.unsqueeze(-2), dens).squeeze(-1).squeeze(-1)  # (*BRD)
+        return dens
+
     ############### grid-related ###############
     def setup_grid(self, grid: BaseGrid, xc: Optional[BaseXC] = None) -> None:
         # save the family and save the xc
