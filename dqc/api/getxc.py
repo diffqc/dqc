@@ -1,27 +1,9 @@
+import re
 import pylibxc
 from dqc.xc.base_xc import BaseXC
 from dqc.xc.libxc import LibXCLDA, LibXCGGA
 
 __all__ = ["get_libxc", "get_xc"]
-
-xlist = {
-    "lda": "lda_x",
-    "pbe": "gga_x_pbe",
-}
-clist = {
-    "lda": "lda_c_pw",
-    "pbe": "gga_c_pbe",
-}
-
-def _get_x(s: str) -> BaseXC:
-    if s in xlist:
-        s = xlist[s]
-    return get_libxc(s)
-
-def _get_c(s: str) -> BaseXC:
-    if s in clist:
-        s = clist[s]
-    return get_libxc(s)
 
 def get_libxc(name: str) -> BaseXC:
     """
@@ -48,20 +30,24 @@ def get_libxc(name: str) -> BaseXC:
         raise NotImplementedError("LibXC wrapper for family %d has not been implemented" % family)
 
 def get_xc(xcstr: str) -> BaseXC:
-    xclist = [s.strip().lower() for s in xcstr.split(",")]
-    if len(xclist) == 1:
-        s = xclist[0]
-        return _get_x(s) + _get_c(s)
-    elif len(xclist) == 2:
-        xempty = xclist[0] == ""
-        cempty = xclist[1] == ""
-        if xempty and not cempty:
-            return _get_c(xclist[1])
-        elif not xempty and cempty:
-            return _get_x(xclist[0])
-        elif not xempty and not cempty:
-            return _get_x(xclist[0]) + _get_c(xclist[1])
-        else:
-            raise ValueError("Invalid xc string: '%s'" % xcstr)
-    else:
-        raise ValueError("Invalid xc string: '%s'" % xcstr)
+    """
+    Returns the XC object based on the expression in xcstr.
+
+    Arguments
+    ---------
+    xcstr: str
+        The expression of the xc string, e.g. "lda_x + gga_c_pbe" where the
+        variable name will be replaced by the LibXC object
+
+    Returns
+    -------
+    BaseXC
+        XC object based on the given expression
+    """
+    # wrap the name of xc with "get_libxc"
+    pattern = r"([a-zA-Z_$][a-zA-Z_$0-9]*)"
+    new_xcstr = re.sub(pattern, r'get_libxc("\1")', xcstr)
+
+    # evaluate the expression and return the xc
+    glob = {"get_libxc": get_libxc}
+    return eval(new_xcstr, glob)

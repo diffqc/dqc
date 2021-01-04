@@ -27,7 +27,7 @@ energies = [
 
 @pytest.mark.parametrize(
     "xc,atomzs,dist,energy_true",
-    [("lda,", *atomz_pos, energy) for (atomz_pos, energy) in zip(atomzs_poss, energies)]
+    [("lda_x", *atomz_pos, energy) for (atomz_pos, energy) in zip(atomzs_poss, energies)]
 )
 def test_rks_energy(xc, atomzs, dist, energy_true):
     poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist
@@ -38,7 +38,7 @@ def test_rks_energy(xc, atomzs, dist, energy_true):
 
 @pytest.mark.parametrize(
     "xc,atomzs,dist,grad2",
-    [("lda,", *atomz_pos, grad2) for (atomz_pos, grad2) in product(atomzs_poss, [False, True])]
+    [("lda_x", *atomz_pos, grad2) for (atomz_pos, grad2) in product(atomzs_poss, [False, True])]
 )
 def test_rks_grad_pos(xc, atomzs, dist, grad2):
     # test grad of energy w.r.t. atom's position
@@ -64,7 +64,7 @@ def test_rks_grad_pos(xc, atomzs, dist, grad2):
 
 @pytest.mark.parametrize(
     "xc,atomzs,dist,vext_p",
-    [("lda,", *atomz_pos, 0.1) for atomz_pos in atomzs_poss]
+    [("lda_x", *atomz_pos, 0.1) for atomz_pos in atomzs_poss]
 )
 def test_rks_grad_vext(xc, atomzs, dist, vext_p):
     # check if the gradient w.r.t. vext is obtained correctly (only check 1st
@@ -176,7 +176,7 @@ u_mols_energies = [
 
 @pytest.mark.parametrize(
     "xc,atomzs,dist,energy_true",
-    [("lda,", *atomz_pos, energy) for (atomz_pos, energy) in zip(atomzs_poss[:2], energies[:2])]
+    [("lda_x", *atomz_pos, energy) for (atomz_pos, energy) in zip(atomzs_poss[:2], energies[:2])]
 )
 def test_uks_energy_same_as_rks(xc, atomzs, dist, energy_true):
     # test to see if uks energy gets the same energy as rks for non-polarized systems
@@ -188,7 +188,7 @@ def test_uks_energy_same_as_rks(xc, atomzs, dist, energy_true):
 
 @pytest.mark.parametrize(
     "xc,atomz,spin,energy_true",
-    [("lda,", atomz, spin, energy) for ((atomz, spin), energy) in zip(u_atomzs_spins, u_atom_energies)]
+    [("lda_x", atomz, spin, energy) for ((atomz, spin), energy) in zip(u_atomzs_spins, u_atom_energies)]
 )
 def test_uks_energy_atoms(xc, atomz, spin, energy_true):
     # check the energy of atoms with non-0 spins
@@ -200,7 +200,7 @@ def test_uks_energy_atoms(xc, atomz, spin, energy_true):
 
 @pytest.mark.parametrize(
     "xc,atomzs,dist,spin,energy_true",
-    [("lda,", atomzs, dist, spin, energy) for ((atomzs, dist, spin), energy)
+    [("lda_x", atomzs, dist, spin, energy) for ((atomzs, dist, spin), energy)
         in zip(u_mols_dists_spins, u_mols_energies)]
 )
 def test_uks_energy_mols(xc, atomzs, dist, spin, energy_true):
@@ -235,7 +235,7 @@ def test_uks_grad_vxc(xccls, xcparams, atomz):
 
 if __name__ == "__main__":
     import time
-    xc = "lda,"
+    xc = "lda_x"
     basis = "3-21G"  # "6-311++G**"
     poss = torch.tensor([[0.0, 0.0, 2.0], [0.0, 0.0, -2.0]], dtype=dtype).requires_grad_()
     moldesc = ([6, 8], poss)
