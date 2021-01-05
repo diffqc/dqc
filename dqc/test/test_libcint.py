@@ -198,8 +198,9 @@ def test_eval_gto_vs_pyscf(eval_type):
         ao_value_scf = mol.eval_gto("GTOval_sph", coords_np)
     elif eval_type == "grad":
         ao_value_scf = mol.eval_gto("GTOval_ip_sph", coords_np)
+    ao_value_scf = torch.as_tensor(ao_value_scf).transpose(-2, -1)
 
-    torch.allclose(ao_value, torch.tensor(ao_value_scf).transpose(-2, -1))
+    assert torch.allclose(ao_value, ao_value_scf)
 
 @pytest.mark.parametrize(
     "eval_type",
