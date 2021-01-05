@@ -53,8 +53,8 @@ energies = {
 
 @pytest.mark.parametrize(
     "xc,atomzs,dist,energy_true",
-    [("lda_x", *atomz_pos, energy) for (atomz_pos, energy) in zip(atomzs_poss, energies["lda_x"])]  #+ \
-    # [("gga_x_pbe", *atomz_pos, energy) for (atomz_pos, energy) in zip(atomzs_poss, energies["gga_x_pbe"])]
+    [("lda_x", *atomz_pos, energy) for (atomz_pos, energy) in zip(atomzs_poss, energies["lda_x"])] + \
+    [("gga_x_pbe", *atomz_pos, energy) for (atomz_pos, energy) in zip(atomzs_poss, energies["gga_x_pbe"])]
 )
 def test_rks_energy(xc, atomzs, dist, energy_true):
     poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist
@@ -185,21 +185,34 @@ u_atomzs_spins = [
     (5, 1),
     (8, 2),
 ]
-u_atom_energies = [
-    # numbers from pyscf with basis 6-311++G** with grid level 4 and LDA x
-    -0.456918307830999,  # H
-    -7.19137615551071,  # Li
-    -24.0638478157822,  # B
-    -73.987463670134,  # O
-]
+u_atom_energies = {
+    "lda_x": [
+        # numbers from pyscf with basis 6-311++G** with grid level 4 and LDA x
+        -0.456918307830999,  # H
+        -7.19137615551071,  # Li
+        -24.0638478157822,  # B
+        -73.987463670134,  # O
+    ],
+    "gga_x_pbe": [
+        -0.49413365762347017,
+        -7.408839641982052,
+        -24.496384193684193,
+        -74.77107826628823,
+    ]
+}
 u_mols_dists_spins = [
     # atomzs,dist,spin
-    ([8, 8], 2.0, 2),
+    ([8, 8], 2.0, 2),  # "O -1.0 0 0; O 1.0 0 0"
 ]
-u_mols_energies = [
-    # numbers from pyscf with basis 6-311++G** with grid level 3 and LDA x
-    -148.149998931489,  # O2
-]
+u_mols_energies = {
+    "lda_x": [
+        # numbers from pyscf with basis 6-311++G** with grid level 3 and LDA x
+        -148.149998931489,  # O2
+    ],
+    "gga_x_pbe": [
+        -149.64097658035521,
+    ]
+}
 
 @pytest.mark.parametrize(
     "xc,atomzs,dist,energy_true",
@@ -215,7 +228,9 @@ def test_uks_energy_same_as_rks(xc, atomzs, dist, energy_true):
 
 @pytest.mark.parametrize(
     "xc,atomz,spin,energy_true",
-    [("lda_x", atomz, spin, energy) for ((atomz, spin), energy) in zip(u_atomzs_spins, u_atom_energies)]
+    [("lda_x", atomz, spin, energy) for ((atomz, spin), energy) in zip(u_atomzs_spins, u_atom_energies["lda_x"])] + \
+    [("gga_x_pbe", atomz, spin, energy) for ((atomz, spin), energy)
+        in zip(u_atomzs_spins, u_atom_energies["gga_x_pbe"])]
 )
 def test_uks_energy_atoms(xc, atomz, spin, energy_true):
     # check the energy of atoms with non-0 spins
@@ -223,12 +238,14 @@ def test_uks_energy_atoms(xc, atomz, spin, energy_true):
     mol = Mol(([atomz], poss), basis="6-311++G**", grid=4, dtype=dtype, spin=spin)
     qc = KS(mol, xc=xc, restricted=False).run()
     ene = qc.energy()
-    assert torch.allclose(ene, ene * 0 + energy_true, rtol=0.0, atol=1e-6)
+    assert torch.allclose(ene, ene * 0 + energy_true, atol=0.0, rtol=1e-6)
 
 @pytest.mark.parametrize(
     "xc,atomzs,dist,spin,energy_true",
     [("lda_x", atomzs, dist, spin, energy) for ((atomzs, dist, spin), energy)
-        in zip(u_mols_dists_spins, u_mols_energies)]
+        in zip(u_mols_dists_spins, u_mols_energies["lda_x"])] + \
+    [("gga_x_pbe", atomzs, dist, spin, energy) for ((atomzs, dist, spin), energy)
+        in zip(u_mols_dists_spins, u_mols_energies["gga_x_pbe"])]
 )
 def test_uks_energy_mols(xc, atomzs, dist, spin, energy_true):
     # check the energy of molecules with non-0 spins
@@ -236,7 +253,7 @@ def test_uks_energy_mols(xc, atomzs, dist, spin, energy_true):
     mol = Mol((atomzs, poss), basis="6-311++G**", grid=3, dtype=dtype, spin=spin)
     qc = KS(mol, xc=xc, restricted=False).run()
     ene = qc.energy()
-    assert torch.allclose(ene, ene * 0 + energy_true)
+    assert torch.allclose(ene, ene * 0 + energy_true, rtol=1e-6, atol=0.0)
 
 @pytest.mark.parametrize(
     "xccls,xcparams,atomz",

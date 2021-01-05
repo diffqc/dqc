@@ -23,7 +23,7 @@ class HamiltonCGTO(BaseHamilton):
         self.is_built = False
 
     @property
-    def naobas(self) -> int:
+    def nao(self) -> int:
         assert self.is_built, "Must run .build() first before calling this function"
         return self.olp_mat.shape[-1]
 
@@ -117,7 +117,7 @@ class HamiltonCGTO(BaseHamilton):
     def get_vext(self, vext: torch.Tensor) -> xt.LinearOperator:
         # vext: (*BR, ngrid)
         if not self.is_ao_set:
-            raise RuntimeError("Please call `setup_grid(grid, gradlevel>=0)` to call this function")
+            raise RuntimeError("Please call `setup_grid(grid, xc)` to call this function")
         mat = torch.einsum("...r,br,cr->...bc", vext, self.basis_dvolume, self.basis)  # (*BR, nao, nao)
         mat = (mat + mat.transpose(-2, -1)) * 0.5  # ensure the symmetricity and reduce numerical instability
         return xt.LinearOperator.m(mat, is_hermitian=True)
@@ -125,7 +125,7 @@ class HamiltonCGTO(BaseHamilton):
     def get_grad_vext(self, grad_vext: torch.Tensor) -> xt.LinearOperator:
         # grad_vext: (*BR, ngrid, ndim)
         if not self.is_grad_ao_set:
-            raise RuntimeError("Please call `setup_grid(grid, gradlevel>=1)` to call this function")
+            raise RuntimeError("Please call `setup_grid(grid, xc)` to call this function")
         mat = torch.einsum("...rd,br,dcr->...bc", grad_vext, self.basis_dvolume, self.grad_basis)
         mat = mat + mat.transpose(-2, -1)  # Martin, et. al., eq. (8.14)
         return xt.LinearOperator.m(mat, is_hermitian=True)
@@ -216,7 +216,9 @@ class HamiltonCGTO(BaseHamilton):
                 if not self.is_grad_ao_set:
                     raise RuntimeError("Please call `setup_grid(grid, gradlevel>=1)` to calculate the density gradient")
                 # (*BD, ngrid, ndim)
-                gdens = torch.einsum("...ij,dir,jr->...rd", dm, self.grad_basis, self.basis)
+                # dm is multiplied by 2 because n(r) = sum (D_ij * phi_i * phi_j), thus
+                # d.n(r) = sum (D_ij * d.phi_i * phi_j + D_ij * phi_i * d.phi_j)
+                gdens = torch.einsum("...ij,dir,jr->...rd", 2 * dm, self.grad_basis, self.basis)
 
             # TODO: implement the density laplacian
 

@@ -12,7 +12,7 @@ class BaseHamilton(xt.EditableModule):
     components.
     """
     @abstractproperty
-    def naobas(self) -> int:
+    def nao(self) -> int:
         """
         Returns the number of atomic orbital basis
         """
