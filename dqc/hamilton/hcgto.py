@@ -20,6 +20,12 @@ class HamiltonCGTO(BaseHamilton):
         self.is_lapl_ao_set = False
         self.xc: Optional[BaseXC] = None
         self.xcfamily = 1
+        self.is_built = False
+
+    @property
+    def naobas(self) -> int:
+        assert self.is_built, "Must run .build() first before calling this function"
+        return self.olp_mat.shape[-1]
 
     def build(self):
         # get the matrices (all (nao, nao), except el_mat)
@@ -29,6 +35,7 @@ class HamiltonCGTO(BaseHamilton):
         nucl_mat = self.libcint_wrapper.nuclattr()
         self.kinnucl_mat = kin_mat + nucl_mat
         self.el_mat = self.libcint_wrapper.elrep()  # (nao^4)
+        self.is_built = True
 
     def get_kinnucl(self) -> xt.LinearOperator:
         # kinnucl_mat: (nao, nao)

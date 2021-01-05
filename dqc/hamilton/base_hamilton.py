@@ -1,6 +1,6 @@
 import torch
 import xitorch as xt
-from abc import abstractmethod
+from abc import abstractmethod, abstractproperty
 from typing import List, Optional, Union, overload
 from dqc.grid.base_grid import BaseGrid
 from dqc.xc.base_xc import BaseXC
@@ -11,6 +11,13 @@ class BaseHamilton(xt.EditableModule):
     Hamilton is a class that provides the LinearOperator of the Hamiltonian
     components.
     """
+    @abstractproperty
+    def naobas(self) -> int:
+        """
+        Returns the number of atomic orbital basis
+        """
+        pass
+
     @abstractmethod
     def build(self) -> None:
         """
