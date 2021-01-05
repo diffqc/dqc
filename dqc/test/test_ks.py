@@ -8,26 +8,53 @@ from dqc.xc.base_xc import BaseXC
 from dqc.utils.safeops import safepow, safenorm
 from dqc.utils.datastruct import ValGrad
 
+# checks on end-to-end outputs and gradients
+
 dtype = torch.float64
 
+def pene(atom: str, spin: int = 0, xc: str = "lda_x", basis: str = "6-311++G**"):
+    # calculate the energy using PySCF, used to calculate the benchmark energies
+    from pyscf import gto, dft
+    mol = gto.M(atom=atom, spin=spin, unit="Bohr", basis=basis)
+    m = dft.UKS(mol)
+    m.xc = xc
+    m.grids.level = 4
+    ene = m.kernel()
+    # print(m.mo_energy)
+    return ene
+
+# xc = "gga_x_pbe"
+# pene("H -0.5 0 0; H 0.5 0 0", xc=xc)
+
 atomzs_poss = [
-    ([1, 1], 1.0),
-    ([3, 3], 5.0),
-    ([7, 7], 2.0),
-    ([9, 9], 2.5),
-    ([6, 8], 2.0),
+    ([1, 1], 1.0),  # "H -0.5 0 0; H 0.5 0 0"
+    ([3, 3], 5.0),  # "Li -2.5 0 0; Li 2.5 0 0"
+    ([7, 7], 2.0),  # "N -1.0 0 0; N 1.0 0 0"
+    ([9, 9], 2.5),  # "F -1.25 0 0; F 1.25 0 0"
+    ([6, 8], 2.0),  # "C -1.0 0 0; O 1.0 0 0"
 ]
-energies = [
-    -0.979143260,  # pyscf: -0.979143262
-    -14.3927863482007,  # pyscf: -14.3927863482007
-    -107.726124017789,  # pyscf: -107.726124017789
-    -197.005308558326,  # pyscf: -197.005308558326
-    -111.490687028797,  # pyscf: -111.490687028797
-]
+energies = {
+    # from pyscf
+    "lda_x": [
+        -0.979143262,
+        -14.3927863482007,
+        -107.726124017789,
+        -197.005308558326,
+        -111.490687028797,
+    ],
+    "gga_x_pbe": [
+        -1.068217310366847,
+        -14.828251186826755,
+        -108.98020015083173,
+        -198.77297153659887,
+        -112.75427978513514,
+    ]
+}
 
 @pytest.mark.parametrize(
     "xc,atomzs,dist,energy_true",
-    [("lda_x", *atomz_pos, energy) for (atomz_pos, energy) in zip(atomzs_poss, energies)]
+    [("lda_x", *atomz_pos, energy) for (atomz_pos, energy) in zip(atomzs_poss, energies["lda_x"])]  #+ \
+    # [("gga_x_pbe", *atomz_pos, energy) for (atomz_pos, energy) in zip(atomzs_poss, energies["gga_x_pbe"])]
 )
 def test_rks_energy(xc, atomzs, dist, energy_true):
     poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist
@@ -176,7 +203,7 @@ u_mols_energies = [
 
 @pytest.mark.parametrize(
     "xc,atomzs,dist,energy_true",
-    [("lda_x", *atomz_pos, energy) for (atomz_pos, energy) in zip(atomzs_poss[:2], energies[:2])]
+    [("lda_x", *atomz_pos, energy) for (atomz_pos, energy) in zip(atomzs_poss[:2], energies["lda_x"][:2])]
 )
 def test_uks_energy_same_as_rks(xc, atomzs, dist, energy_true):
     # test to see if uks energy gets the same energy as rks for non-polarized systems
