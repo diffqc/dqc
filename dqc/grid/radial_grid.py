@@ -1,10 +1,11 @@
+from __future__ import annotations
 from abc import abstractmethod
 import torch
 import numpy as np
 from dqc.grid.base_grid import BaseGrid
-from typing import Tuple
+from typing import Tuple, Union
 
-__all__ = ["RadialGrid"]
+__all__ = ["RadialGrid", "SlicedRadialGrid"]
 
 class RadialGrid(BaseGrid):
     """
@@ -20,7 +21,7 @@ class RadialGrid(BaseGrid):
     """
 
     def __init__(self, ngrid: int, grid_integrator: str = "chebyshev",
-                 grid_transform: str = "logm3",
+                 grid_transform: Union[str, BaseGridTransform] = "logm3",
                  dtype: torch.dtype = torch.float64,
                  device: torch.device = torch.device('cpu')):
         self._dtype = dtype
@@ -29,9 +30,9 @@ class RadialGrid(BaseGrid):
 
         # get the location and weights of the integration in its original
         # coordinate
-        x, w = get_xw_integration(ngrid, grid_integrator)
-        x = torch.as_tensor(x, dtype=dtype, device=device)
-        w = torch.as_tensor(w, dtype=dtype, device=device)
+        _x, _w = get_xw_integration(ngrid, grid_integrator)
+        x = torch.as_tensor(_x, dtype=dtype, device=device)
+        w = torch.as_tensor(_w, dtype=dtype, device=device)
         r = grid_transform_obj.x2r(x)  # (ngrid,)
 
         # get the coordinate in Cartesian
@@ -41,7 +42,7 @@ class RadialGrid(BaseGrid):
         # self.rgrid = torch.cat((r1, r1_zeros, r1_zeros), dim = -1)
 
         # integration element
-        drdx = grid_transform_obj.get_drdx(r)
+        drdx = grid_transform_obj.get_drdx(x)
         vol_elmt = 4 * np.pi * r * r  # (ngrid,)
         dr = drdx * w
         self.dvolume = vol_elmt * dr  # (ngrid,)
@@ -64,6 +65,12 @@ class RadialGrid(BaseGrid):
     def get_rgrid(self) -> torch.Tensor:
         return self.rgrid
 
+    def __getitem__(self, key: Union[int, slice]) -> RadialGrid:
+        if isinstance(key, slice):
+            return _SlicedRadialGrid(self, key)
+        else:
+            raise KeyError("Indexing for RadialGrid is not defined")
+
     def getparamnames(self, methodname: str, prefix: str = ""):
         if methodname == "get_dvolume":
             return [prefix + "dvolume"]
@@ -72,7 +79,7 @@ class RadialGrid(BaseGrid):
         else:
             raise KeyError("getparamnames for %s is not set" % methodname)
 
-def get_xw_integration(n: int, s0: str) -> Tuple[torch.Tensor, torch.Tensor]:
+def get_xw_integration(n: int, s0: str) -> Tuple[np.ndarray, np.ndarray]:
     # returns ``n`` points of integration from -1 to 1 and its integration
     # weights
 
@@ -88,8 +95,20 @@ def get_xw_integration(n: int, s0: str) -> Tuple[torch.Tensor, torch.Tensor]:
                 (1 + 2. / 3 * sin_ipn1 * sin_ipn1) * np.cos(ipn1) * sin_ipn1
         wcheb = 16. / (3 * np1) * sin_ipn1_2 * sin_ipn1_2
         return xcheb, wcheb
+    elif s == "uniform":
+        x = np.linspace(-1, 1, n)
+        w = np.ones(n) * (x[1] - x[0])
+        return x, w
     else:
         raise RuntimeError("Unknown grid_integrator: %s" % s0)
+
+class SlicedRadialGrid(RadialGrid):
+    # Internal class to represent the sliced radial grid
+    def __init__(self, obj: RadialGrid, key: slice):
+        self._dtype = obj.dtype
+        self._device = obj.device
+        self.dvolume = obj.dvolume[key]
+        self.rgrid = obj.rgrid[key]
 
 ### grid transformation ###
 
@@ -100,9 +119,30 @@ class BaseGridTransform(object):
         pass
 
     @abstractmethod
-    def get_drdx(self, r: torch.Tensor) -> torch.Tensor:
+    def get_drdx(self, x: torch.Tensor) -> torch.Tensor:
         # returns the dr/dx
         pass
+
+class DE2Transformation(BaseGridTransform):
+    # eq (31) in https://link.springer.com/article/10.1007/s00214-011-0985-x
+    def __init__(self, alpha: float = 1.0, rmin: float = 1e-7, rmax: float = 20):
+        assert rmin < 1.0
+        self.alpha = alpha
+        self.xmin = -np.log(-np.log(rmin))  # approximate for small r
+        self.xmax = np.log(rmax) / alpha  # approximate for large r
+
+    def x2r(self, x: torch.Tensor) -> torch.Tensor:
+        # x is from [-1, 1]
+        # xnew is from [xmin, xmax]
+        xnew = 0.5 * (x * (self.xmax - self.xmin) + (self.xmax + self.xmin))
+        # r is approximately from [rmin, rmax]
+        r = torch.exp(self.alpha * xnew - torch.exp(-xnew))
+        return r
+
+    def get_drdx(self, x: torch.Tensor) -> torch.Tensor:
+        r = self.x2r(x)
+        xnew = 0.5 * (x * (self.xmax - self.xmin) + (self.xmax + self.xmin))
+        return r * (self.alpha + torch.exp(-xnew)) * (0.5 * (self.xmax - self.xmin))
 
 class LogM3Transformation(BaseGridTransform):
     # eq (12) in https://aip.scitation.org/doi/pdf/10.1063/1.475719
@@ -114,12 +154,18 @@ class LogM3Transformation(BaseGridTransform):
     def x2r(self, x: torch.Tensor) -> torch.Tensor:
         return self.ra * (1 - torch.log1p(-x + self.eps) / self.ln2)
 
-    def get_drdx(self, r: torch.Tensor) -> torch.Tensor:
-        return self.ra / self.ln2 * torch.exp(-self.ln2 * (1.0 - r / self.ra))
+    def get_drdx(self, x: torch.Tensor) -> torch.Tensor:
+        return self.ra / self.ln2 / (1 - x + self.eps)
 
-def get_grid_transform(s0: str) -> BaseGridTransform:
-    s = s0.lower()
-    if s == "logm3":
-        return LogM3Transformation()
+def get_grid_transform(s0: Union[str, BaseGridTransform]) -> BaseGridTransform:
+    # return the grid transformation object from the input
+    if isinstance(s0, BaseGridTransform):
+        return s0
     else:
-        raise RuntimeError("Unknown grid transformation: %s" % s0)
+        s = s0.lower()
+        if s == "logm3":
+            return LogM3Transformation()
+        elif s == "de2":
+            return DE2Transformation()
+        else:
+            raise RuntimeError("Unknown grid transformation: %s" % s0)

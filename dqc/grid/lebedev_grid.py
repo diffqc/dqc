@@ -1,9 +1,11 @@
 import os
-from typing import List
+from typing import List, Sequence
 import torch
 import numpy as np
 from dqc.grid.base_grid import BaseGrid
 from dqc.grid.radial_grid import RadialGrid
+
+__all__ = ["LebedevGrid", "TruncatedLebedevGrid"]
 
 class LebedevGrid(BaseGrid):
     """
@@ -68,3 +70,19 @@ class LebedevGrid(BaseGrid):
             return [prefix + "_dvolume"]
         else:
             raise KeyError("Invalid methodname: %s" % methodname)
+
+class TruncatedLebedevGrid(LebedevGrid):
+    # A class to represent the truncated lebedev grid
+    # It is represented by various radial grid (usually the sliced ones)
+    # with different precisions
+    def __init__(self, radgrids: Sequence[RadialGrid], precs: Sequence[int]):
+        assert len(radgrids) == len(precs)
+        assert len(precs) > 0
+        self.lebedevs = [LebedevGrid(radgrid, prec) for (radgrid, prec) in zip(radgrids, precs)]
+        grid0 = self.lebedevs[0]
+
+        # set the variables to be used in the properties
+        self._dtype = grid0.dtype
+        self._device = grid0.device
+        self._xyz = torch.cat((grid.get_rgrid() for grid in self.lebedevs), dim=0)
+        self._dvolume = torch.cat((grid.get_dvolume() for grid in self.lebedevs), dim=0)

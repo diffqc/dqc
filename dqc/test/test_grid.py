@@ -7,6 +7,7 @@ from dqc.grid.becke_grid import BeckeGrid
 
 rgrid_combinations = [
     ("chebyshev", "logm3"),
+    ("uniform", "de2"),
 ]
 
 @pytest.mark.parametrize(
