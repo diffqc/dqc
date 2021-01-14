@@ -5,9 +5,7 @@ from dqc.hamilton.base_hamilton import BaseHamilton
 from dqc.hamilton.hcgto import HamiltonCGTO
 from dqc.system.base_system import BaseSystem
 from dqc.grid.base_grid import BaseGrid
-from dqc.grid.radial_grid import RadialGrid
-from dqc.grid.lebedev_grid import LebedevGrid
-from dqc.grid.becke_grid import BeckeGrid
+from dqc.grid.factory import get_grid
 from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, SpinParam
 from dqc.utils.periodictable import get_atomz
 from dqc.utils.safeops import eps as util_eps
@@ -54,7 +52,7 @@ class Mol(BaseSystem):
     def __init__(self,
                  moldesc: Union[str, Tuple[AtomZType, AtomPosType]],
                  basis: Union[str, List[CGTOBasis], List[str], List[List[CGTOBasis]]],
-                 grid: int = 4,
+                 grid: Union[int, str] = 4,
                  spin: Optional[int] = None,
                  charge: int = 0,
                  dtype: torch.dtype = torch.float64,
@@ -130,16 +128,19 @@ class Mol(BaseSystem):
 
     def setup_grid(self) -> None:
         grid_inp = self._grid_inp
-        #        0,  1,  2,  3,  4,  5
-        nr   = [20, 40, 60, 75, 100, 125][grid_inp]
-        prec = [13, 17, 21, 29, 41, 59][grid_inp]
-        radgrid = RadialGrid(nr, "chebyshev", "logm3",
-                             dtype=self._dtype, device=self._device)
-        sphgrid = LebedevGrid(radgrid, prec=prec)
+        self._grid = get_grid(self._grid_inp, self._atomzs, self._atompos,
+                              dtype=self._dtype, device=self._device)
 
-        natoms = self._atompos.shape[-2]
-        sphgrids = [sphgrid for _ in range(natoms)]
-        self._grid = BeckeGrid(sphgrids, self._atompos)
+        # #        0,  1,  2,  3,  4,  5
+        # nr   = [20, 40, 60, 75, 100, 125][grid_inp]
+        # prec = [13, 17, 21, 29, 41, 59][grid_inp]
+        # radgrid = RadialGrid(nr, "chebyshev", "logm3",
+        #                      dtype=self._dtype, device=self._device)
+        # sphgrid = LebedevGrid(radgrid, prec=prec)
+        #
+        # natoms = self._atompos.shape[-2]
+        # sphgrids = [sphgrid for _ in range(natoms)]
+        # self._grid = BeckeGrid(sphgrids, self._atompos)
 
     def get_grid(self) -> BaseGrid:
         if self._grid is None:

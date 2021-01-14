@@ -84,5 +84,5 @@ class TruncatedLebedevGrid(LebedevGrid):
         # set the variables to be used in the properties
         self._dtype = grid0.dtype
         self._device = grid0.device
-        self._xyz = torch.cat((grid.get_rgrid() for grid in self.lebedevs), dim=0)
-        self._dvolume = torch.cat((grid.get_dvolume() for grid in self.lebedevs), dim=0)
+        self._xyz = torch.cat(tuple(grid.get_rgrid() for grid in self.lebedevs), dim=0)
+        self._dvolume = torch.cat(tuple(grid.get_dvolume() for grid in self.lebedevs), dim=0)

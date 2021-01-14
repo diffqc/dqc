@@ -4,6 +4,7 @@ import pytest
 from dqc.grid.radial_grid import RadialGrid
 from dqc.grid.lebedev_grid import LebedevGrid
 from dqc.grid.becke_grid import BeckeGrid
+from dqc.grid.factory import get_atomic_grid
 
 rgrid_combinations = [
     ("chebyshev", "logm3"),
@@ -39,6 +40,26 @@ def test_lebedev_grid_dvol(rgrid_integrator, rgrid_transform):
     prec = 7
     radgrid = RadialGrid(nr, rgrid_integrator, rgrid_transform, dtype=dtype)
     sphgrid = LebedevGrid(radgrid, prec=prec)
+
+    dvol = sphgrid.get_dvolume()  # (ngrid,)
+    rgrid = sphgrid.get_rgrid()  # (ngrid, ndim)
+    x = rgrid[:, 0]
+    y = rgrid[:, 1]
+    z = rgrid[:, 2]
+
+    # test gaussian integration
+    fcn = torch.exp(-(x * x + y * y + z * z) * 0.5)
+    int1 = (fcn * dvol).sum()
+    val1 = 2 * np.sqrt(2 * np.pi) * np.pi
+    assert torch.allclose(int1, int1 * 0 + val1)
+
+@pytest.mark.parametrize(
+    "grid_inp",
+    [3, 4, "sg2", "sg3"],
+)
+def test_predefined_grid_dvol(grid_inp):
+    dtype = torch.float64
+    sphgrid = get_atomic_grid(grid_inp, 1, dtype=dtype)
 
     dvol = sphgrid.get_dvolume()  # (ngrid,)
     rgrid = sphgrid.get_rgrid()  # (ngrid, ndim)

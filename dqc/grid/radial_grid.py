@@ -67,7 +67,7 @@ class RadialGrid(BaseGrid):
 
     def __getitem__(self, key: Union[int, slice]) -> RadialGrid:
         if isinstance(key, slice):
-            return _SlicedRadialGrid(self, key)
+            return SlicedRadialGrid(self, key)
         else:
             raise KeyError("Indexing for RadialGrid is not defined")
 
