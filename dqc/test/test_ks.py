@@ -52,13 +52,17 @@ energies = {
 }
 
 @pytest.mark.parametrize(
-    "xc,atomzs,dist,energy_true",
-    [("lda_x", *atomz_pos, energy) for (atomz_pos, energy) in zip(atomzs_poss, energies["lda_x"])] + \
-    [("gga_x_pbe", *atomz_pos, energy) for (atomz_pos, energy) in zip(atomzs_poss, energies["gga_x_pbe"])]
+    "xc,atomzs,dist,energy_true,grid",
+    [("lda_x", *atomz_pos, energy, 3) for (atomz_pos, energy) in zip(atomzs_poss, energies["lda_x"])] + \
+    [("lda_x", *atomz_pos, energy, "sg2") for (atomz_pos, energy) in zip(atomzs_poss, energies["lda_x"])] + \
+    [("gga_x_pbe", *atomz_pos, energy, 3) for (atomz_pos, energy) in zip(atomzs_poss, energies["gga_x_pbe"])] + \
+    [("gga_x_pbe", *atomz_pos, energy, "sg2") for (atomz_pos, energy) in zip(atomzs_poss, energies["gga_x_pbe"])]
 )
-def test_rks_energy(xc, atomzs, dist, energy_true):
+def test_rks_energy(xc, atomzs, dist, energy_true, grid):
+    # test to see if the energy calculated by DQC agrees with PySCF
+    # for this test only we test for different types of grids to see if any error is raised
     poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist
-    mol = Mol((atomzs, poss), basis="6-311++G**", dtype=dtype)
+    mol = Mol((atomzs, poss), basis="6-311++G**", dtype=dtype, grid=grid)
     qc = KS(mol, xc=xc, restricted=True).run()
     ene = qc.energy()
     assert torch.allclose(ene, ene * 0 + energy_true)

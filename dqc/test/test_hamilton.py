@@ -8,7 +8,8 @@ dtype = torch.float64
 def system1():
     poss = torch.tensor([[0.0, 0.0, 0.8], [0.0, 0.0, -0.8]], dtype=dtype)
     moldesc = ([1, 1], poss)
-    m = Mol(moldesc, basis="6-311++G**", dtype=dtype)
+    # untruncated grid is required to pass the hamiltonian tests
+    m = Mol(moldesc, basis="6-311++G**", dtype=dtype, grid=4)
     m.setup_grid()
     hamilton = m.get_hamiltonian()
     hamilton.build()
