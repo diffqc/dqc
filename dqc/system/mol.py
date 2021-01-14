@@ -52,7 +52,7 @@ class Mol(BaseSystem):
     def __init__(self,
                  moldesc: Union[str, Tuple[AtomZType, AtomPosType]],
                  basis: Union[str, List[CGTOBasis], List[str], List[List[CGTOBasis]]],
-                 grid: Union[int, str] = 4,
+                 grid: Union[int, str] = "sg3",
                  spin: Optional[int] = None,
                  charge: int = 0,
                  dtype: torch.dtype = torch.float64,
