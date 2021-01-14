@@ -22,12 +22,19 @@ def get_grid(grid_inp: Union[int, str], atomzs: Union[List[int], torch.Tensor], 
     Returns the grid object given the grid input description.
     """
     # atompos: (natoms, ndim)
-    assert len(atompos.shape) == 2
+    assert atompos.ndim == 2
     assert atompos.shape[-2] == len(atomzs)
+
+    # convert the atomzs to a list of integers
+    if isinstance(atomzs, torch.Tensor):
+        assert atomzs.ndim == 1
+        atomzs_list = [a.item() for a in atomzs]
+    else:
+        atomzs_list = list(atomzs)
 
     if isinstance(grid_inp, int) or isinstance(grid_inp, str):
         sphgrids = [get_atomic_grid(grid_inp, atomz, dtype=dtype, device=device)
-                    for atomz in atomzs]
+                    for atomz in atomzs_list]
         return BeckeGrid(sphgrids, atompos)
     else:
         raise TypeError("Unknown type of grid_inp: %s" % type(grid_inp))
