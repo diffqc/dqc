@@ -7,6 +7,24 @@ from dqc.grid.radial_grid import RadialGrid
 
 __all__ = ["LebedevGrid", "TruncatedLebedevGrid"]
 
+class LebedevLoader(object):
+    # load the lebedev points and save the cache to save time
+    caches = {}
+
+    @classmethod
+    def load(cls, prec: int) -> np.ndarray:
+        if prec not in cls.caches:
+            # load the lebedev grid points
+            dset_path = os.path.join(os.path.split(__file__)[0], "..", "datasets",
+                                     "lebedevquad", "lebedev_%03d.txt" % prec)
+            assert os.path.exists(dset_path), "The dataset lebedev_%03d.txt does not exist" % prec
+            lebedev_dsets = np.loadtxt(dset_path)
+            lebedev_dsets[:, :2] *= (np.pi / 180)  # convert the angles to radians
+            # save to the cache
+            cls.caches[prec] = lebedev_dsets
+
+        return cls.caches[prec]
+
 class LebedevGrid(BaseGrid):
     """
     Using Lebedev predefined angular points + radial grid to form 3D grid.
@@ -20,14 +38,10 @@ class LebedevGrid(BaseGrid):
             "Precision must be an odd number between 3 and 131"
 
         # load the Lebedev grid points
-        dset_path = os.path.join(os.path.split(__file__)[0], "..", "datasets",
-                                 "lebedevquad", "lebedev_%03d.txt" % prec)
-        assert os.path.exists(dset_path), "The dataset lebedev_%03d.txt does not exist" % prec
-        lebedev_dsets = torch.tensor(np.loadtxt(dset_path),
-                                     dtype=self._dtype, device=self._device)
+        lebedev_dsets = torch.tensor(LebedevLoader.load(prec), dtype=self._dtype, device=self._device)
         wphitheta = lebedev_dsets[:, -1]  # (nphitheta)
-        phi = lebedev_dsets[:, 0] * (np.pi / 180.0)
-        theta = lebedev_dsets[:, 1] * (np.pi / 180.0)
+        phi = lebedev_dsets[:, 0]
+        theta = lebedev_dsets[:, 1]
 
         # get the radial grid
         assert radgrid.coord_type == "radial"
