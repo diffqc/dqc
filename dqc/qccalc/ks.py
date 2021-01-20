@@ -272,12 +272,16 @@ class KS(BaseQCCalc):
             return torch.cat((mat_u, mat_d), dim=0)
 
     def __scp2dm(self, scp: torch.Tensor) -> Union[torch.Tensor, SpinParam[torch.Tensor]]:
+        def _symm(scp: torch.Tensor):
+            # forcely symmetrize the tensor
+            return (scp + scp.transpose(-2, -1)) * 0.5
+
         if not self.polarized:
-            fock = xt.LinearOperator.m(scp, is_hermitian=True)
+            fock = xt.LinearOperator.m(_symm(scp), is_hermitian=True)
             return self.__fock2dm(fock)
         else:
-            fock_u = xt.LinearOperator.m(scp[0], is_hermitian=True)
-            fock_d = xt.LinearOperator.m(scp[1], is_hermitian=True)
+            fock_u = xt.LinearOperator.m(_symm(scp[0]), is_hermitian=True)
+            fock_d = xt.LinearOperator.m(_symm(scp[1]), is_hermitian=True)
             return self.__fock2dm(SpinParam(u=fock_u, d=fock_d))
 
     def __scp2scp(self, scp: torch.Tensor) -> torch.Tensor:
