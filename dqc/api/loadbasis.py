@@ -115,6 +115,9 @@ def _normalize_basisname(basisname: str) -> str:
     b = basisname.lower()
     b = b.replace("+", "p")
     b = b.replace("*", "s")
+    b = b.replace("(", "_")
+    b = b.replace(")", "_")
+    b = b.replace(",", "_")
     return b
 
 def _download_basis(fname: str, atomz: int, basisname: str) -> None:
