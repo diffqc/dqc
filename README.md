@@ -20,6 +20,7 @@ After you got the requirements, then you can install dqc from terminal by:
     cd dqc
     git submodule sync
     git submodule update --init --recursive
+    python -m pip install -e .
 
 Then, install the libraries by:
 
