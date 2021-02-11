@@ -1,5 +1,5 @@
 import os
-from typing import List, Sequence
+from typing import List, Sequence, Dict
 import torch
 import numpy as np
 from dqc.grid.base_grid import BaseGrid
@@ -9,7 +9,7 @@ __all__ = ["LebedevGrid", "TruncatedLebedevGrid"]
 
 class LebedevLoader(object):
     # load the lebedev points and save the cache to save time
-    caches = {}
+    caches: Dict[int, np.ndarray] = {}
 
     @classmethod
     def load(cls, prec: int) -> np.ndarray:
