@@ -47,12 +47,18 @@ def test_ks_mols_mem_nn(atomzs, dist, spin):
     # test if there's a leak if using neural network xc
     def _test_ks_mols():
         # setting up xc
-        a = torch.tensor(-0.7385587663820223, dtype=dtype)
-        p = torch.tensor(1.3333333333333333, dtype=dtype)
+        a = torch.tensor(-0.7385587663820223, dtype=dtype, requires_grad=True)
+        p = torch.tensor(1.3333333333333333, dtype=dtype, requires_grad=True)
         xc = PseudoLDA(a=a, p=p)
 
         poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist
+        poss = poss.requires_grad_()
         mol = Mol((atomzs, poss), basis="6-311++G**", grid=3, dtype=dtype, spin=spin)
         qc = KS(mol, xc=xc).run()
-        # ene = qc.energy()
+        ene = qc.energy()
+
+        # see if grad and backward create memleak
+        grads = torch.autograd.grad(ene, (poss, a, p), create_graph=True)
+        ene.backward()  # no create_graph here because of known pytorch's leak
+
     assert_no_memleak_tensor(_test_ks_mols)
