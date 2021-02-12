@@ -27,17 +27,8 @@ class PseudoLDA(BaseXC):
         else:
             return 0.5 * (self.get_edensityxc(densinfo.u * 2) + self.get_edensityxc(densinfo.d * 2))
 
-    # the default get_vxc is the source of memory leak!
-    # rewriting the get_vxc would solve the problem in the short term.
-    # NOTE: we need a longer term solution
-    def get_vxc(self, densinfo):
-        if isinstance(densinfo, ValGrad):
-            rho = densinfo.value.abs()
-            v = self.a * self.p * safepow(rho, self.p - 1)
-            potinfo = ValGrad(value=v)
-            return potinfo
-        else:
-            raise RuntimeError()
+    # the default get_vxc was the source of memory leak!
+    # so we don't rewrite it here to test the memleak in the default get_vxc
 
     def getparamnames(self, methodname, prefix=""):
         return [prefix + "a", prefix + "p"]
@@ -63,5 +54,5 @@ def test_ks_mols_mem_nn(atomzs, dist, spin):
         poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist
         mol = Mol((atomzs, poss), basis="6-311++G**", grid=3, dtype=dtype, spin=spin)
         qc = KS(mol, xc=xc).run()
-        ene = qc.energy()
+        # ene = qc.energy()
     assert_no_memleak_tensor(_test_ks_mols)

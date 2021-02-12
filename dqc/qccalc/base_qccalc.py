@@ -5,7 +5,19 @@ import xitorch as xt
 from dqc.utils.datastruct import SpinParam
 from dqc.system.base_system import BaseSystem
 
-class BaseQCCalc(xt.EditableModule):
+class BaseQCCalc(object):
+    """
+    Quantum Chemistry calculation. This class is the interface to the users
+    regarding parameters that can be calculated after the self-consistent
+    iterations (or other processes).
+
+    This object is usually a thin-wrapper of an engine class where the
+    self-consistent iteration steps (and other processes) are described.
+    To avoid known memory leak, the self-consistent iteration should be
+    run from this object while the steps should be described in another object
+    (i.e. the engine).
+    Details about the leak: https://github.com/pytorch/pytorch/issues/52140
+    """
     @abstractmethod
     def get_system(self) -> BaseSystem:
         """
