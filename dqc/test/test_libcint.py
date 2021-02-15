@@ -161,8 +161,7 @@ def test_integral_grad_pos(int_type):
 
 @pytest.mark.parametrize(
     "int_type",
-    # TODO: fix the integral grad for "nuclattr-frac"
-    ["overlap", "kinetic", "nuclattr", "elrep"]
+    ["overlap", "kinetic", "nuclattr", "nuclattr-frac", "elrep"]
 )
 def test_integral_grad_basis(int_type):
     int_type, is_z_frac = get_int_type_and_frac(int_type)

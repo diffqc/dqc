@@ -17,7 +17,7 @@
   '("int1e_rrrrkin"             (.5 ri dot ri ri dot ri \| p dot p))
   '("int1e_rrovlprr"            (ri dot ri \| rj dot rj))
   '("int1e_rrnucrr"             (ri dot ri \| nuc \| rj dot rj))
-  '("int1e_rrrinvrr"            (ri dot ri \| nuc \| rj dot rj))
+  '("int1e_rrrinvrr"            (ri dot ri \| rinv \| rj dot rj))
   '("int1e_rrkinrr"             (.5 ri dot ri \| p dot p rj dot rj))
   '("int1e_ia01p"               (#C(0 1) \| nabla-rinv \| cross p))
   '("int1e_giao_irjxp"          (#C(0 1) \| r cross p))
