@@ -42,6 +42,7 @@ class LibcintWrapper(object):
         self._spherical = spherical
         self._natoms = len(atombases)
         self._basis_normalized = basis_normalized
+        self.atombases = self._atombases
 
         # the libcint lists
         self._ptr_env = 20
@@ -62,10 +63,17 @@ class LibcintWrapper(object):
 
         # construct the atom, basis, and env lists
         self._nshells = []
+        self._all_int_atomzs: bool = True
         for i, atombasis in enumerate(atombases):
             # modifying most of the parameters above
             ns = self._add_atom_and_basis(i, atombasis)
             self._nshells.append(ns)
+
+            # check if there are fractional atomz
+            atomz = atombasis.atomz
+            if isinstance(atomz, float) and atomz % 1 != 0:
+                self._all_int_atomzs = False
+
         self.nshells_tot = sum(self._nshells)
 
         # flatten the params list
@@ -114,8 +122,8 @@ class LibcintWrapper(object):
     def _add_atom_and_basis(self, iatom: int, atombasis: AtomCGTOBasis) -> int:
         # construct the atom first
         assert atombasis.pos.numel() == NDIM, "Please report this bug in Github"
-        #                      charge           ptr_coord       nucl model (unused for standard nucl model)
-        self._atm_list.append([atombasis.atomz, self._ptr_env, 1, self._ptr_env + NDIM, 0, 0])
+        #                      charge                ptr_coord       nucl model (unused for standard nucl model)
+        self._atm_list.append([int(atombasis.atomz), self._ptr_env, 1, self._ptr_env + NDIM, 0, 0])
         self._env_list.extend(atombasis.pos)
         self._ptr_env += NDIM
         self._env_list.extend([0.0])
@@ -210,7 +218,14 @@ class LibcintWrapper(object):
         return self._int1e("kin")
 
     def nuclattr(self) -> torch.Tensor:
-        return self._int1e("nuc")
+        if self._all_int_atomzs:
+            return self._int1e("nuc")
+        else:
+            res = torch.tensor([])
+            for i in range(self._natoms):
+                y = self._int1e("rinv", self.allpos_params[i]) * (-self._atombases[i].atomz)
+                res = y if (i == 0) else (res + y)
+            return res
 
     def elrep(self) -> torch.Tensor:
         return self._int2e("ar12b")
@@ -236,11 +251,18 @@ class LibcintWrapper(object):
         return [self.allcoeffs_params, self.allalphas_params, self.allpos_params]
 
     ################ integrals to construct the operator ################
-    def _int1e(self, shortname: str) -> torch.Tensor:
+    def _int1e(self, shortname: str, atompos: Optional[torch.Tensor] = None) -> torch.Tensor:
+        # perform the 1-electron integral according to the given shortname.
+        # if not performing rinv, atompos is ignored
+        # otherwise, it performs the rinv integral around atompos
+
+        if atompos is None:
+            atompos = self.allpos_params
+
         # one electron integral (overlap, kinetic, and nuclear attraction)
         return _Int1eFunction.apply(
             self.allcoeffs_params, self.allalphas_params, self.allpos_params,
-            self.allpos_params,
+            atompos,
             self, shortname)
 
     def _int2e(self, shortname: str) -> torch.Tensor:
@@ -443,8 +465,8 @@ class _Int1eFunction(torch.autograd.Function):
         # allcoeffs: (ngauss_tot,)
         # allalphas: (ngauss_tot,)
         # allposs: (natom, ndim)
-        # ratoms: (natom, ndim) if contains "nuc" or (ndim,) if contains "rinv"
-        #         ratoms is only meaningful if shortname contains "rinv" or "nuc"
+        # ratoms: (ndim,) if contains "rinv"
+        #         ratoms is only meaningful if shortname contains "rinv"
         # in "rinv", ratoms becomes the centre
 
         # those tensors are not used in the forward calculation, but required
@@ -554,7 +576,8 @@ class _Int1eFunction(torch.autograd.Function):
 
             grad_ratoms = torch.empty_like(ratoms)
             for i in range(natoms):
-                atomz = wrapper._atm[i, 0]  # 0 is the charge position in _atm
+                atomz = wrapper.atombases[i].atomz
+                # atomz = wrapper._atm[i, 0]  # 0 is the charge position in _atm
 
                 # get the integrals
                 int_fcn = lambda name: _Int1eFunction.apply(

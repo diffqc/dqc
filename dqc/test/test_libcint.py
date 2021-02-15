@@ -15,12 +15,12 @@ except ImportError:
 
 AtomEnv = namedtuple("AtomEnv", ["poss", "basis", "rgrid", "atomzs"])
 
-def get_atom_env(dtype, basis="3-21G", ngrid=0, pos_requires_grad=True):
+def get_atom_env(dtype, basis="3-21G", ngrid=0, pos_requires_grad=True, atomz=1):
     d = 0.8
     pos1 = torch.tensor([0.0, 0.0, d], dtype=dtype, requires_grad=pos_requires_grad)
     pos2 = torch.tensor([0.0, 0.0, -d], dtype=dtype, requires_grad=pos_requires_grad)
     poss = [pos1, pos2]
-    atomzs = [1, 1]
+    atomzs = [atomz, atomz]
 
     rgrid = None
     if ngrid > 0:
@@ -42,6 +42,15 @@ def get_mol_pyscf(dtype, basis="3-21G"):
     d = 0.8
     mol = pyscf.gto.M(atom="H 0 0 {d}; H 0 0 -{d}".format(d=d), basis=basis, unit="Bohr")
     return mol
+
+def get_int_type_and_frac(int_type):
+    # given the integral type, returns the actual integral type and whether
+    # it is a fractional z integral
+    is_z_frac = False
+    if "-frac" in int_type:
+        int_type = int_type[:-5]
+        is_z_frac = True
+    return int_type, is_z_frac
 
 @pytest.mark.parametrize(
     "int_type",
@@ -83,18 +92,51 @@ def test_integral_vs_pyscf(int_type):
 
     assert torch.allclose(torch.tensor(mat_scf, dtype=dtype), mat)
 
-@pytest.mark.parametrize(
-    "int_type",
-    ["overlap", "kinetic", "nuclattr", "elrep"]
-)
-def test_integral_grad_pos(int_type):
+def test_nuc_integral_frac_atomz():
+    # test the nuclear integral with fractional atomz
     dtype = torch.double
 
-    atomenv = get_atom_env(dtype)
+    atomenv1 = get_atom_env(dtype, atomz=1)
+    atomenv2 = get_atom_env(dtype, atomz=2)
+    atomenv1f = get_atom_env(dtype, atomz=1.0)
+    atomenv2f = get_atom_env(dtype, atomz=2.0)
+    atomenv15f = get_atom_env(dtype, atomz=1.5)
+    natoms = len(atomenv1.atomzs)
+    allbases = [
+        loadbasis("%d:%s" % (1, atomenv1.basis), dtype=dtype, requires_grad=False)
+        for i in range(natoms)
+    ]
+
+    def get_nuc_int1e(atomenv):
+        atombasis1 = AtomCGTOBasis(atomz=atomenv.atomzs[0], bases=allbases[0], pos=atomenv.poss[0])
+        atombasis2 = AtomCGTOBasis(atomz=atomenv.atomzs[1], bases=allbases[1], pos=atomenv.poss[1])
+        env = LibcintWrapper([atombasis1, atombasis2], spherical=True)
+        return env.nuclattr()
+
+    nuc1 = get_nuc_int1e(atomenv1)
+    nuc2 = get_nuc_int1e(atomenv2)
+    nuc1f = get_nuc_int1e(atomenv1f)
+    nuc2f = get_nuc_int1e(atomenv2f)
+    nuc15f = get_nuc_int1e(atomenv15f)
+    assert torch.allclose(nuc1, nuc1f)
+    assert torch.allclose(nuc2, nuc2f)
+    nuc15 = (nuc1 + nuc2) * 0.5
+    assert torch.allclose(nuc15, nuc15f)
+
+@pytest.mark.parametrize(
+    "int_type",
+    ["overlap", "kinetic", "nuclattr", "nuclattr-frac", "elrep"]
+)
+def test_integral_grad_pos(int_type):
+    int_type, is_z_frac = get_int_type_and_frac(int_type)
+    dtype = torch.double
+
+    atomz = 1.2 if is_z_frac else 1
+    atomenv = get_atom_env(dtype, atomz=atomz)
     pos1 = atomenv.poss[0]
     pos2 = atomenv.poss[1]
     allbases = [
-        loadbasis("%d:%s" % (atomz, atomenv.basis), dtype=dtype, requires_grad=False)
+        loadbasis("%d:%s" % (int(atomz), atomenv.basis), dtype=dtype, requires_grad=False)
         for atomz in atomenv.atomzs
     ]
 
@@ -119,13 +161,16 @@ def test_integral_grad_pos(int_type):
 
 @pytest.mark.parametrize(
     "int_type",
+    # TODO: fix the integral grad for "nuclattr-frac"
     ["overlap", "kinetic", "nuclattr", "elrep"]
 )
 def test_integral_grad_basis(int_type):
+    int_type, is_z_frac = get_int_type_and_frac(int_type)
     dtype = torch.double
     torch.manual_seed(123)
 
-    atomenv = get_atom_env(dtype, pos_requires_grad=False)
+    atomz = 1.2 if is_z_frac else 1
+    atomenv = get_atom_env(dtype, atomz=atomz, pos_requires_grad=False)
     pos1 = atomenv.poss[0]
     pos2 = atomenv.poss[1]
 

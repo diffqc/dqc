@@ -14,7 +14,7 @@ class CGTOBasis:
 
 @dataclass
 class AtomCGTOBasis:
-    atomz: int
+    atomz: Union[int, float]
     bases: List[CGTOBasis]
     pos: torch.Tensor  # (ndim,)
 
