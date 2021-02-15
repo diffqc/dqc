@@ -210,7 +210,7 @@ class LibcintWrapper(object):
         return self._int1e("kin")
 
     def nuclattr(self) -> torch.Tensor:
-        return self._int1e("nuc", True)
+        return self._int1e("nuc")
 
     def elrep(self) -> torch.Tensor:
         return self._int2e("ar12b")
@@ -236,7 +236,7 @@ class LibcintWrapper(object):
         return [self.allcoeffs_params, self.allalphas_params, self.allpos_params]
 
     ################ integrals to construct the operator ################
-    def _int1e(self, shortname: str, nuc: bool = False) -> torch.Tensor:
+    def _int1e(self, shortname: str) -> torch.Tensor:
         # one electron integral (overlap, kinetic, and nuclear attraction)
         return _Int1eFunction.apply(
             self.allcoeffs_params, self.allalphas_params, self.allpos_params,
