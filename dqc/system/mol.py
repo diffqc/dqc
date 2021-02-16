@@ -3,10 +3,10 @@ import torch
 import numpy as np
 from dqc.hamilton.base_hamilton import BaseHamilton
 from dqc.hamilton.hcgto import HamiltonCGTO
-from dqc.system.base_system import BaseSystem, ZType
+from dqc.system.base_system import BaseSystem
 from dqc.grid.base_grid import BaseGrid
 from dqc.grid.factory import get_grid
-from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, SpinParam
+from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, SpinParam, ZType, is_z_float
 from dqc.utils.periodictable import get_atomz
 from dqc.utils.safeops import eps as util_eps, occnumber
 from dqc.api.loadbasis import loadbasis
@@ -69,7 +69,7 @@ class Mol(BaseSystem):
         atomzs, atompos = _parse_moldesc(moldesc, dtype, device)
         atomzs_int = torch.round(atomzs).to(torch.int) if atomzs.is_floating_point() else atomzs
         allbases = _parse_basis(atomzs_int, basis)  # list of list of CGTOBasis
-        atombases = [AtomCGTOBasis(atomz=atz.item(), bases=bas, pos=atpos)
+        atombases = [AtomCGTOBasis(atomz=atz, bases=bas, pos=atpos)
                      for (atz, bas, atpos) in zip(atomzs, allbases, atompos)]
         self._hamilton = HamiltonCGTO(atombases)
         self._atompos = atompos  # (natoms, ndim)
@@ -85,8 +85,8 @@ class Mol(BaseSystem):
         self._numel = nelecs
 
         # calculate the orbital weights
-        nspin_dn: ZType = (nelecs - spin) * 0.5 if frac_mode else (nelecs - spin) // 2
-        nspin_up: ZType = nspin_dn + spin
+        nspin_dn: torch.Tensor = (nelecs - spin) * 0.5 if frac_mode else (nelecs - spin) // 2
+        nspin_up: torch.Tensor = nspin_dn + spin
 
         # total orbital weights
         _orb_weights_u = occnumber(nspin_up, dtype=dtype, device=device)
@@ -225,17 +225,17 @@ def _parse_basis(atomzs: torch.Tensor,
             return basis  # type: ignore
 
 def _get_nelecs_spin(atomzs: torch.Tensor, spin: Optional[ZType],
-                     charge: ZType) -> Tuple[ZType, ZType, bool]:
+                     charge: ZType) -> Tuple[torch.Tensor, ZType, bool]:
     # get the number of electrons and spins
 
     # a boolean to indicate if working in a fractional mode
-    frac_mode = atomzs.is_floating_point() or isinstance(spin, float) or isinstance(charge, float)
+    frac_mode = atomzs.is_floating_point() or is_z_float(charge) or \
+        (spin is not None and is_z_float(spin))
 
-    zsum = torch.sum(atomzs).item()
-    nelecs_tot: ZType = float(zsum) if frac_mode else int(zsum)
+    nelecs_tot: torch.Tensor = torch.sum(atomzs)
     assert nelecs_tot >= charge, \
-        "Only %s electrons, but needs %s charge" % (nelecs_tot, charge)
-    nelecs: ZType = nelecs_tot - charge
+        "Only %f electrons, but needs %f charge" % (nelecs_tot.item(), charge)
+    nelecs: torch.Tensor = nelecs_tot - charge
 
     # if spin is not given, then set it as the remainder if nelecs is an integer
     if spin is None:

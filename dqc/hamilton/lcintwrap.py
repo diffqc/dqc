@@ -71,7 +71,8 @@ class LibcintWrapper(object):
 
             # check if there are fractional atomz
             atomz = atombasis.atomz
-            if isinstance(atomz, float):
+            if isinstance(atomz, float) or \
+                    (isinstance(atomz, torch.Tensor) and atomz.is_floating_point()):
                 self._all_int_atomzs = False
 
         self.nshells_tot = sum(self._nshells)

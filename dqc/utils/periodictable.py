@@ -1,4 +1,6 @@
 from typing import Union
+import torch
+from dqc.utils.datastruct import ZType
 
 periodic_table_atomz = {
     "H": 1,
@@ -57,8 +59,11 @@ periodic_table_atomz = {
     "Xe": 54,
 }
 
-def get_atomz(elmt: Union[str, int, float]) -> Union[int, float]:
-    if isinstance(elmt, int) or isinstance(elmt, float):
-        return elmt
-    else:
+def get_atomz(elmt: Union[str, ZType]) -> ZType:
+    if isinstance(elmt, str):
         return periodic_table_atomz[elmt]
+    elif isinstance(elmt, torch.Tensor):
+        assert elmt.numel() == 1
+        return elmt
+    else:  # float or int
+        return elmt

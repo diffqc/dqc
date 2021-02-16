@@ -4,9 +4,7 @@ import xitorch as xt
 from typing import List, Union
 from dqc.hamilton.base_hamilton import BaseHamilton
 from dqc.grid.base_grid import BaseGrid
-from dqc.utils.datastruct import SpinParam
-
-ZType = Union[int, float]
+from dqc.utils.datastruct import SpinParam, ZType
 
 class BaseSystem(xt.EditableModule):
     """

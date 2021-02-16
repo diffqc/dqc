@@ -318,6 +318,20 @@ def test_rks_frac_energy():
     ene2ne = get_energy(3 - 1e-4, with_ii=False)
     assert torch.allclose(ene2e, ene2ne, rtol=3e-4)
 
+def test_rks_frac_energy_grad():
+    # test the gradient of energy w.r.t. Z in fraction case
+
+    def get_energy(atomzs):
+        poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype)
+        mol = Mol((atomzs, poss), basis="6-311++G**", spin=0, dtype=dtype, grid="sg3")
+        qc = KS(mol, xc="lda_x", restricted=True).run()
+        ene = qc.energy() - mol.get_nuclei_energy()
+        return ene
+
+    atomzs = torch.tensor([1.2, 1.25], dtype=dtype, requires_grad=True)
+    torch.autograd.gradcheck(get_energy, (atomzs,))
+    torch.autograd.gradgradcheck(get_energy, (atomzs,))
+
 if __name__ == "__main__":
     import time
     xc = "lda_x"

@@ -123,6 +123,24 @@ def test_nuc_integral_frac_atomz():
     nuc15 = (nuc1 + nuc2) * 0.5
     assert torch.allclose(nuc15, nuc15f)
 
+def test_nuc_integral_frac_atomz_grad():
+    # test the gradient w.r.t. Z for nuclear integral with fractional Z
+
+    dtype = torch.double
+    atomz = torch.tensor(2.1, dtype=dtype, requires_grad=True)
+
+    def get_nuc_int1e(atomz):
+        atomenv = get_atom_env(dtype, atomz=atomz)
+        basis = loadbasis("%d:%s" % (2, atomenv.basis), dtype=dtype, requires_grad=False)
+
+        atombasis1 = AtomCGTOBasis(atomz=atomenv.atomzs[0], bases=basis, pos=atomenv.poss[0])
+        atombasis2 = AtomCGTOBasis(atomz=atomenv.atomzs[1], bases=basis, pos=atomenv.poss[1])
+        env = LibcintWrapper([atombasis1, atombasis2], spherical=True)
+        return env.nuclattr()
+
+    torch.autograd.gradcheck(get_nuc_int1e, (atomz,))
+    torch.autograd.gradgradcheck(get_nuc_int1e, (atomz,))
+
 @pytest.mark.parametrize(
     "int_type",
     ["overlap", "kinetic", "nuclattr", "nuclattr-frac", "elrep"]

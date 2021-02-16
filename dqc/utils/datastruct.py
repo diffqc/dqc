@@ -6,6 +6,16 @@ __all__ = ["CGTOBasis", "AtomCGTOBasis", "ValGrad"]
 
 T = TypeVar('T')
 
+# type of the atom Z
+ZType = Union[int, float, torch.Tensor]
+
+def is_z_float(a: ZType):
+    # returns if the given z-type is a floating point
+    if isinstance(a, torch.Tensor):
+        return a.is_floating_point()
+    else:
+        return isinstance(a, float)
+
 @dataclass
 class CGTOBasis:
     angmom: int
@@ -14,7 +24,7 @@ class CGTOBasis:
 
 @dataclass
 class AtomCGTOBasis:
-    atomz: Union[int, float]
+    atomz: ZType
     bases: List[CGTOBasis]
     pos: torch.Tensor  # (ndim,)
 
