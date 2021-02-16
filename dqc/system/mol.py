@@ -224,7 +224,7 @@ def _parse_basis(atomzs: torch.Tensor,
             return basis  # type: ignore
 
 def _get_nelecs_spin(atomzs: torch.Tensor, spin: Optional[ZType],
-                     charge: ZType) -> Tuple[ZType, ZType]:
+                     charge: ZType) -> Tuple[ZType, ZType, bool]:
     # get the number of electrons and spins
 
     # a boolean to indicate if working in a fractional mode
