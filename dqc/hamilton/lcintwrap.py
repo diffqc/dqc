@@ -124,7 +124,7 @@ class LibcintWrapper(object):
         assert atombasis.pos.numel() == NDIM, "Please report this bug in Github"
         #                      charge                ptr_coord       nucl model (unused for standard nucl model)
         self._atm_list.append([int(atombasis.atomz), self._ptr_env, 1, self._ptr_env + NDIM, 0, 0])
-        self._env_list.extend(atombasis.pos)
+        self._env_list.extend(atombasis.pos.detach())
         self._ptr_env += NDIM
         self._env_list.extend([0.0])
         self._ptr_env += 1
@@ -144,8 +144,8 @@ class LibcintWrapper(object):
             self._bas_list.append([iatom, basis.angmom, ngauss, 1, 0, self._ptr_env,
                                    # ptr_coeffs,           unused
                                    self._ptr_env + ngauss, 0])
-            self._env_list.extend(basis.alphas)
-            self._env_list.extend(normcoeff)
+            self._env_list.extend(basis.alphas.detach())
+            self._env_list.extend(normcoeff.detach())
             self._ptr_env += 2 * ngauss
 
             # add the basis coeffs and alphas to the flat list and update the offset
@@ -443,8 +443,8 @@ class LibcintWrapper(object):
                  self.bas_ctypes, self.nbas_ctypes,
                  self.env_ctypes)
 
-        out = torch.tensor(out, dtype=self.dtype, device=self.device)
-        return out
+        out_tensor = torch.tensor(out, dtype=self.dtype, device=self.device)
+        return out_tensor
 
     ################ misc functions ################
     def _nao_at_shell(self, sh: int) -> int:

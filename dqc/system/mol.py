@@ -12,7 +12,7 @@ from dqc.utils.safeops import eps as util_eps, occnumber
 from dqc.api.loadbasis import loadbasis
 
 AtomZsType  = Union[List[str], List[ZType], torch.Tensor]
-AtomPosType = Union[List[List[float]], np.array, torch.Tensor]
+AtomPosType = Union[List[List[float]], np.ndarray, torch.Tensor]
 
 class Mol(BaseSystem):
     """

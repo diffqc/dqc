@@ -62,7 +62,7 @@ class BeckeGrid(BaseGrid):
             raise KeyError("Invalid methodname: %s" % methodname)
 
 def _get_atom_weights(xyz: torch.Tensor, atompos: torch.Tensor,
-                      atom_grids_idxs: np.array,
+                      atom_grids_idxs: np.ndarray,
                       atomradius: Optional[torch.Tensor] = None) -> torch.Tensor:
     # returns the relative integration weights for each atoms
 

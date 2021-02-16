@@ -213,7 +213,7 @@ class CalcGGALibXCPol(torch.autograd.Function):
         return (grad_rho_u, grad_rho_d, grad_sigma_uu, grad_sigma_ud, grad_sigma_dd,
                 None, None)
 
-def _get_libxc_res(inp: Mapping[str, Union[np.array, Tuple[np.array, ...]]],
+def _get_libxc_res(inp: Mapping[str, Union[np.ndarray, Tuple[np.ndarray, ...], torch.Tensor, Tuple[torch.Tensor, ...]]],
                    deriv: int,
                    libxcfcn: pylibxc.functional.LibXCFunctional,
                    family: int, polarized: bool) -> Tuple[torch.Tensor, ...]:
@@ -244,18 +244,20 @@ def _get_libxc_res(inp: Mapping[str, Union[np.array, Tuple[np.array, ...]]],
     if deriv == 0:
         rho = inp["rho"]
         if polarized:
-            rho = sum(_unpack_input(rho))  # rho[:, 0] + rho[:, 1]
+            assert isinstance(rho, np.ndarray)
+            start = np.zeros(1, dtype=rho.dtype)
+            rho = sum(_unpack_input(rho), start=start)  # rho[:, 0] + rho[:, 1]
         res0 = res[0] * rho
         res = (res0, *res[1:])
 
     return res
 
-def _pack_input(*vals: torch.Tensor) -> np.array:
+def _pack_input(*vals: torch.Tensor) -> np.ndarray:
     # arrange the values in a numpy array with fortran memory order
     vals_np = np.asarray([val.detach().numpy() for val in vals])
     return np.ascontiguousarray(vals_np.T)
 
-def _unpack_input(inp: np.array) -> Iterator[np.array]:
+def _unpack_input(inp: np.ndarray) -> Iterator[np.ndarray]:
     # unpack from libxc input format into tuple of inputs
     return (a for a in inp.T)
 
@@ -274,12 +276,12 @@ GGA_KEYS = [["zk"],
             ["v3rho3", "v3rho2sigma", "v3rhosigma2", "v3sigma3"],
             ["v4rho4", "v4rho3sigma", "v4rho2sigma2", "v4rhosigma3", "v4sigma4"]]
 
-def _extract_return_lda(ret: Mapping[str, np.array], deriv: int) -> \
+def _extract_return_lda(ret: Mapping[str, np.ndarray], deriv: int) -> \
         Tuple[torch.Tensor]:
     a = lambda v: torch.as_tensor(v.T)
     return (a(ret[LDA_KEYS[deriv]]), )
 
-def _extract_return_gga(ret: Mapping[str, np.array], deriv: int) -> \
+def _extract_return_gga(ret: Mapping[str, np.ndarray], deriv: int) -> \
         Tuple[torch.Tensor, ...]:
     a = lambda v: torch.as_tensor(v.T)
     return tuple(a(ret[key]) for key in GGA_KEYS[deriv])
