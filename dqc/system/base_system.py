@@ -6,6 +6,8 @@ from dqc.hamilton.base_hamilton import BaseHamilton
 from dqc.grid.base_grid import BaseGrid
 from dqc.utils.datastruct import SpinParam
 
+ZType = Union[int, float]
+
 class BaseSystem(xt.EditableModule):
     """
     System is a class describing the environment before doing the quantum
@@ -56,21 +58,21 @@ class BaseSystem(xt.EditableModule):
 
     ####################### system properties #######################
     @abstractproperty
-    def spin(self) -> int:
+    def spin(self) -> ZType:
         """
         Returns the total spin of the system.
         """
         pass
 
     @abstractproperty
-    def charge(self) -> int:
+    def charge(self) -> ZType:
         """
         Returns the charge of the system.
         """
         pass
 
     @abstractproperty
-    def numel(self) -> int:
+    def numel(self) -> ZType:
         """
         Returns the total number of the electrons in the system.
         """

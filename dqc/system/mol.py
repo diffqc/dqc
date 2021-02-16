@@ -3,15 +3,15 @@ import torch
 import numpy as np
 from dqc.hamilton.base_hamilton import BaseHamilton
 from dqc.hamilton.hcgto import HamiltonCGTO
-from dqc.system.base_system import BaseSystem
+from dqc.system.base_system import BaseSystem, ZType
 from dqc.grid.base_grid import BaseGrid
 from dqc.grid.factory import get_grid
 from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, SpinParam
 from dqc.utils.periodictable import get_atomz
-from dqc.utils.safeops import eps as util_eps
+from dqc.utils.safeops import eps as util_eps, occnumber
 from dqc.api.loadbasis import loadbasis
 
-AtomZType   = Union[List[str], List[int], torch.Tensor]
+AtomZsType  = Union[List[str], List[ZType], torch.Tensor]
 AtomPosType = Union[List[List[float]], np.array, torch.Tensor]
 
 class Mol(BaseSystem):
@@ -50,11 +50,11 @@ class Mol(BaseSystem):
     """
 
     def __init__(self,
-                 moldesc: Union[str, Tuple[AtomZType, AtomPosType]],
+                 moldesc: Union[str, Tuple[AtomZsType, AtomPosType]],
                  basis: Union[str, List[CGTOBasis], List[str], List[List[CGTOBasis]]],
                  grid: Union[int, str] = "sg3",
-                 spin: Optional[int] = None,
-                 charge: int = 0,
+                 spin: Optional[ZType] = None,
+                 charge: ZType = 0,
                  dtype: torch.dtype = torch.float64,
                  device: torch.device = torch.device('cpu'),
                  ):
@@ -64,7 +64,7 @@ class Mol(BaseSystem):
         self._grid: Optional[BaseGrid] = None
 
         # get the AtomCGTOBasis & the hamiltonian
-        # atomzs: (natoms,)
+        # atomzs: (natoms,) dtype: torch.int or dtype for floating point
         # atompos: (natoms, ndim)
         atomzs, atompos = _parse_moldesc(moldesc, dtype, device)
         allbases = _parse_basis(atomzs, basis)  # list of list of CGTOBasis
@@ -72,15 +72,11 @@ class Mol(BaseSystem):
                      for (atz, bas, atpos) in zip(atomzs, allbases, atompos)]
         self._hamilton = HamiltonCGTO(atombases)
         self._atompos = atompos  # (natoms, ndim)
-        self._atomzs = atomzs  # (natoms,) int-type
+        self._atomzs = atomzs  # (natoms,) int-type or dtype if floating point
+        self._atomzs_int = torch.round(atomzs).to(torch.int) if atomzs.is_floating_point() else atomzs
 
-        # get the orbital weights
-        nelecs: int = int(torch.sum(atomzs).item()) - charge
-        if spin is None:
-            spin = nelecs % 2
-        assert spin >= 0
-        assert (nelecs - spin) % 2 == 0, \
-            "Spin %d is not suited for %d electrons" % (spin, nelecs)
+        # get the number of electrons and spin
+        nelecs, spin, frac_mode = _get_nelecs_spin(atomzs, spin, charge)
 
         # save the system's properties
         self._spin = spin
@@ -88,18 +84,20 @@ class Mol(BaseSystem):
         self._numel = nelecs
 
         # calculate the orbital weights
-        nspin_dn = (nelecs - spin) // 2
-        nspin_up = nspin_dn + spin
-        _orb_weights = torch.ones((nspin_up,), dtype=dtype, device=device)
-        _orb_weights[:nspin_dn] = 2.0
-        self._orb_weights = _orb_weights
+        nspin_dn: ZType = (nelecs - spin) * 0.5 if frac_mode else (nelecs - spin) // 2
+        nspin_up: ZType = nspin_dn + spin
+
+        # total orbital weights
+        _orb_weights_u = occnumber(nspin_up, dtype=dtype, device=device)
+        _orb_weights_d = occnumber(nspin_dn, n=len(_orb_weights_u), dtype=dtype, device=device)
+        self._orb_weights = _orb_weights_u + _orb_weights_d
 
         # get the polarized orbital weights
-        self._orb_weights_u = torch.ones((nspin_up,), dtype=dtype, device=device)
+        self._orb_weights_u = _orb_weights_u  # torch.ones((nspin_up,), dtype=dtype, device=device)
         if nspin_dn > 0:
-            self._orb_weights_d = torch.ones((nspin_dn,), dtype=dtype, device=device)
+            self._orb_weights_d = occnumber(nspin_dn, dtype=dtype, device=device)
         else:
-            self._orb_weights_d = torch.zeros((1,), dtype=dtype, device=device)
+            self._orb_weights_d = occnumber(0, n=1, dtype=dtype, device=device)
 
     def get_hamiltonian(self) -> BaseHamilton:
         return self._hamilton
@@ -128,7 +126,7 @@ class Mol(BaseSystem):
 
     def setup_grid(self) -> None:
         grid_inp = self._grid_inp
-        self._grid = get_grid(self._grid_inp, self._atomzs, self._atompos,
+        self._grid = get_grid(self._grid_inp, self._atomzs_int, self._atompos,
                               dtype=self._dtype, device=self._device)
 
         # #        0,  1,  2,  3,  4,  5
@@ -151,18 +149,18 @@ class Mol(BaseSystem):
         pass
 
     @property
-    def spin(self) -> int:
+    def spin(self) -> ZType:
         return self._spin
 
     @property
-    def charge(self) -> int:
+    def charge(self) -> ZType:
         return self._charge
 
     @property
-    def numel(self) -> int:
+    def numel(self) -> ZType:
         return self._numel
 
-def _parse_moldesc(moldesc: Union[str, Tuple[AtomZType, AtomPosType]],
+def _parse_moldesc(moldesc: Union[str, Tuple[AtomZsType, AtomPosType]],
                    dtype: torch.dtype,
                    device: torch.device) -> Tuple[torch.Tensor, torch.Tensor]:
     if isinstance(moldesc, str):
@@ -173,8 +171,7 @@ def _parse_moldesc(moldesc: Union[str, Tuple[AtomZType, AtomPosType]],
                 for i, c in enumerate(line.split())
             ] for line in moldesc.split(";")]
         atomzs = torch.tensor([line[0] for line in elmts], device=device)
-        atomposs = torch.tensor([line[1:] for line in elmts], dtype=dtype, device=device)
-        return atomzs, atomposs
+        atompos = torch.tensor([line[1:] for line in elmts], dtype=dtype, device=device)
 
     else:  # tuple of atomzs, atomposs
         atomzs_raw, atompos_raw = moldesc
@@ -183,17 +180,21 @@ def _parse_moldesc(moldesc: Union[str, Tuple[AtomZType, AtomPosType]],
 
         # convert the atomz to tensor
         if not isinstance(atomzs_raw, torch.Tensor):
-            atomzs = torch.tensor([get_atomz(at) for at in atomzs_raw])
+            atomzs = torch.tensor([get_atomz(at) for at in atomzs_raw], device=device)
         else:
-            atomzs = atomzs_raw  # already a tensor
+            atomzs = atomzs_raw.to(device)  # already a tensor
 
         # convert the atompos to tensor
         if not isinstance(atompos_raw, torch.Tensor):
             atompos = torch.as_tensor(atompos_raw, dtype=dtype, device=device)
         else:
-            atompos = atompos_raw  # already a tensor
+            atompos = atompos_raw.to(dtype).to(device)  # already a tensor
 
-        return atomzs, atompos
+    # convert to dtype if atomzs is a floating point tensor, not an integer tensor
+    if atomzs.is_floating_point():
+        atomzs = atomzs.to(dtype)
+
+    return atomzs, atompos
 
 def _parse_basis(atomzs: torch.Tensor,
                  basis: Union[str, List[CGTOBasis], List[str], List[List[CGTOBasis]]]) -> \
@@ -202,7 +203,7 @@ def _parse_basis(atomzs: torch.Tensor,
     natoms = len(atomzs)
 
     if isinstance(basis, str):
-        return [loadbasis("%d:%s" % (atomz, basis)) for atomz in atomzs]
+        return [loadbasis("%d:%s" % (int(atomz), basis)) for atomz in atomzs]
 
     else:  # basis is a list
         assert len(atomzs) == len(basis)
@@ -216,8 +217,35 @@ def _parse_basis(atomzs: torch.Tensor,
 
         # list of str
         elif isinstance(basis[0], str):
-            return [loadbasis("%d:%s" % (atz, b)) for (atz, b) in zip(atomzs, basis)]  # type: ignore
+            return [loadbasis("%d:%s" % (int(atz), b)) for (atz, b) in zip(atomzs, basis)]  # type: ignore
 
         # list of list of cgto basis
         else:
             return basis  # type: ignore
+
+def _get_nelecs_spin(atomzs: torch.Tensor, spin: Optional[ZType],
+                     charge: ZType) -> Tuple[ZType, ZType]:
+    # get the number of electrons and spins
+
+    # a boolean to indicate if working in a fractional mode
+    frac_mode = atomzs.is_floating_point() or isinstance(spin, float) or isinstance(charge, float)
+
+    zsum = torch.sum(atomzs).item()
+    nelecs_tot: ZType = float(zsum) if frac_mode else int(zsum)
+    assert nelecs_tot >= charge, \
+        "Only %s electrons, but needs %s charge" % (nelecs_tot, charge)
+    nelecs: ZType = nelecs_tot - charge
+
+    # if spin is not given, then set it as the remainder if nelecs is an integer
+    if spin is None:
+        assert not frac_mode, \
+            "Fraction case requires the spin argument to be specified"
+        spin = nelecs % 2
+    else:
+        assert spin >= 0
+        if not frac_mode:
+            # only check if the calculation is not in fraction mode,
+            # for fractional mode, unmatched spin is acceptable
+            assert (nelecs - spin) % 2 == 0, \
+                "Spin %d is not suited for %d electrons" % (spin, nelecs)
+    return nelecs, spin, frac_mode

@@ -281,6 +281,38 @@ def test_uks_grad_vxc(xccls, xcparams, atomz):
     params = tuple(torch.tensor(p, dtype=dtype).requires_grad_() for p in xcparams)
     torch.autograd.gradcheck(get_energy, params)
 
+############## Fractional charge ##############
+def test_rks_frac_energy():
+    # test if fraction of atomz produces close/same results with integer atomz
+
+    def get_energy(atomz, with_ii=True):
+        atomzs = [atomz, atomz]
+        poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype)
+        mol = Mol((atomzs, poss), basis="6-311++G**", spin=0, dtype=dtype, grid="sg3")
+        qc = KS(mol, xc="lda_x", restricted=True).run()
+        ene = qc.energy()
+        if with_ii:
+            ene = ene - mol.get_nuclei_energy()
+        return ene
+
+    ene1tot      = get_energy(1, with_ii=True)
+    ene1e        = get_energy(1, with_ii=False)
+    ene1ftot     = get_energy(1.0, with_ii=True)
+    ene1fe       = get_energy(1.0, with_ii=False)
+    ene1epse     = get_energy(1.0 + 1e-2, with_ii=False)
+    ene1smalltot = get_energy(1.0 + 1e-8, with_ii=True)
+    ene1smalle   = get_energy(1.0 + 1e-8, with_ii=False)
+
+    # check if the floating point calculation produces the same number as
+    # integer calculation (or close if atomz is close to 1)
+    assert torch.all(ene1tot == ene1ftot)
+    assert torch.all(ene1e == ene1fe)
+    assert torch.allclose(ene1tot, ene1smalltot)
+    assert torch.allclose(ene1e, ene1smalle)
+
+    # check if the electron energy changes with change of z
+    assert torch.all(ene1e != ene1epse)
+
 if __name__ == "__main__":
     import time
     xc = "lda_x"
