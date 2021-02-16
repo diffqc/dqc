@@ -314,7 +314,7 @@ class _KSEngine(xt.EditableModule):
 
     @overload
     def __diagonalize(self, fock: SpinParam[xt.LinearOperator]  # type: ignore
-                           ) -> Tuple[SpinParam[torch.Tensor], SpinParam[torch.Tensor]]:
+                      ) -> Tuple[SpinParam[torch.Tensor], SpinParam[torch.Tensor]]:
         ...
 
     def __diagonalize(self, fock):

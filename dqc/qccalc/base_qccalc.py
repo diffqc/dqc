@@ -1,7 +1,6 @@
 from abc import abstractmethod
 from typing import List, Union
 import torch
-import xitorch as xt
 from dqc.utils.datastruct import SpinParam
 from dqc.system.base_system import BaseSystem
 

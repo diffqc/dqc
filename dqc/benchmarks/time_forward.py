@@ -1,4 +1,3 @@
-import torch
 import pprofile
 from dqc.qccalc.ks import KS
 from dqc.system.mol import Mol
