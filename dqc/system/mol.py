@@ -67,13 +67,14 @@ class Mol(BaseSystem):
         # atomzs: (natoms,) dtype: torch.int or dtype for floating point
         # atompos: (natoms, ndim)
         atomzs, atompos = _parse_moldesc(moldesc, dtype, device)
-        allbases = _parse_basis(atomzs, basis)  # list of list of CGTOBasis
-        atombases = [AtomCGTOBasis(atomz=atz, bases=bas, pos=atpos)
+        atomzs_int = torch.round(atomzs).to(torch.int) if atomzs.is_floating_point() else atomzs
+        allbases = _parse_basis(atomzs_int, basis)  # list of list of CGTOBasis
+        atombases = [AtomCGTOBasis(atomz=atz.item(), bases=bas, pos=atpos)
                      for (atz, bas, atpos) in zip(atomzs, allbases, atompos)]
         self._hamilton = HamiltonCGTO(atombases)
         self._atompos = atompos  # (natoms, ndim)
         self._atomzs = atomzs  # (natoms,) int-type or dtype if floating point
-        self._atomzs_int = torch.round(atomzs).to(torch.int) if atomzs.is_floating_point() else atomzs
+        self._atomzs_int = atomzs_int  # (natoms,) int-type rounded from atomzs
 
         # get the number of electrons and spin
         nelecs, spin, frac_mode = _get_nelecs_spin(atomzs, spin, charge)
@@ -203,7 +204,7 @@ def _parse_basis(atomzs: torch.Tensor,
     natoms = len(atomzs)
 
     if isinstance(basis, str):
-        return [loadbasis("%d:%s" % (int(atomz), basis)) for atomz in atomzs]
+        return [loadbasis("%d:%s" % (atomz, basis)) for atomz in atomzs]
 
     else:  # basis is a list
         assert len(atomzs) == len(basis)
@@ -217,7 +218,7 @@ def _parse_basis(atomzs: torch.Tensor,
 
         # list of str
         elif isinstance(basis[0], str):
-            return [loadbasis("%d:%s" % (int(atz), b)) for (atz, b) in zip(atomzs, basis)]  # type: ignore
+            return [loadbasis("%d:%s" % (atz, b)) for (atz, b) in zip(atomzs, basis)]  # type: ignore
 
         # list of list of cgto basis
         else:

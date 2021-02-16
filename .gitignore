@@ -3,6 +3,7 @@ profile.sh
 profile.prof
 rprofile.py
 report.txt
+notebooks/*
 
 # library dependence
 CMakeCache.txt

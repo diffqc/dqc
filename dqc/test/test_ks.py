@@ -305,13 +305,18 @@ def test_rks_frac_energy():
 
     # check if the floating point calculation produces the same number as
     # integer calculation (or close if atomz is close to 1)
-    assert torch.all(ene1tot == ene1ftot)
-    assert torch.all(ene1e == ene1fe)
+    assert torch.allclose(ene1tot, ene1ftot, rtol=0, atol=1e-10)
+    assert torch.allclose(ene1e, ene1fe, rtol=0, atol=1e-10)
     assert torch.allclose(ene1tot, ene1smalltot)
     assert torch.allclose(ene1e, ene1smalle)
 
     # check if the electron energy changes with change of z
     assert torch.all(ene1e != ene1epse)
+
+    # check if the results on the negative side is close to the integer part
+    ene2e = get_energy(3, with_ii=False)
+    ene2ne = get_energy(3 - 1e-4, with_ii=False)
+    assert torch.allclose(ene2e, ene2ne, rtol=3e-4)
 
 if __name__ == "__main__":
     import time
