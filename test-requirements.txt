@@ -2,7 +2,7 @@ pytest>=6.0
 mypy>=0.782
 pytest-cov>=2.10
 scipy>=0.15
-pytorch>=1.6.0
+torch>=1.7.1
 numpy>=1.8.2
 basis_set_exchange
 xitorch>=0.1.0
