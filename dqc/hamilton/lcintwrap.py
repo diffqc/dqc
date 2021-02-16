@@ -71,7 +71,7 @@ class LibcintWrapper(object):
 
             # check if there are fractional atomz
             atomz = atombasis.atomz
-            if isinstance(atomz, float) and atomz % 1 != 0:
+            if isinstance(atomz, float):
                 self._all_int_atomzs = False
 
         self.nshells_tot = sum(self._nshells)
