@@ -33,14 +33,18 @@ class Mol(BaseSystem):
         If it is an integer, then it uses the default grid with specified level
         of accuracy.
         Default: 3
-    * spin: int or None
+    * spin: int, float, torch.Tensor, or None
         The difference between spin-up and spin-down electrons.
         It must be an integer or None.
-        If None, then it is num_electrons % 2.
+        If None, then it is ``num_electrons % 2``.
+        For floating point atomzs and/or charge, the ``spin`` must be specified.
         Default: None
-    * charge: int
+    * charge: int, float, or torch.Tensor
         The charge of the molecule.
         Default: 0
+    * orb_weights: SpinParam[torch.Tensor] or None
+        Specifiying the orbital occupancy (or weights) directly. If specified,
+        ``spin`` and ``charge`` arguments are ignored.
     * dtype: torch.dtype
         The data type of tensors in this class.
         Default: torch.float64
@@ -55,6 +59,8 @@ class Mol(BaseSystem):
                  grid: Union[int, str] = "sg3",
                  spin: Optional[ZType] = None,
                  charge: ZType = 0,
+                 orb_weights: Optional[SpinParam[torch.Tensor]] = None,
+                 *,
                  dtype: torch.dtype = torch.float64,
                  device: torch.device = torch.device('cpu'),
                  ):
@@ -75,30 +81,50 @@ class Mol(BaseSystem):
         self._atompos = atompos  # (natoms, ndim)
         self._atomzs = atomzs  # (natoms,) int-type or dtype if floating point
         self._atomzs_int = atomzs_int  # (natoms,) int-type rounded from atomzs
+        nelecs_tot: torch.Tensor = torch.sum(atomzs)
 
-        # get the number of electrons and spin
-        nelecs, spin, frac_mode = _get_nelecs_spin(atomzs, spin, charge)
+        # orb_weights is not specified, so determine it from spin and charge
+        if orb_weights is None:
+            # get the number of electrons and spin
+            nelecs, spin, frac_mode = _get_nelecs_spin(nelecs_tot, spin, charge)
 
-        # save the system's properties
-        self._spin = spin
-        self._charge = charge
-        self._numel = nelecs
+            # save the system's properties
+            self._spin = spin
+            self._charge = charge
+            self._numel = nelecs
 
-        # calculate the orbital weights
-        nspin_dn: torch.Tensor = (nelecs - spin) * 0.5 if frac_mode else (nelecs - spin) // 2
-        nspin_up: torch.Tensor = nspin_dn + spin
+            # calculate the orbital weights
+            nspin_dn: torch.Tensor = (nelecs - spin) * 0.5 if frac_mode else (nelecs - spin) // 2
+            nspin_up: torch.Tensor = nspin_dn + spin
 
-        # total orbital weights
-        _orb_weights_u = occnumber(nspin_up, dtype=dtype, device=device)
-        _orb_weights_d = occnumber(nspin_dn, n=len(_orb_weights_u), dtype=dtype, device=device)
-        self._orb_weights = _orb_weights_u + _orb_weights_d
+            # total orbital weights
+            _orb_weights_u = occnumber(nspin_up, dtype=dtype, device=device)
+            _orb_weights_d = occnumber(nspin_dn, n=len(_orb_weights_u), dtype=dtype, device=device)
+            self._orb_weights = _orb_weights_u + _orb_weights_d
 
-        # get the polarized orbital weights
-        self._orb_weights_u = _orb_weights_u  # torch.ones((nspin_up,), dtype=dtype, device=device)
-        if nspin_dn > 0:
-            self._orb_weights_d = occnumber(nspin_dn, dtype=dtype, device=device)
+            # get the polarized orbital weights
+            self._orb_weights_u = _orb_weights_u  # torch.ones((nspin_up,), dtype=dtype, device=device)
+            if nspin_dn > 0:
+                self._orb_weights_d = occnumber(nspin_dn, dtype=dtype, device=device)
+            else:
+                self._orb_weights_d = occnumber(0, n=1, dtype=dtype, device=device)
+
+        # orb_weights is specified, so calculate the spin and charge from it
         else:
-            self._orb_weights_d = occnumber(0, n=1, dtype=dtype, device=device)
+            assert isinstance(orb_weights, SpinParam)
+            assert orb_weights.u.ndim == 1
+            assert orb_weights.d.ndim == 1
+            assert len(orb_weights.u) == len(orb_weights.d)
+
+            utot = orb_weights.u.sum()
+            dtot = orb_weights.d.sum()
+            self._numel = utot + dtot
+            self._spin = utot - dtot
+            self._charge = nelecs_tot - self._numel
+
+            self._orb_weights_u = orb_weights.u
+            self._orb_weights_d = orb_weights.d
+            self._orb_weights = orb_weights.u + orb_weights.d
 
     def get_hamiltonian(self) -> BaseHamilton:
         return self._hamilton
@@ -224,15 +250,14 @@ def _parse_basis(atomzs: torch.Tensor,
         else:
             return basis  # type: ignore
 
-def _get_nelecs_spin(atomzs: torch.Tensor, spin: Optional[ZType],
+def _get_nelecs_spin(nelecs_tot: torch.Tensor, spin: Optional[ZType],
                      charge: ZType) -> Tuple[torch.Tensor, ZType, bool]:
     # get the number of electrons and spins
 
     # a boolean to indicate if working in a fractional mode
-    frac_mode = atomzs.is_floating_point() or is_z_float(charge) or \
+    frac_mode = nelecs_tot.is_floating_point() or is_z_float(charge) or \
         (spin is not None and is_z_float(spin))
 
-    nelecs_tot: torch.Tensor = torch.sum(atomzs)
     assert nelecs_tot >= charge, \
         "Only %f electrons, but needs %f charge" % (nelecs_tot.item(), charge)
     nelecs: torch.Tensor = nelecs_tot - charge
