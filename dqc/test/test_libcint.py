@@ -1,4 +1,5 @@
 from collections import namedtuple
+import itertools
 import torch
 import pytest
 import warnings
@@ -92,6 +93,48 @@ def test_integral_vs_pyscf(int_type):
 
     assert torch.allclose(torch.tensor(mat_scf, dtype=dtype), mat)
 
+@pytest.mark.parametrize(
+    "intc_type",
+    ["int2c", "int4c"]
+)
+def test_integral_with_subset(intc_type):
+    # check if the integral with the subsets agrees with the subset of the full integrals
+
+    dtype = torch.double
+    atomenv = get_atom_env(dtype)
+    allbases = [
+        loadbasis("%d:%s" % (atomz, atomenv.basis), dtype=dtype, requires_grad=False)
+        for atomz in atomenv.atomzs
+    ]
+
+    atombasis1 = AtomCGTOBasis(atomz=atomenv.atomzs[0], bases=allbases[0], pos=atomenv.poss[0])
+    atombasis2 = AtomCGTOBasis(atomz=atomenv.atomzs[1], bases=allbases[1], pos=atomenv.poss[1])
+    env = LibcintWrapper([atombasis1, atombasis2], spherical=True)
+    env1 = env[: len(env) // 2]
+    nenv1 = env1.nao()
+    if intc_type == "int2c":
+        mat_full = env.overlap()
+        mat = env.overlap(env1)
+        mat1 = env1.overlap()
+        mat2 = env1.overlap(other=env)
+
+        assert torch.allclose(mat_full[:, :nenv1], mat)
+        assert torch.allclose(mat_full[:nenv1, :nenv1], mat1)
+        assert torch.allclose(mat_full[:nenv1, :], mat2)
+
+    elif intc_type == "int4c":
+        mat_full = env.elrep()
+        mat = env.elrep(other1=env1, other2=env1)
+        mat1 = env1.elrep(other1=env, other2=env, other3=env1)
+        mat2 = env1.elrep(other1=env1, other2=env1, other3=env1)
+
+        assert torch.allclose(mat_full[:, :nenv1, :nenv1, :], mat)
+        assert torch.allclose(mat_full[:nenv1, :, :, :nenv1], mat1)
+        assert torch.allclose(mat_full[:nenv1, :nenv1, :nenv1, :nenv1], mat2)
+
+    else:
+        raise RuntimeError("Unknown integral type: %s" % intc_type)
+
 def test_nuc_integral_frac_atomz():
     # test the nuclear integral with fractional atomz
     dtype = torch.double
@@ -178,6 +221,42 @@ def test_integral_grad_pos(int_type):
     torch.autograd.gradgradcheck(get_int1e, (pos1, pos2, int_type))
 
 @pytest.mark.parametrize(
+    "intc_type,allsubsets",
+    list(itertools.product(
+        ["int2c", "int4c"],
+        [False, True]
+    ))
+)
+def test_integral_subset_grad_pos(intc_type, allsubsets):
+    dtype = torch.double
+
+    atomz = 1
+    atomenv = get_atom_env(dtype, atomz=atomz)
+    pos1 = atomenv.poss[0]
+    pos2 = atomenv.poss[1]
+    allbases = [
+        loadbasis("%d:%s" % (int(atomz), atomenv.basis), dtype=dtype, requires_grad=False)
+        for atomz in atomenv.atomzs
+    ]
+
+    def get_int1e(pos1, pos2, name):
+        atombasis1 = AtomCGTOBasis(atomz=atomenv.atomzs[0], bases=allbases[0], pos=pos1)
+        atombasis2 = AtomCGTOBasis(atomz=atomenv.atomzs[1], bases=allbases[1], pos=pos2)
+        env = LibcintWrapper([atombasis1, atombasis2], spherical=True)
+        env1 = env[: len(env) // 2]
+        env2 = env[len(env) // 2:] if allsubsets else env
+        if name == "int2c":
+            return env2.nuclattr(other=env1)
+        elif name == "int4c":
+            return env2.elrep(other1=env1, other2=env2, other3=env1)
+        else:
+            raise RuntimeError()
+
+    # integrals gradcheck
+    torch.autograd.gradcheck(get_int1e, (pos1, pos2, intc_type))
+    torch.autograd.gradgradcheck(get_int1e, (pos1, pos2, intc_type))
+
+@pytest.mark.parametrize(
     "int_type",
     ["overlap", "kinetic", "nuclattr", "nuclattr-frac", "elrep"]
 )
@@ -229,10 +308,65 @@ def test_integral_grad_basis(int_type):
     torch.autograd.gradgradcheck(get_int1e, (alphas1, alphas2, coeffs1, coeffs2, int_type))
 
 @pytest.mark.parametrize(
+    "intc_type,allsubsets",
+    list(itertools.product(
+        ["int2c", "int4c"],
+        [False, True]
+    ))
+)
+def test_integral_subset_grad_basis(intc_type, allsubsets):
+    dtype = torch.double
+    torch.manual_seed(123)
+
+    atomz = 1
+    atomenv = get_atom_env(dtype, atomz=atomz, pos_requires_grad=False)
+    pos1 = atomenv.poss[0]
+    pos2 = atomenv.poss[1]
+
+    def get_int1e(alphas1, alphas2, coeffs1, coeffs2, name):
+        # alphas*: (nangmoms, ngauss)
+        bases1 = [
+            CGTOBasis(angmom=i, alphas=alphas1[i], coeffs=coeffs1[i])
+            for i in range(len(alphas1))
+        ]
+        bases2 = [
+            CGTOBasis(angmom=i, alphas=alphas2[i], coeffs=coeffs2[i])
+            for i in range(len(alphas2))
+        ]
+        atombasis1 = AtomCGTOBasis(atomz=atomenv.atomzs[0], bases=bases1, pos=pos1)
+        atombasis2 = AtomCGTOBasis(atomz=atomenv.atomzs[1], bases=bases2, pos=pos2)
+        env = LibcintWrapper([atombasis1, atombasis2], spherical=True, basis_normalized=True)
+        env1 = env[: len(env) // 2]
+        env2 = env[len(env) // 2:] if allsubsets else env
+        if name == "int2c":
+            return env2.nuclattr(other=env1)
+        elif name == "int4c":
+            return env2.elrep(other1=env1, other2=env1, other3=env1)
+        else:
+            raise RuntimeError()
+
+    # change the numbers to 1 for debugging
+    if intc_type != "int4c":
+        ncontr, nangmom = (2, 2)
+    else:
+        ncontr, nangmom = (1, 1)  # saving time
+
+    alphas1 = torch.rand((ncontr, nangmom), dtype=dtype, requires_grad=True)
+    alphas2 = torch.rand((ncontr, nangmom), dtype=dtype, requires_grad=True)
+    coeffs1 = torch.rand((ncontr, nangmom), dtype=dtype, requires_grad=True)
+    coeffs2 = torch.rand((ncontr, nangmom), dtype=dtype, requires_grad=True)
+
+    torch.autograd.gradcheck(get_int1e, (alphas1, alphas2, coeffs1, coeffs2, intc_type))
+    torch.autograd.gradgradcheck(get_int1e, (alphas1, alphas2, coeffs1, coeffs2, intc_type))
+
+@pytest.mark.parametrize(
     "eval_type",
     ["", "grad"]
 )
 def test_eval_gto_vs_pyscf(eval_type):
+    # check if our eval_gto produces the same results as pyscf
+    # also check the partial eval_gto
+
     basis = "6-311++G**"
     dtype = torch.double
     d = 0.8
@@ -247,10 +381,16 @@ def test_eval_gto_vs_pyscf(eval_type):
     atombasis1 = AtomCGTOBasis(atomz=atomenv.atomzs[0], bases=allbases[0], pos=atomenv.poss[0])
     atombasis2 = AtomCGTOBasis(atomz=atomenv.atomzs[1], bases=allbases[1], pos=atomenv.poss[1])
     wrapper = LibcintWrapper([atombasis1, atombasis2], spherical=True)
+    wrapper1 = wrapper[:len(wrapper)]
     if eval_type == "":
         ao_value = wrapper.eval_gto(rgrid)
+        ao_value1 = wrapper1.eval_gto(rgrid)
     elif eval_type == "grad":
         ao_value = wrapper.eval_gradgto(rgrid)
+        ao_value1 = wrapper1.eval_gradgto(rgrid)
+
+    # check the partial eval_gto
+    assert torch.allclose(ao_value[..., :len(wrapper1), :], ao_value1)
 
     # system in pyscf
     mol = get_mol_pyscf(dtype)
@@ -265,10 +405,13 @@ def test_eval_gto_vs_pyscf(eval_type):
     assert torch.allclose(ao_value, ao_value_scf)
 
 @pytest.mark.parametrize(
-    "eval_type",
-    ["", "grad", "lapl"]
+    "eval_type,partial",
+    list(itertools.product(
+        ["", "grad", "lapl"],
+        [False, True],
+    ))
 )
-def test_eval_gto_grad_pos(eval_type):
+def test_eval_gto_grad_pos(eval_type, partial):
     dtype = torch.double
 
     atomenv = get_atom_env(dtype, ngrid=3)
@@ -284,12 +427,13 @@ def test_eval_gto_grad_pos(eval_type):
         atombasis1 = AtomCGTOBasis(atomz=atomenv.atomzs[0], bases=allbases[0], pos=pos1)
         atombasis2 = AtomCGTOBasis(atomz=atomenv.atomzs[1], bases=allbases[1], pos=pos2)
         env = LibcintWrapper([atombasis1, atombasis2], spherical=True)
+        env1 = env[:len(env) // 2] if partial else env
         if name == "":
-            return env.eval_gto(rgrid)
+            return env1.eval_gto(rgrid)
         elif name == "grad":
-            return env.eval_gradgto(rgrid)
+            return env1.eval_gradgto(rgrid)
         elif name == "lapl":
-            return env.eval_laplgto(rgrid)
+            return env1.eval_laplgto(rgrid)
         else:
             raise RuntimeError("Unknown name: %s" % name)
 
