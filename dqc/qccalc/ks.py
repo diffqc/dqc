@@ -125,7 +125,7 @@ class _KSEngine(xt.EditableModule):
 
         # decide if this is restricted or not
         if restricted is None:
-            self._polarized = system.spin != 0
+            self._polarized = bool(system.spin != 0)
         else:
             self._polarized = not restricted
 
