@@ -6,7 +6,7 @@ import operator
 from functools import reduce, lru_cache
 import ctypes
 from contextlib import contextmanager
-from typing import List, Tuple, Optional, Iterator, Sequence, Union, Callable
+from typing import List, Tuple, Optional, Iterator, Callable
 import torch
 import numpy as np
 from dqc.utils.datastruct import AtomCGTOBasis, CGTOBasis
@@ -202,7 +202,7 @@ class LibcintWrapper(object):
         return self._ao_to_shell
 
     @property
-    def ngauss_at_shell(self) -> int:
+    def ngauss_at_shell(self) -> List[int]:
         # returns the number of gaussian basis at the given shell
         return self._ngauss_at_shell_list
 
@@ -216,7 +216,7 @@ class LibcintWrapper(object):
         # returns the number of atomic orbitals
         shell_idxs = self.shell_idxs
         return self.full_shell_to_aoloc[shell_idxs[-1]] - \
-               self.full_shell_to_aoloc[shell_idxs[0]]
+            self.full_shell_to_aoloc[shell_idxs[0]]
 
     @lru_cache(maxsize=32)
     def ao_idxs(self) -> Tuple[int, int]:
@@ -224,7 +224,7 @@ class LibcintWrapper(object):
         # in the full ao map (i.e. absolute indices)
         shell_idxs = self.shell_idxs
         return self.full_shell_to_aoloc[shell_idxs[0]], \
-               self.full_shell_to_aoloc[shell_idxs[1]]
+            self.full_shell_to_aoloc[shell_idxs[1]]
 
     @lru_cache(maxsize=32)
     def ao_to_atom(self) -> torch.Tensor:
@@ -537,8 +537,8 @@ class _Int2cFunction(torch.autograd.Function):
 
             # get the integrals required for the derivatives
             sname_derivs = [_get_intgl_deriv_shortname(int_type, shortname, s) for s in ("r1", "r2")]
-            int_fcn = lambda wrappers, name: _Int2cFunction.apply(*ctx.saved_tensors, wrappers,
-                int_type, name)
+            int_fcn = lambda wrappers, name: _Int2cFunction.apply(
+                *ctx.saved_tensors, wrappers, int_type, name)
             # list of tensors with shape: (ndim, ..., nao0, nao1)
             dout_dposs = _get_integrals(sname_derivs, wrappers, int_type, int_fcn)
 
@@ -585,8 +585,8 @@ class _Int2cFunction(torch.autograd.Function):
             # rinv_pos: (ndim)
             # get the integrals for the derivatives
             sname_derivs = [_get_intgl_deriv_shortname(int_type, shortname, s) for s in ("r1", "r2")]
-            int_fcn = lambda wrappers, name: _Int2cFunction.apply(*ctx.saved_tensors, wrappers,
-                int_type, name)
+            int_fcn = lambda wrappers, name: _Int2cFunction.apply(
+                *ctx.saved_tensors, wrappers, int_type, name)
             dout_datposs = _get_integrals(sname_derivs, wrappers, int_type, int_fcn)
 
             grad_datpos = grad_out * (dout_datposs[0] + dout_datposs[1])
@@ -641,8 +641,8 @@ class _Int2cFunction(torch.autograd.Function):
             if allalphas.requires_grad:
                 grad_allalphas = torch.zeros_like(allalphas)  # (ngauss)
 
-                u_int_fcn = lambda u_wrappers, name: _Int2cFunction.apply(*u_params,
-                    rinv_pos, u_wrappers, int_type, name)
+                u_int_fcn = lambda u_wrappers, name: _Int2cFunction.apply(
+                    *u_params, rinv_pos, u_wrappers, int_type, name)
 
                 # get the uncontracted integrals
                 sname_derivs = [_get_intgl_deriv_shortname(int_type, shortname, s) for s in ("a1", "a2")]
@@ -659,8 +659,8 @@ class _Int2cFunction(torch.autograd.Function):
                 grad_allalphas.scatter_add_(dim=-1, index=ao2shl1, src=grad_dalpha_j)
 
         return grad_allcoeffs, grad_allalphas, grad_allposs, \
-               grad_rinv_pos, \
-               None, None, None
+            grad_rinv_pos, \
+            None, None, None
 
 class _Int4cFunction(torch.autograd.Function):
     # wrapper class for the 4-centre integrals
@@ -683,9 +683,6 @@ class _Int4cFunction(torch.autograd.Function):
         allcoeffs, allalphas, allposs = ctx.saved_tensors
         wrappers, int_type, shortname = ctx.other_info
         naos = grad_out.shape[-4:]
-
-        grad_allcoeffs: Optional[torch.Tensor] = None
-        grad_allalphas: Optional[torch.Tensor] = None
 
         # calculate the gradient w.r.t. positions
         grad_allposs: Optional[torch.Tensor] = None
@@ -880,6 +877,8 @@ class Intor(object):
             return self._int2c()
         elif self.int_type == "int2e":
             return self._int4c()
+        else:
+            raise ValueError("Unknown integral type: %s" % self.int_type)
 
     def _int2c(self):
         # performing 2-centre integrals with libcint
@@ -1107,7 +1106,7 @@ def _transpose(a: torch.Tensor, axes: List[Tuple[int, int]]) -> torch.Tensor:
         a = a.transpose(*axis2)
     return a
 
-def _swap_list(a: List, swaps: List[Tuple[int, int]]) -> torch.Tensor:
+def _swap_list(a: List, swaps: List[Tuple[int, int]]) -> List:
     # swap the elements according to the swaps input
     res = copy.copy(a)  # shallow copy
     for idxs in swaps:
