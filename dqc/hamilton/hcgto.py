@@ -1,8 +1,8 @@
 from typing import List, Optional, Union, overload
 import torch
 import xitorch as xt
+import dqc.hamilton.intor as intor
 from dqc.hamilton.base_hamilton import BaseHamilton
-from dqc.hamilton.lcintwrap import LibcintWrapper
 from dqc.utils.datastruct import AtomCGTOBasis, ValGrad, SpinParam
 from dqc.grid.base_grid import BaseGrid
 from dqc.xc.base_xc import BaseXC
@@ -10,7 +10,7 @@ from dqc.xc.base_xc import BaseXC
 class HamiltonCGTO(BaseHamilton):
     def __init__(self, atombases: List[AtomCGTOBasis], spherical: bool = True) -> None:
         self.atombases = atombases
-        self.libcint_wrapper = LibcintWrapper(atombases, spherical)
+        self.libcint_wrapper = intor.LibcintWrapper(atombases, spherical)
         self.dtype = self.libcint_wrapper.dtype
         self.device = self.libcint_wrapper.device
 
@@ -30,11 +30,11 @@ class HamiltonCGTO(BaseHamilton):
     def build(self):
         # get the matrices (all (nao, nao), except el_mat)
         # these matrices have already been normalized
-        self.olp_mat = self.libcint_wrapper.overlap()
-        kin_mat = self.libcint_wrapper.kinetic()
-        nucl_mat = self.libcint_wrapper.nuclattr()
+        self.olp_mat = intor.overlap(self.libcint_wrapper)
+        kin_mat = intor.kinetic(self.libcint_wrapper)
+        nucl_mat = intor.nuclattr(self.libcint_wrapper)
         self.kinnucl_mat = kin_mat + nucl_mat
-        self.el_mat = self.libcint_wrapper.elrep()  # (nao^4)
+        self.el_mat = intor.elrep(self.libcint_wrapper)  # (nao^4)
         self.is_built = True
 
     def get_kinnucl(self) -> xt.LinearOperator:
@@ -74,7 +74,7 @@ class HamiltonCGTO(BaseHamilton):
         nao = dm.shape[-1]
         xyzshape = xyz.shape
         # basis: (nao, *BR)
-        basis = self.libcint_wrapper.eval_gto(xyz.reshape(-1, xyzshape[-1])).reshape((nao, *xyzshape[:-1]))
+        basis = intor.eval_gto(self.libcint_wrapper, xyz.reshape(-1, xyzshape[-1])).reshape((nao, *xyzshape[:-1]))
         basis = torch.movedim(basis, 0, -1)  # (*BR, nao)
 
         # torch.einsum("...ij,...i,...j->...", dm, basis, basis)
@@ -98,7 +98,7 @@ class HamiltonCGTO(BaseHamilton):
 
         # setup the basis as a spatial function
         self.is_ao_set = True
-        self.basis = self.libcint_wrapper.eval_gto(self.rgrid)  # (nao, ngrid)
+        self.basis = intor.eval_gto(self.libcint_wrapper, self.rgrid)  # (nao, ngrid)
         self.basis_dvolume = self.basis * self.grid.get_dvolume()  # (nao, ngrid)
 
         if self.xcfamily == 1:  # LDA
@@ -106,13 +106,13 @@ class HamiltonCGTO(BaseHamilton):
 
         # setup the gradient of the basis
         self.is_grad_ao_set = True
-        self.grad_basis = self.libcint_wrapper.eval_gradgto(self.rgrid)  # (ndim, nao, ngrid)
+        self.grad_basis = intor.eval_gradgto(self.libcint_wrapper, self.rgrid)  # (ndim, nao, ngrid)
         if self.xcfamily == 2:  # GGA
             return
 
         # setup the laplacian of the basis
         self.is_lapl_ao_set = True
-        self.lapl_basis = self.libcint_wrapper.eval_laplgto(self.rgrid)  # (nao, ngrid)
+        self.lapl_basis = intor.eval_laplgto(self.libcint_wrapper, self.rgrid)  # (nao, ngrid)
 
     def get_vext(self, vext: torch.Tensor) -> xt.LinearOperator:
         # vext: (*BR, ngrid)

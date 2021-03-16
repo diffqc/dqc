@@ -4,7 +4,8 @@ import torch
 import pytest
 import warnings
 from dqc.api.loadbasis import loadbasis
-from dqc.hamilton.lcintwrap import LibcintWrapper
+# from dqc.hamilton.lcintwrap import intor.LibcintWrapper
+import dqc.hamilton.intor as intor
 from dqc.utils.datastruct import AtomCGTOBasis, CGTOBasis
 
 # import pyscf
@@ -69,15 +70,15 @@ def test_integral_vs_pyscf(int_type):
 
     atombasis1 = AtomCGTOBasis(atomz=atomenv.atomzs[0], bases=allbases[0], pos=atomenv.poss[0])
     atombasis2 = AtomCGTOBasis(atomz=atomenv.atomzs[1], bases=allbases[1], pos=atomenv.poss[1])
-    env = LibcintWrapper([atombasis1, atombasis2], spherical=True)
+    env = intor.LibcintWrapper([atombasis1, atombasis2], spherical=True)
     if int_type == "overlap":
-        mat = env.overlap()
+        mat = intor.overlap(env)
     elif int_type == "kinetic":
-        mat = env.kinetic()
+        mat = intor.kinetic(env)
     elif int_type == "nuclattr":
-        mat = env.nuclattr()
+        mat = intor.nuclattr(env)
     elif int_type == "elrep":
-        mat = env.elrep()
+        mat = intor.elrep(env)
 
     # get the matrix from pyscf
     mol = get_mol_pyscf(dtype)
@@ -109,24 +110,24 @@ def test_integral_with_subset(intc_type):
 
     atombasis1 = AtomCGTOBasis(atomz=atomenv.atomzs[0], bases=allbases[0], pos=atomenv.poss[0])
     atombasis2 = AtomCGTOBasis(atomz=atomenv.atomzs[1], bases=allbases[1], pos=atomenv.poss[1])
-    env = LibcintWrapper([atombasis1, atombasis2], spherical=True)
+    env = intor.LibcintWrapper([atombasis1, atombasis2], spherical=True)
     env1 = env[: len(env) // 2]
     nenv1 = env1.nao()
     if intc_type == "int2c":
-        mat_full = env.overlap()
-        mat = env.overlap(env1)
-        mat1 = env1.overlap()
-        mat2 = env1.overlap(other=env)
+        mat_full = intor.overlap(env)
+        mat = intor.overlap(env, other=env1)
+        mat1 = intor.overlap(env1)
+        mat2 = intor.overlap(env1, other=env)
 
         assert torch.allclose(mat_full[:, :nenv1], mat)
         assert torch.allclose(mat_full[:nenv1, :nenv1], mat1)
         assert torch.allclose(mat_full[:nenv1, :], mat2)
 
     elif intc_type == "int4c":
-        mat_full = env.elrep()
-        mat = env.elrep(other1=env1, other2=env1)
-        mat1 = env1.elrep(other1=env, other2=env, other3=env1)
-        mat2 = env1.elrep(other1=env1, other2=env1, other3=env1)
+        mat_full = intor.elrep(env)
+        mat = intor.elrep(env, other1=env1, other2=env1)
+        mat1 = intor.elrep(env1, other1=env, other2=env, other3=env1)
+        mat2 = intor.elrep(env1, other1=env1, other2=env1, other3=env1)
 
         assert torch.allclose(mat_full[:, :nenv1, :nenv1, :], mat)
         assert torch.allclose(mat_full[:nenv1, :, :, :nenv1], mat1)
@@ -153,8 +154,8 @@ def test_nuc_integral_frac_atomz():
     def get_nuc_int1e(atomenv):
         atombasis1 = AtomCGTOBasis(atomz=atomenv.atomzs[0], bases=allbases[0], pos=atomenv.poss[0])
         atombasis2 = AtomCGTOBasis(atomz=atomenv.atomzs[1], bases=allbases[1], pos=atomenv.poss[1])
-        env = LibcintWrapper([atombasis1, atombasis2], spherical=True)
-        return env.nuclattr()
+        env = intor.LibcintWrapper([atombasis1, atombasis2], spherical=True)
+        return intor.nuclattr(env)
 
     nuc1 = get_nuc_int1e(atomenv1)
     nuc2 = get_nuc_int1e(atomenv2)
@@ -178,8 +179,8 @@ def test_nuc_integral_frac_atomz_grad():
 
         atombasis1 = AtomCGTOBasis(atomz=atomenv.atomzs[0], bases=basis, pos=atomenv.poss[0])
         atombasis2 = AtomCGTOBasis(atomz=atomenv.atomzs[1], bases=basis, pos=atomenv.poss[1])
-        env = LibcintWrapper([atombasis1, atombasis2], spherical=True)
-        return env.nuclattr()
+        env = intor.LibcintWrapper([atombasis1, atombasis2], spherical=True)
+        return intor.nuclattr(env)
 
     torch.autograd.gradcheck(get_nuc_int1e, (atomz,))
     torch.autograd.gradgradcheck(get_nuc_int1e, (atomz,))
@@ -204,15 +205,15 @@ def test_integral_grad_pos(int_type):
     def get_int1e(pos1, pos2, name):
         atombasis1 = AtomCGTOBasis(atomz=atomenv.atomzs[0], bases=allbases[0], pos=pos1)
         atombasis2 = AtomCGTOBasis(atomz=atomenv.atomzs[1], bases=allbases[1], pos=pos2)
-        env = LibcintWrapper([atombasis1, atombasis2], spherical=True)
+        env = intor.LibcintWrapper([atombasis1, atombasis2], spherical=True)
         if name == "overlap":
-            return env.overlap()
+            return intor.overlap(env)
         elif name == "kinetic":
-            return env.kinetic()
+            return intor.kinetic(env)
         elif name == "nuclattr":
-            return env.nuclattr()
+            return intor.nuclattr(env)
         elif name == "elrep":
-            return env.elrep()
+            return intor.elrep(env)
         else:
             raise RuntimeError()
 
@@ -242,13 +243,13 @@ def test_integral_subset_grad_pos(intc_type, allsubsets):
     def get_int1e(pos1, pos2, name):
         atombasis1 = AtomCGTOBasis(atomz=atomenv.atomzs[0], bases=allbases[0], pos=pos1)
         atombasis2 = AtomCGTOBasis(atomz=atomenv.atomzs[1], bases=allbases[1], pos=pos2)
-        env = LibcintWrapper([atombasis1, atombasis2], spherical=True)
+        env = intor.LibcintWrapper([atombasis1, atombasis2], spherical=True)
         env1 = env[: len(env) // 2]
         env2 = env[len(env) // 2:] if allsubsets else env
         if name == "int2c":
-            return env2.nuclattr(other=env1)
+            return intor.nuclattr(env2, other=env1)
         elif name == "int4c":
-            return env2.elrep(other1=env1, other2=env2, other3=env1)
+            return intor.elrep(env2, other1=env1, other2=env2, other3=env1)
         else:
             raise RuntimeError()
 
@@ -282,15 +283,15 @@ def test_integral_grad_basis(int_type):
         ]
         atombasis1 = AtomCGTOBasis(atomz=atomenv.atomzs[0], bases=bases1, pos=pos1)
         atombasis2 = AtomCGTOBasis(atomz=atomenv.atomzs[1], bases=bases2, pos=pos2)
-        env = LibcintWrapper([atombasis1, atombasis2], spherical=True, basis_normalized=True)
+        env = intor.LibcintWrapper([atombasis1, atombasis2], spherical=True, basis_normalized=True)
         if name == "overlap":
-            return env.overlap()
+            return intor.overlap(env)
         elif name == "kinetic":
-            return env.kinetic()
+            return intor.kinetic(env)
         elif name == "nuclattr":
-            return env.nuclattr()
+            return intor.nuclattr(env)
         elif name == "elrep":
-            return env.elrep()
+            return intor.elrep(env)
         else:
             raise RuntimeError()
 
@@ -335,13 +336,13 @@ def test_integral_subset_grad_basis(intc_type, allsubsets):
         ]
         atombasis1 = AtomCGTOBasis(atomz=atomenv.atomzs[0], bases=bases1, pos=pos1)
         atombasis2 = AtomCGTOBasis(atomz=atomenv.atomzs[1], bases=bases2, pos=pos2)
-        env = LibcintWrapper([atombasis1, atombasis2], spherical=True, basis_normalized=True)
+        env = intor.LibcintWrapper([atombasis1, atombasis2], spherical=True, basis_normalized=True)
         env1 = env[: len(env) // 2]
         env2 = env[len(env) // 2:] if allsubsets else env
         if name == "int2c":
-            return env2.nuclattr(other=env1)
+            return intor.nuclattr(env2, other=env1)
         elif name == "int4c":
-            return env2.elrep(other1=env1, other2=env1, other3=env1)
+            return intor.elrep(env2, other1=env1, other2=env1, other3=env1)
         else:
             raise RuntimeError()
 
@@ -380,14 +381,14 @@ def test_eval_gto_vs_pyscf(eval_type):
     ]
     atombasis1 = AtomCGTOBasis(atomz=atomenv.atomzs[0], bases=allbases[0], pos=atomenv.poss[0])
     atombasis2 = AtomCGTOBasis(atomz=atomenv.atomzs[1], bases=allbases[1], pos=atomenv.poss[1])
-    wrapper = LibcintWrapper([atombasis1, atombasis2], spherical=True)
+    wrapper = intor.LibcintWrapper([atombasis1, atombasis2], spherical=True)
     wrapper1 = wrapper[:len(wrapper)]
     if eval_type == "":
-        ao_value = wrapper.eval_gto(rgrid)
-        ao_value1 = wrapper1.eval_gto(rgrid)
+        ao_value = intor.eval_gto(wrapper, rgrid)
+        ao_value1 = intor.eval_gto(wrapper1, rgrid)
     elif eval_type == "grad":
-        ao_value = wrapper.eval_gradgto(rgrid)
-        ao_value1 = wrapper1.eval_gradgto(rgrid)
+        ao_value = intor.eval_gradgto(wrapper, rgrid)
+        ao_value1 = intor.eval_gradgto(wrapper1, rgrid)
 
     # check the partial eval_gto
     assert torch.allclose(ao_value[..., :len(wrapper1), :], ao_value1)
@@ -426,14 +427,14 @@ def test_eval_gto_grad_pos(eval_type, partial):
     def evalgto(pos1, pos2, rgrid, name):
         atombasis1 = AtomCGTOBasis(atomz=atomenv.atomzs[0], bases=allbases[0], pos=pos1)
         atombasis2 = AtomCGTOBasis(atomz=atomenv.atomzs[1], bases=allbases[1], pos=pos2)
-        env = LibcintWrapper([atombasis1, atombasis2], spherical=True)
+        env = intor.LibcintWrapper([atombasis1, atombasis2], spherical=True)
         env1 = env[:len(env) // 2] if partial else env
         if name == "":
-            return env1.eval_gto(rgrid)
+            return intor.eval_gto(env1, rgrid)
         elif name == "grad":
-            return env1.eval_gradgto(rgrid)
+            return intor.eval_gradgto(env1, rgrid)
         elif name == "lapl":
-            return env1.eval_laplgto(rgrid)
+            return intor.eval_laplgto(env1, rgrid)
         else:
             raise RuntimeError("Unknown name: %s" % name)
 

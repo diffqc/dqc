@@ -1,497 +1,93 @@
-from __future__ import annotations
-import os
-import re
-import copy
-import operator
-from functools import reduce, lru_cache
+from typing import Optional, List, Tuple, Callable
 import ctypes
-from contextlib import contextmanager
-from typing import List, Tuple, Optional, Iterator, Callable
-import torch
+import copy
+import re
+import operator
+from functools import reduce
 import numpy as np
-from dqc.utils.datastruct import AtomCGTOBasis, CGTOBasis
-
-# Terminology:
-# * gauss: one gaussian element (multiple gaussian becomes one shell)
-# * shell: one contracted basis (the same contracted gaussian for different atoms
-#          counted as different shells)
-# * ao: shell that has been splitted into its components,
-#       e.g. p-shell is splitted into 3 components for cartesian (x, y, z)
-
-NDIM = 3
-PTR_RINV_ORIG = 4  # from libcint/src/cint_const.h
-BLKSIZE = 128  # same as lib/gto/grid_ao_drv.c
-
-# load the libcint
-_curpath = os.path.dirname(os.path.abspath(__file__))
-_libcint_path = os.path.join(_curpath, "../../lib/libcint/build/libcint.so")
-_libcgto_path = os.path.join(_curpath, "../../lib/libcgto.so")
-CINT = ctypes.cdll.LoadLibrary(_libcint_path)
-CGTO = ctypes.cdll.LoadLibrary(_libcgto_path)
-
-def np2ctypes(a: np.ndarray) -> ctypes.c_void_p:
-    # get the ctypes of the numpy ndarray
-    return a.ctypes.data_as(ctypes.c_void_p)
-
-def int2ctypes(a: int) -> ctypes.c_int:
-    # convert the python's integer to ctypes' integer
-    return ctypes.c_int(a)
-
-# Optimizer class
-class _cintoptHandler(ctypes.c_void_p):
-    def __del__(self):
-        try:
-            CGTO.CINTdel_optimizer(ctypes.byref(self))
-        except AttributeError:
-            pass
-
-class LibcintWrapper(object):
-    def __init__(self, atombases: List[AtomCGTOBasis], spherical: bool = True,
-                 basis_normalized: bool = False) -> None:
-        self._atombases = atombases
-        self._spherical = spherical
-        self._basis_normalized = basis_normalized
-        self._fracz = False
-        self._natoms = len(atombases)
-
-        # get dtype and device for torch's tensors
-        self.dtype = atombases[0].bases[0].alphas.dtype
-        self.device = atombases[0].bases[0].alphas.device
-
-        # construct _atm, _bas, and _env as well as the parameters
-        ptr_env = 20  # initial padding from libcint
-        atm_list: List[List[int]] = []
-        env_list: List[float] = [0.0] * ptr_env
-        bas_list: List[List[int]] = []
-        allpos: List[torch.Tensor] = []
-        allalphas: List[torch.Tensor] = []
-        allcoeffs: List[torch.Tensor] = []
-        shell_to_atom: List[int] = []
-        ngauss_at_shell: List[int] = []
-
-        # constructing the triplet lists and also collecting the parameters
-        nshells = 0
-        for iatom, atombasis in enumerate(atombases):
-            # construct the atom environment
-            assert atombasis.pos.numel() == NDIM, "Please report this bug in Github"
-            atomz = atombasis.atomz
-            #                charge    ptr_coord, nucl model (unused for standard nucl model)
-            atm_list.append([int(atomz), ptr_env, 1, ptr_env + NDIM, 0, 0])
-            env_list.extend(atombasis.pos.detach())
-            env_list.append(0.0)
-            ptr_env += NDIM + 1
-
-            # check if the atomz is fractional
-            if isinstance(atomz, float) or \
-                    (isinstance(atomz, torch.Tensor) and atomz.is_floating_point()):
-                self._fracz = True
-
-            # add the atom position into the parameter list
-            # TODO: consider moving allpos into shell
-            allpos.append(atombasis.pos.unsqueeze(0))
-
-            nshells += len(atombasis.bases)
-            shell_to_atom.extend([iatom] * len(atombasis.bases))
-
-            # then construct the basis
-            for shell in atombasis.bases:
-                assert shell.alphas.shape == shell.coeffs.shape and shell.alphas.ndim == 1,\
-                    "Please report this bug in Github"
-                normcoeff = self._normalize_basis(basis_normalized, shell.alphas, shell.coeffs, shell.angmom)
-                ngauss = len(shell.alphas)
-                #                iatom, angmom,       ngauss, ncontr, kappa, ptr_exp
-                bas_list.append([iatom, shell.angmom, ngauss, 1, 0, ptr_env,
-                                 # ptr_coeffs,           unused
-                                 ptr_env + ngauss, 0])
-                env_list.extend(shell.alphas.detach())
-                env_list.extend(normcoeff.detach())
-                ptr_env += 2 * ngauss
-
-                # add the alphas and coeffs to the parameters list
-                allalphas.append(shell.alphas)
-                allcoeffs.append(normcoeff)
-                ngauss_at_shell.append(ngauss)
-
-        # compile the parameters of this object
-        self._allpos_params = torch.cat(allpos, dim=0)  # (natom, NDIM)
-        self._allalphas_params = torch.cat(allalphas, dim=0)  # (ntot_gauss)
-        self._allcoeffs_params = torch.cat(allcoeffs, dim=0)  # (ntot_gauss)
-
-        # convert the lists to numpy to make it contiguous (Python lists are not contiguous)
-        self._atm = np.array(atm_list, dtype=np.int32, order="C")
-        self._bas = np.array(bas_list, dtype=np.int32, order="C")
-        self._env = np.array(env_list, dtype=np.float64, order="C")
-
-        # construct the full shell mapping
-        shell_to_aoloc = [0]
-        ao_to_shell: List[int] = []
-        ao_to_atom: List[int] = []
-        for i in range(nshells):
-            nao_at_shell_i = self._nao_at_shell(i)
-            shell_to_aoloc_i = shell_to_aoloc[-1] + nao_at_shell_i
-            shell_to_aoloc.append(shell_to_aoloc_i)
-            ao_to_shell.extend([i] * nao_at_shell_i)
-            ao_to_atom.extend([shell_to_atom[i]] * nao_at_shell_i)
-
-        self._ngauss_at_shell_list = ngauss_at_shell
-        self._shell_to_aoloc = np.array(shell_to_aoloc, dtype=np.int32)
-        self._shell_idxs = (0, nshells)
-        self._ao_to_shell = torch.tensor(ao_to_shell, dtype=torch.long, device=self.device)
-        self._ao_to_atom = torch.tensor(ao_to_atom, dtype=torch.long, device=self.device)
-
-    @property
-    def natoms(self) -> int:
-        # return the number of atoms in the environment
-        return self._natoms
-
-    @property
-    def fracz(self) -> bool:
-        # indicating whether we are working with fractional z
-        return self._fracz
-
-    @property
-    def basis_normalized(self) -> bool:
-        return self._basis_normalized
-
-    @property
-    def spherical(self) -> bool:
-        # returns whether the basis is in spherical coordinate (otherwise, it
-        # is in cartesian coordinate)
-        return self._spherical
-
-    @property
-    def atombases(self) -> List[AtomCGTOBasis]:
-        return self._atombases
-
-    @property
-    def atm_bas_env(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        # returns the triplet lists, i.e. atm, bas, env
-        # this shouldn't change in the sliced wrapper
-        return self._atm, self._bas, self._env
-
-    @property
-    def params(self) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        # returns all the parameters of this object
-        # this shouldn't change in the sliced wrapper
-        return self._allcoeffs_params, self._allalphas_params, self._allpos_params
-
-    @property
-    def shell_idxs(self) -> Tuple[int, int]:
-        # returns the lower and upper indices of the shells of this object
-        # in the absolute index (upper is exclusive)
-        return self._shell_idxs
-
-    @property
-    def full_shell_to_aoloc(self) -> np.ndarray:
-        # returns the full array mapping from shell index to absolute ao location
-        # the atomic orbital absolute index of i-th shell is given by
-        # (self.full_shell_to_aoloc[i], self.full_shell_to_aoloc[i + 1])
-        # if this object is a subset, then returns the complete mapping
-        return self._shell_to_aoloc
-
-    @property
-    def full_ao_to_atom(self) -> torch.Tensor:
-        # returns the full array mapping from atomic orbital index to the
-        # atom location
-        return self._ao_to_atom
-
-    @property
-    def full_ao_to_shell(self) -> torch.Tensor:
-        # returns the full array mapping from atomic orbital index to the
-        # shell location
-        return self._ao_to_shell
-
-    @property
-    def ngauss_at_shell(self) -> List[int]:
-        # returns the number of gaussian basis at the given shell
-        return self._ngauss_at_shell_list
-
-    @lru_cache(maxsize=32)
-    def __len__(self) -> int:
-        # total shells
-        return self.shell_idxs[-1] - self.shell_idxs[0]
-
-    @lru_cache(maxsize=32)
-    def nao(self) -> int:
-        # returns the number of atomic orbitals
-        shell_idxs = self.shell_idxs
-        return self.full_shell_to_aoloc[shell_idxs[-1]] - \
-            self.full_shell_to_aoloc[shell_idxs[0]]
-
-    @lru_cache(maxsize=32)
-    def ao_idxs(self) -> Tuple[int, int]:
-        # returns the lower and upper indices of the atomic orbitals of this object
-        # in the full ao map (i.e. absolute indices)
-        shell_idxs = self.shell_idxs
-        return self.full_shell_to_aoloc[shell_idxs[0]], \
-            self.full_shell_to_aoloc[shell_idxs[1]]
-
-    @lru_cache(maxsize=32)
-    def ao_to_atom(self) -> torch.Tensor:
-        # get the relative mapping from atomic orbital relative index to the
-        # absolute atom position
-        # this is usually used in scatter in backward calculation
-        return self.full_ao_to_atom[slice(*self.ao_idxs())]
-
-    @lru_cache(maxsize=32)
-    def ao_to_shell(self) -> torch.Tensor:
-        # get the relative mapping from atomic orbital relative index to the
-        # absolute shell position
-        # this is usually used in scatter in backward calculation
-        return self.full_ao_to_shell[slice(*self.ao_idxs())]
-
-    def __getitem__(self, inp) -> LibcintWrapper:
-        # get the subset of the shells, but keeping the environment and
-        # parameters the same
-        assert isinstance(inp, slice)
-        assert inp.step is None or inp.step == 1
-        assert inp.start is not None or inp.stop is not None
-
-        # complete the slice
-        nshells = self.shell_idxs[-1]
-        if inp.start is None and inp.stop is not None:
-            inp = slice(0, inp.stop)
-        elif inp.start is not None and inp.stop is None:
-            inp = slice(inp.start, nshells)
-
-        # make the slice positive
-        if inp.start < 0:
-            inp = slice(inp.start + nshells, inp.stop)
-        if inp.stop < 0:
-            inp = slice(inp.start, inp.stop + nshells)
-
-        return SubsetLibcintWrapper(self, inp)
-
-    @lru_cache(maxsize=32)
-    def get_uncontracted_wrapper(self) -> Tuple[LibcintWrapper, torch.Tensor]:
-        # returns the uncontracted LibcintWrapper as well as the mapping from
-        # uncontracted atomic orbital (relative index) to the relative index
-        # of the atomic orbital
-        new_atombases = []
-        for atombasis in self.atombases:
-            atomz = atombasis.atomz
-            pos = atombasis.pos
-            new_bases = []
-            for shell in atombasis.bases:
-                angmom = shell.angmom
-                alphas = shell.alphas
-                coeffs = shell.coeffs
-                new_bases.extend([
-                    CGTOBasis(angmom, alpha[None], coeff[None]) for (alpha, coeff) in zip(alphas, coeffs)
-                ])
-            new_atombases.append(AtomCGTOBasis(atomz=atomz, bases=new_bases, pos=pos))
-        uncontr_wrapper = LibcintWrapper(
-            new_atombases, spherical=self.spherical,
-            basis_normalized=self.basis_normalized)
-
-        # get the mapping uncontracted ao to the contracted ao
-        uao2ao: List[int] = []
-        idx_ao = 0
-        # iterate over shells
-        for i in range(len(self)):
-            nao = self._nao_at_shell(i)
-            uao2ao += list(range(idx_ao, idx_ao + nao)) * self.ngauss_at_shell[i]
-            idx_ao += nao
-        uao2ao_res = torch.tensor(uao2ao, dtype=torch.long, device=self.device)
-        return uncontr_wrapper, uao2ao_res
-
-    # integrals
-    def int1e(self, shortname: str, other: Optional[LibcintWrapper] = None, *,
-              # additional options for some specific integrals
-              rinv_pos: Optional[torch.Tensor] = None) -> torch.Tensor:
-        # 2-centre 1-electron integral
-
-        # check and set the other parameters
-        other1 = self._check_and_set(other)
-
-        # set the rinv_pos arguments
-        if "rinv" in shortname:
-            assert isinstance(rinv_pos, torch.Tensor), "The keyword rinv_pos must be specified"
-        else:
-            # don't really care, it will be ignored
-            rinv_pos = torch.zeros(1, dtype=self.dtype, device=self.device)
-
-        return _Int2cFunction.apply(*self.params,
-                                    rinv_pos,
-                                    [self, other1],
-                                    "int1e", shortname)
-
-    def int2e(self, shortname: str,
-              other1: Optional[LibcintWrapper] = None,
-              other2: Optional[LibcintWrapper] = None,
-              other3: Optional[LibcintWrapper] = None) -> torch.Tensor:
-        # 4-centre 2-electron integral
-
-        # check and set the others
-        other1w = self._check_and_set(other1)
-        other2w = self._check_and_set(other2)
-        other3w = self._check_and_set(other3)
-        return _Int4cFunction.apply(
-            *self.params,
-            [self, other1w, other2w, other3w],
-            "int2e", shortname)
-
-    # evaluation of the gaussian basis
-    def evl(self, shortname: str, rgrid: torch.Tensor) -> torch.Tensor:
-        # expand ao_to_atom to have shape of (nao, ndim)
-        ao_to_atom = self.ao_to_atom().unsqueeze(-1).expand(-1, NDIM)
-
-        # rgrid: (ngrid, ndim)
-        return _EvalGTO.apply(
-            # tensors
-            *self.params, rgrid,
-
-            # nontensors or int tensors
-            ao_to_atom, self, shortname)
-
-    # shortcuts
-    def overlap(self, other: Optional[LibcintWrapper] = None) -> torch.Tensor:
-        return self.int1e("ovlp", other=other)
-
-    def kinetic(self, other: Optional[LibcintWrapper] = None) -> torch.Tensor:
-        return self.int1e("kin", other=other)
-
-    def nuclattr(self, other: Optional[LibcintWrapper] = None) -> torch.Tensor:
-        if not self.fracz:  # ???
-            return self.int1e("nuc", other=other)
-        else:
-            res = torch.tensor([])
-            allpos_params = self.params[-1]
-            for i in range(self.natoms):
-                y = self.int1e("rinv", other=other, rinv_pos=allpos_params[i]) * \
-                    (-self._atombases[i].atomz)
-                res = y if (i == 0) else (res + y)
-            return res
-
-    def elrep(self,
-              other1: Optional[LibcintWrapper] = None,
-              other2: Optional[LibcintWrapper] = None,
-              other3: Optional[LibcintWrapper] = None,
-              ) -> torch.Tensor:
-        return self.int2e("ar12b", other1, other2, other3)
-
-    def eval_gto(self, rgrid: torch.Tensor) -> torch.Tensor:
-        # rgrid: (ngrid, ndim)
-        # return: (nao, ngrid)
-        return self.evl("", rgrid)
-
-    def eval_gradgto(self, rgrid: torch.Tensor) -> torch.Tensor:
-        # rgrid: (ngrid, ndim)
-        # return: (ndim, nao, ngrid)
-        return self.evl("ip", rgrid)
-
-    def eval_laplgto(self, rgrid: torch.Tensor) -> torch.Tensor:
-        # rgrid: (ngrid, ndim)
-        # return: (nao, ngrid)
-        return self.evl("lapl", rgrid)
-
-    ############### misc functions ###############
-    @contextmanager
-    def centre_on_r(self, r: torch.Tensor) -> Iterator:
-        # set the centre of coordinate to r (usually used in rinv integral)
-        # r: (ndim,)
-        try:
-            env = self.atm_bas_env[-1]
-            prev_centre = env[PTR_RINV_ORIG: PTR_RINV_ORIG + NDIM]
-            env[PTR_RINV_ORIG: PTR_RINV_ORIG + NDIM] = r.detach().numpy()
-            yield
-        finally:
-            env[PTR_RINV_ORIG: PTR_RINV_ORIG + NDIM] = prev_centre
-
-    ############### private functions ###################
-    def _check_and_set(self, other: Optional[LibcintWrapper]) -> LibcintWrapper:
-        # check the value and set the default value of "other" in the integrals
-        if other is not None:
-            atm0, bas0, env0 = self.atm_bas_env
-            atm1, bas1, env1 = other.atm_bas_env
-            assert id(atm0) == id(atm1)
-            assert id(bas0) == id(bas1)
-            assert id(env0) == id(env1)
-        else:
-            other = self
-        assert isinstance(other, LibcintWrapper)
-        return other
-
-    def _normalize_basis(self, basis_normalized: bool, alphas: torch.Tensor,
-                         coeffs: torch.Tensor, angmom: int) -> torch.Tensor:
-        # the normalization is obtained from CINTgto_norm from
-        # libcint/src/misc.c, or
-        # https://github.com/sunqm/libcint/blob/b8594f1d27c3dad9034984a2a5befb9d607d4932/src/misc.c#L80
-
-        # if the basis has been normalized before, then just return the coeffs
-        if basis_normalized:
-            return coeffs
-
-        # precomputed factor:
-        # 2 ** (2 * angmom + 3) * factorial(angmom + 1) * / \
-        # (factorial(angmom * 2 + 2) * np.sqrt(np.pi)))
-        factor = [
-            2.256758334191025,  # 0
-            1.5045055561273502,  # 1
-            0.6018022224509401,  # 2
-            0.17194349212884005,  # 3
-            0.03820966491752001,  # 4
-            0.006947211803185456,  # 5
-            0.0010688018158746854,  # 6
-        ]
-        return coeffs * torch.sqrt(factor[angmom] * (2 * alphas) ** (angmom + 1.5))
-
-    def _nao_at_shell(self, sh: int) -> int:
-        # returns the number of atomic orbital at the given shell index
-        if self.spherical:
-            op = CINT.CINTcgto_spheric
-        else:
-            op = CINT.CINTcgto_cart
-        bas = self.atm_bas_env[1]
-        return op(int2ctypes(sh), np2ctypes(bas))
-
-class SubsetLibcintWrapper(LibcintWrapper):
-    """
-    A class to represent the subset of LibcintWrapper.
-    If put into integrals or evaluations, this class will only evaluate
-        the subset of the shells from its parent.
-    The environment will still be the same as its parent.
-    """
-    def __init__(self, parent: LibcintWrapper, subset: slice):
-        self._parent = parent
-        self._shell_idxs = subset.start, subset.stop
-
-    @property
-    def shell_idxs(self) -> Tuple[int, int]:
-        return self._shell_idxs
-
-    @lru_cache(maxsize=32)
-    def get_uncontracted_wrapper(self):
-        # returns the uncontracted LibcintWrapper as well as the mapping from
-        # uncontracted atomic orbital (relative index) to the relative index
-        # of the atomic orbital of the contracted wrapper
-
-        pu_wrapper, p_uao2ao = self._parent.get_uncontracted_wrapper()
-
-        # determine the corresponding shell indices in the new uncontracted wrapper
-        shell_idxs = self.shell_idxs
-        gauss_idx0 = sum(self._parent.ngauss_at_shell[: shell_idxs[0]])
-        gauss_idx1 = sum(self._parent.ngauss_at_shell[: shell_idxs[1]])
-        u_wrapper = pu_wrapper[gauss_idx0: gauss_idx1]
-
-        # construct the uao (relative index) mapping to the absolute index
-        # of the atomic orbital in the contracted basis
-        uao2ao = []
-        idx_ao = 0
-        for i in range(shell_idxs[0], shell_idxs[1]):
-            nao = self._parent._nao_at_shell(i)
-            uao2ao += list(range(idx_ao, idx_ao + nao)) * self._parent.ngauss_at_shell[i]
-            idx_ao += nao
-        uao2ao_res = torch.tensor(uao2ao, dtype=torch.long, device=self.device)
-        return u_wrapper, uao2ao_res
-
-    def __getitem__(self, inp):
-        raise NotImplementedError("Indexing of SubsetLibcintWrapper is not implemented")
-
-    def __getattr__(self, name):
-        return getattr(self._parent, name)
-
-############### autograd functions ###############
+import torch
+from dqc.hamilton.intor.lcintwrap import LibcintWrapper
+from dqc.hamilton.intor.utils import np2ctypes, int2ctypes, NDIM, CINT, CGTO
+
+__all__ = ["int1e", "int2e", "overlap", "kinetic", "nuclattr", "elrep"]
+
+# integrals
+def int1e(shortname: str, wrapper: LibcintWrapper, other: Optional[LibcintWrapper] = None, *,
+          # additional options for some specific integrals
+          rinv_pos: Optional[torch.Tensor] = None) -> torch.Tensor:
+    # 2-centre 1-electron integral
+
+    # check and set the other parameters
+    other1 = _check_and_set(wrapper, other)
+
+    # set the rinv_pos arguments
+    if "rinv" in shortname:
+        assert isinstance(rinv_pos, torch.Tensor), "The keyword rinv_pos must be specified"
+    else:
+        # don't really care, it will be ignored
+        rinv_pos = torch.zeros(1, dtype=wrapper.dtype, device=wrapper.device)
+
+    return _Int2cFunction.apply(*wrapper.params,
+                                rinv_pos,
+                                [wrapper, other1],
+                                "int1e", shortname)
+
+def int2e(shortname: str, wrapper: LibcintWrapper,
+          other1: Optional[LibcintWrapper] = None,
+          other2: Optional[LibcintWrapper] = None,
+          other3: Optional[LibcintWrapper] = None) -> torch.Tensor:
+    # 4-centre 2-electron integral
+
+    # check and set the others
+    other1w = _check_and_set(wrapper, other1)
+    other2w = _check_and_set(wrapper, other2)
+    other3w = _check_and_set(wrapper, other3)
+    return _Int4cFunction.apply(
+        *wrapper.params,
+        [wrapper, other1w, other2w, other3w],
+        "int2e", shortname)
+
+# shortcuts
+def overlap(wrapper: LibcintWrapper, other: Optional[LibcintWrapper] = None) -> torch.Tensor:
+    return int1e("ovlp", wrapper, other=other)
+
+def kinetic(wrapper: LibcintWrapper, other: Optional[LibcintWrapper] = None) -> torch.Tensor:
+    return int1e("kin", wrapper, other=other)
+
+def nuclattr(wrapper: LibcintWrapper, other: Optional[LibcintWrapper] = None) -> torch.Tensor:
+    if not wrapper.fracz:
+        return int1e("nuc", wrapper, other=other)
+    else:
+        res = torch.tensor([])
+        allpos_params = wrapper.params[-1]
+        for i in range(wrapper.natoms):
+            y = int1e("rinv", wrapper, other=other, rinv_pos=allpos_params[i]) * \
+                (-wrapper.atombases[i].atomz)
+            res = y if (i == 0) else (res + y)
+        return res
+
+def elrep(wrapper: LibcintWrapper,
+          other1: Optional[LibcintWrapper] = None,
+          other2: Optional[LibcintWrapper] = None,
+          other3: Optional[LibcintWrapper] = None,
+          ) -> torch.Tensor:
+    return int2e("ar12b", wrapper, other1, other2, other3)
+
+# misc functions
+def _check_and_set(wrapper: LibcintWrapper, other: Optional[LibcintWrapper]) -> LibcintWrapper:
+    # check the value and set the default value of "other" in the integrals
+    if other is not None:
+        atm0, bas0, env0 = wrapper.atm_bas_env
+        atm1, bas1, env1 = wrapper.atm_bas_env
+        assert id(atm0) == id(atm1)
+        assert id(bas0) == id(bas1)
+        assert id(env0) == id(env1)
+    else:
+        other = wrapper
+    assert isinstance(other, LibcintWrapper)
+    return other
+
+############### pytorch functions ###############
 class _Int2cFunction(torch.autograd.Function):
     # wrapper class to provide the gradient of the 2-centre integrals
     @staticmethod
@@ -794,62 +390,16 @@ class _Int4cFunction(torch.autograd.Function):
         return grad_allcoeffs, grad_allalphas, grad_allposs, \
             None, None, None
 
-class _EvalGTO(torch.autograd.Function):
-    # wrapper class to provide the gradient for evaluating the contracted gto
-    @staticmethod
-    def forward(ctx,  # type: ignore
-                # tensors not used in calculating the forward, but required
-                # for the backward propagation
-                alphas: torch.Tensor,  # (ngauss_tot)
-                coeffs: torch.Tensor,  # (ngauss_tot)
-                pos: torch.Tensor,  # (natom, ndim)
-
-                # tensors used in forward
-                rgrid: torch.Tensor,  # (ngrid, ndim)
-
-                # other non-tensor info
-                ao_to_atom: torch.Tensor,  # int tensor (nao, ndim)
-                wrapper: LibcintWrapper,
-                shortname: str) -> torch.Tensor:
-
-        res = gto_evaluator(wrapper, shortname, rgrid)  # (*, nao, ngrid)
-        ctx.save_for_backward(alphas, coeffs, pos, rgrid)
-        ctx.other_info = (ao_to_atom, wrapper, shortname)
-        return res
-
-    @staticmethod
-    def backward(ctx, grad_res: torch.Tensor) -> Tuple[Optional[torch.Tensor], ...]:  # type: ignore
-        # grad_res: (*, nao, ngrid)
-        ao_to_atom, wrapper, shortname = ctx.other_info
-        alphas, coeffs, pos, rgrid = ctx.saved_tensors
-
-        # TODO: implement the gradient w.r.t. alphas and coeffs
-        grad_alphas = None
-        grad_coeffs = None
-
-        # calculate the gradient w.r.t. basis' pos and rgrid
-        grad_pos = None
-        grad_rgrid = None
-        if rgrid.requires_grad or pos.requires_grad:
-            opsname = _get_evalgto_derivname(shortname, "r")
-            dresdr = _EvalGTO.apply(*ctx.saved_tensors,
-                                    ao_to_atom, wrapper, opsname)  # (ndim, *, nao, ngrid)
-            grad_r = dresdr * grad_res  # (ndim, *, nao, ngrid)
-
-            if rgrid.requires_grad:
-                grad_rgrid = grad_r.reshape(dresdr.shape[0], -1, dresdr.shape[-1])
-                grad_rgrid = grad_rgrid.sum(dim=1).transpose(-2, -1)  # (ngrid, ndim)
-
-            if pos.requires_grad:
-                grad_rao = torch.movedim(grad_r, -2, 0)  # (nao, ndim, *, ngrid)
-                grad_rao = -grad_rao.reshape(*grad_rao.shape[:2], -1).sum(dim=-1)  # (nao, ndim)
-                grad_pos = torch.zeros_like(pos)  # (natom, ndim)
-                grad_pos.scatter_add_(dim=0, index=ao_to_atom, src=grad_rao)
-
-        return grad_alphas, grad_coeffs, grad_pos, grad_rgrid, \
-            None, None, None, None, None
-
 ################### integrator (direct interface to libcint) ###################
+
+# Optimizer class
+class _cintoptHandler(ctypes.c_void_p):
+    def __del__(self):
+        try:
+            CGTO.CINTdel_optimizer(ctypes.byref(self))
+        except AttributeError:
+            pass
+
 class Intor(object):
     def __init__(self, int_type: str, shortname: str, wrappers: List[LibcintWrapper]):
         assert len(wrappers) > 0
@@ -1129,64 +679,3 @@ def _gather_at_dims(inp: torch.Tensor, mapidxs: List[torch.Tensor],
         map2 = map2.expand(*out.shape[:dim], -1, *out.shape[dim + 1:])
         out = torch.gather(out, dim=dim, index=map2)
     return out
-
-################### evaluator (direct interfact to libcgto) ###################
-def gto_evaluator(wrapper: LibcintWrapper, shortname: str, rgrid: torch.Tensor):
-    # NOTE: this function do not propagate gradient and should only be used
-    # in this file only
-
-    # rgrid: (ngrid, ndim)
-    # returns: (*, nao, ngrid)
-
-    ngrid = rgrid.shape[0]
-    nshells = len(wrapper)
-    nao = wrapper.nao()
-    opname = _get_evalgto_opname(shortname, wrapper.spherical)
-    outshape = _get_evalgto_compshape(shortname) + (nao, ngrid)
-
-    out = np.empty(outshape, dtype=np.float64)
-    non0tab = np.ones(((ngrid + BLKSIZE - 1) // BLKSIZE, nshells),
-                      dtype=np.int8)
-
-    # TODO: check if we need to transpose it first?
-    rgrid = rgrid.contiguous()
-    coords = np.asarray(rgrid, dtype=np.float64, order='F')
-    ao_loc = np.asarray(wrapper.full_shell_to_aoloc, dtype=np.int32)
-
-    c_shls = (ctypes.c_int * 2)(*wrapper.shell_idxs)
-    c_ngrid = ctypes.c_int(ngrid)
-
-    # evaluate the orbital
-    operator = getattr(CGTO, opname)
-    operator.restype = ctypes.c_double
-    atm, bas, env = wrapper.atm_bas_env
-    operator(c_ngrid, c_shls,
-             np2ctypes(ao_loc),
-             np2ctypes(out),
-             np2ctypes(coords),
-             np2ctypes(non0tab),
-             np2ctypes(atm), int2ctypes(atm.shape[0]),
-             np2ctypes(bas), int2ctypes(bas.shape[0]),
-             np2ctypes(env))
-
-    out_tensor = torch.tensor(out, dtype=wrapper.dtype, device=wrapper.device)
-    return out_tensor
-
-def _get_evalgto_opname(shortname: str, spherical: bool) -> str:
-    # returns the complete name of the evalgto operation
-    sname = ("_" + shortname) if (shortname != "") else ""
-    suffix = "_sph" if spherical else "_cart"
-    return "GTOval%s%s" % (sname, suffix)
-
-def _get_evalgto_compshape(shortname: str) -> Tuple[int, ...]:
-    # returns the component shape of the evalgto function
-
-    # count "ip" only at the beginning
-    n_ip = len(re.findall(r"^(?:ip)*(?:ip)?", shortname)[0]) // 2
-    return (NDIM, ) * n_ip
-
-def _get_evalgto_derivname(shortname: str, derivmode: str):
-    if derivmode == "r":
-        return "ip%s" % shortname
-    else:
-        raise RuntimeError("Unknown derivmode: %s" % derivmode)
