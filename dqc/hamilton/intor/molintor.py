@@ -430,7 +430,7 @@ class Intor(object):
         else:
             raise ValueError("Unknown integral type: %s" % self.int_type)
 
-    def _int2c(self):
+    def _int2c(self) -> torch.Tensor:
         # performing 2-centre integrals with libcint
         drv = CGTO.GTOint2c
         outshape = self.outshape
@@ -454,7 +454,7 @@ class Intor(object):
                                      device=self.wrapper0.device)
         return out_tensor
 
-    def _int4c(self):
+    def _int4c(self) -> torch.Tensor:
         # performing 4-centre integrals with libcint
         out = np.empty(self.outshape, dtype=np.float64)
         drv = CGTO.GTOnr2e_fill_drv
