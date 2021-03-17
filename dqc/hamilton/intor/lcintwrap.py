@@ -6,6 +6,7 @@ import torch
 import numpy as np
 from dqc.utils.datastruct import AtomCGTOBasis, CGTOBasis
 from dqc.hamilton.intor.utils import np2ctypes, int2ctypes, NDIM, CINT
+from dqc.system.tools import Lattice
 
 __all__ = ["LibcintWrapper", "SubsetLibcintWrapper"]
 
@@ -20,12 +21,13 @@ PTR_RINV_ORIG = 4  # from libcint/src/cint_const.h
 
 class LibcintWrapper(object):
     def __init__(self, atombases: List[AtomCGTOBasis], spherical: bool = True,
-                 basis_normalized: bool = False) -> None:
+                 basis_normalized: bool = False, lattice: Optional[Lattice] = None) -> None:
         self._atombases = atombases
         self._spherical = spherical
         self._basis_normalized = basis_normalized
         self._fracz = False
         self._natoms = len(atombases)
+        self._lattice = lattice
 
         # get dtype and device for torch's tensors
         self.dtype = atombases[0].bases[0].alphas.dtype
@@ -125,6 +127,11 @@ class LibcintWrapper(object):
     @property
     def basis_normalized(self) -> bool:
         return self._basis_normalized
+
+    @property
+    def lattice(self) -> Lattice:
+        assert self._lattice is not None
+        return self._lattice
 
     @property
     def spherical(self) -> bool:

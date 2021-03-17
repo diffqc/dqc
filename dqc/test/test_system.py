@@ -1,7 +1,7 @@
 import torch
 import pytest
 from dqc.system.mol import Mol
-from dqc.system.molpbc import Lattice
+from dqc.system.tools import Lattice
 
 # these tests to make sure the systems parse the inputs correctly
 

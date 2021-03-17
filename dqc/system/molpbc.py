@@ -1,86 +1,89 @@
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union, List
 import torch
 from dqc.system.base_system import BaseSystem
+from dqc.system.mol import _parse_moldesc, _parse_basis, _get_nelecs_spin, \
+                           _get_orb_weights, AtomZsType, AtomPosType
+from dqc.utils.safeops import occnumber
+from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, SpinParam, ZType, is_z_float
+from dqc.system.tools import Lattice
 
 class MolPBC(BaseSystem):
-    pass  # TODO: complete this
-
-class Lattice(object):
     """
-    Lattice is an object that describe the periodicity of the lattice.
-    Note that this object does not know about atoms.
-    For the integrated object between the lattice and atoms, please see MolPBC
+    Describe the system of an isolated molecule.
+
+    Arguments
+    ---------
+    * moldesc: str or 2-elements tuple (atomzs, atompos)
+        Description of the molecule system.
+        If string, it can be described like "H 0 0 0; H 0.5 0.5 0.5".
+        If tuple, the first element of the tuple is the Z number of the atoms while
+        the second element is the position of the atoms.
+    * basis: str, CGTOBasis or list of str or CGTOBasis
+        The string describing the gto basis. If it is a list, then it must have
+        the same length as the number of atoms.
+    * grid: int
+        Describe the grid.
+        If it is an integer, then it uses the default grid with specified level
+        of accuracy.
+        Default: 3
+    * spin: int, float, torch.Tensor, or None
+        The difference between spin-up and spin-down electrons.
+        It must be an integer or None.
+        If None, then it is ``num_electrons % 2``.
+        For floating point atomzs and/or charge, the ``spin`` must be specified.
+        Default: None
+    * charge: int, float, or torch.Tensor
+        The charge of the molecule.
+        Default: 0
+    * orb_weights: SpinParam[torch.Tensor] or None
+        Specifiying the orbital occupancy (or weights) directly. If specified,
+        ``spin`` and ``charge`` arguments are ignored.
+    * dtype: torch.dtype
+        The data type of tensors in this class.
+        Default: torch.float64
+    * device: torch.device
+        The device on which the tensors in this class are stored.
+        Default: torch.device('cpu')
     """
-    def __init__(self, a: torch.Tensor):
-        # 2D or 1D repetition are not implemented yet
-        assert a.ndim == 2
-        assert a.shape[0] == 3
-        assert a.shape[-1] == 3
-        self.ndim = a.shape[0]
-        self.a = a
-        self.device = a.device
-        self.dtype = a.dtype
 
-    def lattice_vectors(self) -> torch.Tensor:
-        """
-        Returns the 3D lattice vectors (nv, ndim) with nv == 3
-        """
-        return self.a
+    def __init__(self,
+                 moldesc: Union[str, Tuple[AtomZsType, AtomPosType]],
+                 alattice: torch.Tensor,
+                 basis: Union[str, List[CGTOBasis], List[str], List[List[CGTOBasis]]],
+                 grid: Union[int, str] = "sg3",
+                 spin: Optional[ZType] = None,
+                 *,
+                 dtype: torch.dtype = torch.float64,
+                 device: torch.device = torch.device('cpu'),
+                 ):
+        self._dtype = dtype
+        self._device = device
+        self._grid_inp = grid
+        self._grid: Optional[BaseGrid] = None
+        charge = 0  # we can't have charged solids for now
 
-    def recip_vectors(self) -> torch.Tensor:
-        """
-        Returns the 3D reciprocal vectors with norm == 1 with shape (nv, ndim)
-        with nv == 3
-        """
-        return torch.inverse(self.a)
+        # get the AtomCGTOBasis & the hamiltonian
+        # atomzs: (natoms,) dtype: torch.int or dtype for floating point
+        # atompos: (natoms, ndim)
+        atomzs, atompos = _parse_moldesc(moldesc, dtype, device)
+        allbases = _parse_basis(atomzs_int, basis)  # list of list of CGTOBasis
+        atombases = [AtomCGTOBasis(atomz=atz, bases=bas, pos=atpos)
+                     for (atz, bas, atpos) in zip(atomzs, allbases, atompos)]
+        self._atompos = atompos  # (natoms, ndim)
+        self._atomzs = atomzs  # (natoms,) int-type
+        nelecs_tot: torch.Tensor = torch.sum(atomzs)
 
-    def volume(self) -> torch.Tensor:
-        """
-        Returns the volume of a lattice.
-        """
-        return torch.det(self.a)
+        # get the number of electrons and spin and orbital weights
+        nelecs, spin, frac_mode = _get_nelecs_spin(nelecs_tot, spin, charge)
+        assert not frac_mode, "Fractional Z mode for pbc is not supported"
+        _orb_weights, _orb_weights_u, _orb_weights_d = _get_orb_weights(
+            nelecs, spin, frac_mode, dtype, device)
 
-    @property
-    def params(self) -> Tuple[torch.Tensor, ...]:
-        """
-        Returns the list of parameters of this object
-        """
-        return (self.a,)
-
-    def get_lattice_ls(self, nimgs: Optional[int] = None, rcut: Optional[float] = None) -> torch.Tensor:
-        """
-        Returns a tensor that contains the coordinates of the neighboring
-        lattices.
-
-        Arguments
-        ---------
-        nimgs: Optional[int]
-            Number of neighbors from every side (e.g. for 3D: up, down, left,
-            right, front, back). If specified, the `rcut` is ignored.
-        rcut: Optional[float]
-            The threshold of the distance from the main cell to be included
-            in the neighbor.
-
-        Returns
-        -------
-        ls: torch.Tensor
-            Tensor with size `(nb, ndim)` containing the coordinates of the
-            neighboring cells.
-        """
-        # largely inspired by pyscf:
-        # https://github.com/pyscf/pyscf/blob/e6c569932d5bab5e49994ae3dd365998fc5202b5/pyscf/pbc/tools/pbc.py#L473
-
-        a = self.lattice_vectors()
-        if nimgs is None:
-            assert rcut is not None, "At least one of nimgs or rcut must be specified"
-            b = self.recip_vectors()  # (nv, ndim)
-            heights_inv = torch.max(torch.norm(b, dim=-1)).detach().numpy()  # scalar
-            nimgs = int(rcut * heights_inv + 1.1)
-
-        assert isinstance(nimgs, int)
-        n1_0 = torch.arange(-nimgs, nimgs + 1, dtype=torch.int32, device=self.device)  # (nimgs2,)
-        ls = n1_0[:, None] * a[0, :]  # (nimgs2, ndim)
-        ls = ls + n1_0[:, None, None] * a[1, :]  # (nimgs2, nimgs2, ndim)
-        ls = ls + n1_0[:, None, None, None] * a[2, :]  # (nimgs2, nimgs2, nimgs2, ndim)
-        ls = ls.view(-1, ls.shape[-1])  # (nb, ndim)
-        return ls
+        # save the system's properties
+        self._spin = spin
+        self._charge = charge
+        self._numel = nelecs
+        self._orb_weights = _orb_weights
+        self._orb_weights_u = _orb_weights_u
+        self._orb_weights_d = _orb_weights_d
+        self._lattice = Lattice(alattice)

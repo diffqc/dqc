@@ -4,14 +4,15 @@ import torch
 import pytest
 import warnings
 from dqc.api.loadbasis import loadbasis
-# from dqc.hamilton.lcintwrap import intor.LibcintWrapper
 import dqc.hamilton.intor as intor
 from dqc.utils.datastruct import AtomCGTOBasis, CGTOBasis
+from dqc.system.tools import Lattice
 
 # import pyscf
 try:
     warnings.filterwarnings("ignore", category=DeprecationWarning)
     import pyscf
+    import pyscf.pbc
 except ImportError:
     raise ImportError("pyscf is needed for this test")
 
@@ -43,6 +44,11 @@ def get_atom_env(dtype, basis="3-21G", ngrid=0, pos_requires_grad=True, atomz=1)
 def get_mol_pyscf(dtype, basis="3-21G"):
     d = 0.8
     mol = pyscf.gto.M(atom="H 0 0 {d}; H 0 0 -{d}".format(d=d), basis=basis, unit="Bohr")
+    return mol
+
+def get_cell_pyscf(dtype, a, basis="3-21G"):
+    d = 0.8
+    mol = pyscf.pbc.gto.C(atom="H 0 0 {d}; H 0 0 -{d}".format(d=d), a=a, basis=basis, unit="Bohr")
     return mol
 
 def get_int_type_and_frac(int_type):
@@ -441,3 +447,48 @@ def test_eval_gto_grad_pos(eval_type, partial):
     # evals gradcheck
     torch.autograd.gradcheck(evalgto, (pos1, pos2, rgrid, eval_type))
     torch.autograd.gradgradcheck(evalgto, (pos1, pos2, rgrid, eval_type))
+
+################ pbc intor ################
+@pytest.mark.parametrize(
+    "int_type",
+    ["overlap", "kinetic"]
+)
+def test_pbc_integral_1e_vs_pyscf(int_type):
+    # check if the pbc 1-electron integrals from dqc agrees with pyscf's pbc_intor
+
+    dtype = torch.double
+    atomenv = get_atom_env(dtype)
+    allbases = [
+        loadbasis("%d:%s" % (atomz, atomenv.basis), dtype=dtype, requires_grad=False)
+        for atomz in atomenv.atomzs
+    ]
+    a = torch.tensor([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]], dtype=dtype)
+    lattice = Lattice(a)
+    kpts = torch.tensor([
+        [0.0, 0.0, 0.0],
+        [0.2, 0.1, 0.3],
+    ], dtype=dtype)
+
+    atombasis1 = AtomCGTOBasis(atomz=atomenv.atomzs[0], bases=allbases[0], pos=atomenv.poss[0])
+    atombasis2 = AtomCGTOBasis(atomz=atomenv.atomzs[1], bases=allbases[1], pos=atomenv.poss[1])
+    env = intor.LibcintWrapper([atombasis1, atombasis2], spherical=True, lattice=lattice)
+    if int_type == "overlap":
+        mat = intor.pbc_overlap(env, kpts=kpts)
+    elif int_type == "kinetic":
+        mat = intor.pbc_kinetic(env, kpts=kpts)
+    else:
+        raise RuntimeError("Unknown int_type: %s" % int_type)
+
+    # get the matrix from pyscf
+    cell = get_cell_pyscf(dtype, a.detach().numpy())
+    if int_type == "overlap":
+        int_name = "int1e_ovlp_sph"
+    elif int_type == "kinetic":
+        int_name = "int1e_kin_sph"
+    else:
+        raise RuntimeError("Unknown int_type: %s" % int_type)
+    mat_scf = cell.pbc_intor(int_name, kpts=kpts.detach().numpy())
+
+    print(mat)
+    print(mat_scf)
+    assert torch.allclose(torch.as_tensor(mat_scf, dtype=mat.dtype), mat, atol=2e-6)
