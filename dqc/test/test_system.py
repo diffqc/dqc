@@ -1,6 +1,7 @@
 import torch
 import pytest
 from dqc.system.mol import Mol
+from dqc.system.molpbc import Lattice
 
 # these tests to make sure the systems parse the inputs correctly
 
@@ -51,3 +52,23 @@ def test_mol_grid(moldesc):
     # can be changed
     assert rgrid.shape[1] == 3
     assert m.get_grid().coord_type == "cart"
+
+def test_lattice():
+    # testing various properties of the lattice object
+    a = torch.tensor([[1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [2.0, 1.0, 1.0]], dtype=dtype)
+    latt = Lattice(a)
+    assert torch.allclose(latt.lattice_vectors(), a)
+    assert torch.allclose(latt.recip_vectors(), torch.inverse(a))
+    assert torch.allclose(latt.volume(), torch.det(a))
+
+    # check the lattice_ls function returns the correct shape
+    nimgs = 2
+    ls0 = latt.get_lattice_ls(nimgs=nimgs)  # (nb, ndim)
+    assert ls0.ndim == 2
+    assert ls0.shape[0] == (2 * nimgs + 1) ** 3
+    assert ls0.shape[1] == 3
+
+    # check the ls has no repeated coordinates
+    ls0_dist = torch.norm(ls0[:, None, :] - ls0[None, :, :], dim=-1)  # (nb, nb)
+    ls0_dist = ls0_dist + torch.eye(ls0_dist.shape[0], dtype=dtype)
+    assert torch.all(ls0_dist.abs() > 1e-9)
