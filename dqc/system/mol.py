@@ -87,27 +87,16 @@ class Mol(BaseSystem):
         if orb_weights is None:
             # get the number of electrons and spin
             nelecs, spin, frac_mode = _get_nelecs_spin(nelecs_tot, spin, charge)
+            _orb_weights, _orb_weights_u, _orb_weights_d = _get_orb_weights(
+                nelecs, spin, frac_mode, dtype, device)
 
             # save the system's properties
             self._spin = spin
             self._charge = charge
             self._numel = nelecs
-
-            # calculate the orbital weights
-            nspin_dn: torch.Tensor = (nelecs - spin) * 0.5 if frac_mode else (nelecs - spin) // 2
-            nspin_up: torch.Tensor = nspin_dn + spin
-
-            # total orbital weights
-            _orb_weights_u = occnumber(nspin_up, dtype=dtype, device=device)
-            _orb_weights_d = occnumber(nspin_dn, n=len(_orb_weights_u), dtype=dtype, device=device)
-            self._orb_weights = _orb_weights_u + _orb_weights_d
-
-            # get the polarized orbital weights
-            self._orb_weights_u = _orb_weights_u  # torch.ones((nspin_up,), dtype=dtype, device=device)
-            if nspin_dn > 0:
-                self._orb_weights_d = occnumber(nspin_dn, dtype=dtype, device=device)
-            else:
-                self._orb_weights_d = occnumber(0, n=1, dtype=dtype, device=device)
+            self._orb_weights = _orb_weights
+            self._orb_weights_u = _orb_weights_u
+            self._orb_weights_d = _orb_weights_d
 
         # orb_weights is specified, so calculate the spin and charge from it
         else:
@@ -275,3 +264,26 @@ def _get_nelecs_spin(nelecs_tot: torch.Tensor, spin: Optional[ZType],
             assert (nelecs - spin) % 2 == 0, \
                 "Spin %d is not suited for %d electrons" % (spin, nelecs)
     return nelecs, spin, frac_mode
+
+def _get_orb_weights(nelecs: torch.Tensor, spin: ZType, frac_mode: bool,
+                     dtype: torch.dtype, device: torch.device) \
+        -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    # returns the orbital weights given the electronic information
+    # (total orbital weights, spin-up orb weights, spin-down orb weights)
+
+    # calculate the orbital weights
+    nspin_dn: torch.Tensor = (nelecs - spin) * 0.5 if frac_mode else (nelecs - spin) // 2
+    nspin_up: torch.Tensor = nspin_dn + spin
+
+    # total orbital weights
+    _orb_weights_u = occnumber(nspin_up, dtype=dtype, device=device)
+    _orb_weights_d = occnumber(nspin_dn, n=len(_orb_weights_u), dtype=dtype, device=device)
+    _orb_weights = _orb_weights_u + _orb_weights_d
+
+    # get the polarized orbital weights
+    if nspin_dn > 0:
+        _orb_weights_d = occnumber(nspin_dn, dtype=dtype, device=device)
+    else:
+        _orb_weights_d = occnumber(0, n=1, dtype=dtype, device=device)
+
+    return _orb_weights, _orb_weights_u, _orb_weights_d
