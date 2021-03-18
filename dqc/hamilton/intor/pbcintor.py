@@ -3,6 +3,7 @@ import ctypes
 import copy
 import re
 import operator
+import warnings
 from dataclasses import dataclass
 from functools import reduce
 import numpy as np
@@ -144,6 +145,11 @@ class PBCIntor(object):
         # get the lattice translation vectors and the exponential factors
         ls = np.asarray(lattice.get_lattice_ls(rcut=rcut))
         expkl = np.asarray(np.exp(1j * np.dot(kpts_np, ls.T)), order='C')
+
+        # if the ls is too big, it might produce segfault
+        if (ls.shape[0] > 1e6):
+            warnings.warn("The number of neighbors in the integral is too many, "\
+                          "it might causes segfault")
 
         # perform the integration
         drv = CPBC.PBCnr2c_drv

@@ -1,5 +1,6 @@
 from typing import Optional, Tuple
 import torch
+import numpy as np
 
 class Lattice(object):
     """
@@ -25,10 +26,10 @@ class Lattice(object):
 
     def recip_vectors(self) -> torch.Tensor:
         """
-        Returns the 3D reciprocal vectors with norm == 1 with shape (nv, ndim)
+        Returns the 3D reciprocal vectors with norm == 2 * pi with shape (nv, ndim)
         with nv == 3
         """
-        return torch.inverse(self.a)
+        return torch.inverse(self.a.transpose(-2, -1)) * (2 * np.pi)
 
     def volume(self) -> torch.Tensor:
         """
@@ -70,7 +71,7 @@ class Lattice(object):
         # TODO: do this properly
         if nimgs is None:
             assert rcut is not None, "At least one of nimgs or rcut must be specified"
-            b = self.recip_vectors()  # (nv, ndim)
+            b = self.recip_vectors() / (2 * np.pi)  # (nv, ndim)
             heights_inv = torch.max(torch.norm(b, dim=-1)).detach().numpy()  # scalar
             nimgs = int(rcut * heights_inv + 1.1)
 

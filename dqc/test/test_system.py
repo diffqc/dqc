@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 import pytest
 from dqc.system.mol import Mol
 from dqc.system.tools import Lattice
@@ -56,9 +57,10 @@ def test_mol_grid(moldesc):
 def test_lattice():
     # testing various properties of the lattice object
     a = torch.tensor([[1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [2.0, 1.0, 1.0]], dtype=dtype)
+    b = torch.inverse(a.T) * (2 * np.pi)
     latt = Lattice(a)
     assert torch.allclose(latt.lattice_vectors(), a)
-    assert torch.allclose(latt.recip_vectors(), torch.inverse(a))
+    assert torch.allclose(latt.recip_vectors(), b)
     assert torch.allclose(latt.volume(), torch.det(a))
 
     # check the lattice_ls function returns the correct shape
