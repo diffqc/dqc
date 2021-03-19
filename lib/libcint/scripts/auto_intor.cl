@@ -222,6 +222,21 @@
   '("int3c2e_ipspsp1"           (nabla sigma dot p \, sigma dot p \| ))
   '("int3c2e_spsp1ip2"          (sigma dot p \, sigma dot p \| nabla ))
 ;
+  '("int3c2e_ar12"              ( \, \| r12 \| ))
+  '("int3c2e_ipar12"            ( nabla \, \| r12 \| ))
+  '("int3c2e_ar12ip"            ( \, \| r12 \| nabla ))
+  '("int3c2e_ipipar12"          ( nabla nabla \, \| r12 \| ))
+  '("int3c2e_ipaipr12"          ( nabla \, nabla \| r12 \| ))
+  '("int3c2e_ipar12ip"          ( nabla \, \| r12 \| nabla ))
+  '("int3c2e_ar12ipip"          ( \, \| r12 \| nabla nabla ))
+;
+  '("int3c2e_rrar12"            ( ri dot ri \, \| r12 \| ))
+  '("int3c2e_ar12rr"            ( \, \| r12 \| rk dot rk ))
+  '("int3c2e_rrrrar12"          ( ri dot ri ri dot ri \, \| r12 \| ))
+  '("int3c2e_rrarrr12"          ( ri dot ri \, rj dot rj \| r12 \| ))
+  '("int3c2e_rrar12rr"          ( ri dot ri \, \| r12 \| rk dot rk ))
+  '("int3c2e_ar12rrrr"          ( \, \| r12 \| rk dot rk rk dot rk ))
+;
   '("int3c2e_ipip1"             ( nabla nabla \, \| ))
   '("int3c2e_ipip2"             ( \, \| nabla nabla ))
   '("int3c2e_ipvip1"            ( nabla \, nabla \| ))

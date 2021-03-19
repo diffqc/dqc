@@ -9,7 +9,8 @@ import torch
 from dqc.hamilton.intor.lcintwrap import LibcintWrapper
 from dqc.hamilton.intor.utils import np2ctypes, int2ctypes, NDIM, CINT, CGTO
 
-__all__ = ["int1e", "int2e", "overlap", "kinetic", "nuclattr", "elrep"]
+__all__ = ["int1e", "int3c2e", "int2e",
+           "overlap", "kinetic", "nuclattr", "elrep", "elrep3c"]
 
 # integrals
 def int1e(shortname: str, wrapper: LibcintWrapper, other: Optional[LibcintWrapper] = None, *,
@@ -32,11 +33,35 @@ def int1e(shortname: str, wrapper: LibcintWrapper, other: Optional[LibcintWrappe
                                 [wrapper, other1],
                                 "int1e", shortname)
 
+def int3c2e(shortname: str, wrapper: LibcintWrapper,
+            other1: Optional[LibcintWrapper] = None,
+            other2: Optional[LibcintWrapper] = None) -> torch.Tensor:
+    """
+    3-centre 2-electron integrals where the `wrapper` and `other1` correspond
+    to the first electron, and `other2` corresponds to another electron.
+    The returned indices are sorted based on `wrapper`, `other1`, and `other2`.
+    The available shortname: "ar12"
+    """
+
+    # check and set the others
+    other1w = _check_and_set(wrapper, other1)
+    other2w = _check_and_set(wrapper, other2)
+    return _Int3cFunction.apply(
+        *wrapper.params,
+        [wrapper, other1w, other2w],
+        "int3c2e", shortname)
+
 def int2e(shortname: str, wrapper: LibcintWrapper,
           other1: Optional[LibcintWrapper] = None,
           other2: Optional[LibcintWrapper] = None,
           other3: Optional[LibcintWrapper] = None) -> torch.Tensor:
-    # 4-centre 2-electron integral
+    """
+    4-centre 2-electron integrals where the `wrapper` and `other1` correspond
+    to the first electron, and `other2` and `other3` correspond to another
+    electron.
+    The returned indices are sorted based on `wrapper`, `other1`, `other2`, and `other3`.
+    The available shortname: "ar12b"
+    """
 
     # check and set the others
     other1w = _check_and_set(wrapper, other1)
@@ -72,6 +97,12 @@ def elrep(wrapper: LibcintWrapper,
           other3: Optional[LibcintWrapper] = None,
           ) -> torch.Tensor:
     return int2e("ar12b", wrapper, other1, other2, other3)
+
+def elrep3c(wrapper: LibcintWrapper,
+          other1: Optional[LibcintWrapper] = None,
+          other2: Optional[LibcintWrapper] = None,
+          ) -> torch.Tensor:
+    return int3c2e("ar12", wrapper, other1, other2)
 
 # misc functions
 def _check_and_set(wrapper: LibcintWrapper, other: Optional[LibcintWrapper]) -> LibcintWrapper:
@@ -258,6 +289,128 @@ class _Int2cFunction(torch.autograd.Function):
             grad_rinv_pos, \
             None, None, None
 
+class _Int3cFunction(torch.autograd.Function):
+    # wrapper class for the 3-centre integrals
+    @staticmethod
+    def forward(ctx,  # type: ignore
+                allcoeffs: torch.Tensor, allalphas: torch.Tensor, allposs: torch.Tensor,
+                wrappers: List[LibcintWrapper],
+                int_type: str, shortname: str) -> torch.Tensor:
+
+        assert len(wrappers) == 3
+
+        out_tensor = Intor(int_type, shortname, wrappers).calc()
+        ctx.save_for_backward(allcoeffs, allalphas, allposs)
+        ctx.other_info = (wrappers, int_type, shortname)
+        return out_tensor  # (..., nao0, nao1, nao2)
+
+    @staticmethod
+    def backward(ctx, grad_out) -> Tuple[Optional[torch.Tensor], ...]:  # type: ignore
+        # grad_out: (..., nao0, nao1, nao2)
+        allcoeffs, allalphas, allposs = ctx.saved_tensors
+        wrappers, int_type, shortname = ctx.other_info
+        naos = grad_out.shape[-3:]
+
+        # calculate the gradient w.r.t. positions
+        grad_allposs: Optional[torch.Tensor] = None
+        if allposs.requires_grad:
+            grad_allposs = torch.zeros_like(allposs)  # (natom, ndim)
+            grad_allpossT = grad_allposs.transpose(-2, -1)  # (ndim, natom)
+
+            sname_derivs = [_get_intgl_deriv_shortname(int_type, shortname, sname)
+                            for sname in ("ra1", "ra2", "rb")]
+            int_fcn = lambda wrappers, name: _Int3cFunction.apply(
+                *ctx.saved_tensors, wrappers, int_type, name)
+            dout_dposs = _get_integrals(sname_derivs, wrappers, int_type, int_fcn)
+
+            # negative because the integral calculates the nabla w.r.t. the
+            # spatial coordinate, not the basis central position
+            ndim = dout_dposs[0].shape[0]
+            shape = (ndim, -1, *naos)
+            grad_out2 = grad_out.reshape(*shape[1:])
+            grad_pos_a1 = -torch.einsum("dzijk,zijk->di", dout_dposs[0].reshape(*shape), grad_out2)
+            grad_pos_a2 = -torch.einsum("dzijk,zijk->dj", dout_dposs[1].reshape(*shape), grad_out2)
+            grad_pos_b1 = -torch.einsum("dzijk,zijk->dk", dout_dposs[2].reshape(*shape), grad_out2)
+
+            ao_to_atom0 = wrappers[0].ao_to_atom().expand(ndim, -1)
+            ao_to_atom1 = wrappers[1].ao_to_atom().expand(ndim, -1)
+            ao_to_atom2 = wrappers[2].ao_to_atom().expand(ndim, -1)
+            grad_allpossT.scatter_add_(dim=-1, index=ao_to_atom0, src=grad_pos_a1)
+            grad_allpossT.scatter_add_(dim=-1, index=ao_to_atom1, src=grad_pos_a2)
+            grad_allpossT.scatter_add_(dim=-1, index=ao_to_atom2, src=grad_pos_b1)
+
+        # gradients for the basis coefficients
+        grad_allcoeffs: Optional[torch.Tensor] = None
+        grad_allalphas: Optional[torch.Tensor] = None
+        if allcoeffs.requires_grad or allalphas.requires_grad:
+            # obtain the uncontracted wrapper, and expanded grad_out
+            # uao2ao: (nu_ao)
+            u_wrappers_tup, uao2aos_tup = zip(*[w.get_uncontracted_wrapper() for w in wrappers])
+            u_wrappers = list(u_wrappers_tup)
+            uao2aos = list(uao2aos_tup)
+            u_params = u_wrappers[0].params
+
+            # u_grad_out: (..., nu_ao0, nu_ao1, nu_ao2)
+            u_grad_out = _gather_at_dims(grad_out, mapidxs=uao2aos, dims=[-3, -2, -1])
+
+            # get the scatter indices
+            ao2shl0 = u_wrappers[0].ao_to_shell()  # (nu_ao0,)
+            ao2shl1 = u_wrappers[1].ao_to_shell()
+            ao2shl2 = u_wrappers[2].ao_to_shell()
+
+            # calculate the grad w.r.t. coeffs
+            if allcoeffs.requires_grad:
+                grad_allcoeffs = torch.zeros_like(allcoeffs)
+
+                # (..., nu_ao0, nu_ao1, nu_ao2)
+                dout_dcoeff = _Int3cFunction.apply(*u_params, u_wrappers, int_type, shortname)
+
+                # get the coefficients and spread it on the u_ao-length tensor
+                coeffs_ao0 = torch.gather(allcoeffs, dim=-1, index=ao2shl0)  # (nu_ao0)
+                coeffs_ao1 = torch.gather(allcoeffs, dim=-1, index=ao2shl1)  # (nu_ao1)
+                coeffs_ao2 = torch.gather(allcoeffs, dim=-1, index=ao2shl2)  # (nu_ao2)
+                # dout_dcoeff_*: (..., nu_ao0, nu_ao1, nu_ao2, nu_ao3)
+                dout_dcoeff_a1 = dout_dcoeff / coeffs_ao0[:, None, None]
+                dout_dcoeff_a2 = dout_dcoeff / coeffs_ao1[:, None]
+                dout_dcoeff_b1 = dout_dcoeff / coeffs_ao2
+
+                # reduce the uncontracted integrations
+                # grad_coeff_*: (nu_ao*)
+                grad_coeff_a1 = torch.einsum("...ijk,...ijk->i", dout_dcoeff_a1, u_grad_out)
+                grad_coeff_a2 = torch.einsum("...ijk,...ijk->j", dout_dcoeff_a2, u_grad_out)
+                grad_coeff_b1 = torch.einsum("...ijk,...ijk->k", dout_dcoeff_b1, u_grad_out)
+                # grad_coeff_all = grad_coeff_a1 + grad_coeff_a2 + grad_coeff_b1 + grad_coeff_b2
+
+                # scatter to the coefficients
+                grad_allcoeffs.scatter_add_(dim=-1, index=ao2shl0, src=grad_coeff_a1)
+                grad_allcoeffs.scatter_add_(dim=-1, index=ao2shl1, src=grad_coeff_a2)
+                grad_allcoeffs.scatter_add_(dim=-1, index=ao2shl2, src=grad_coeff_b1)
+
+            if allalphas.requires_grad:
+                grad_allalphas = torch.zeros_like(allalphas)  # (ngauss)
+
+                # get the uncontracted integrals
+                sname_derivs = [_get_intgl_deriv_shortname(int_type, shortname, sname)
+                                for sname in ("aa1", "aa2", "ab")]
+                u_int_fcn = lambda u_wrappers, name: _Int3cFunction.apply(
+                    *u_params, u_wrappers, int_type, name)
+                dout_dalphas = _get_integrals(sname_derivs, u_wrappers, int_type, u_int_fcn)
+
+                # (nu_ao)
+                # negative because the exponent is negative alpha * (r-ra)^2
+                grad_alpha_a1 = -torch.einsum("...ijk,...ijk->i", dout_dalphas[0], u_grad_out)
+                grad_alpha_a2 = -torch.einsum("...ijk,...ijk->j", dout_dalphas[1], u_grad_out)
+                grad_alpha_b1 = -torch.einsum("...ijk,...ijk->k", dout_dalphas[2], u_grad_out)
+                # grad_alpha_all = (grad_alpha_a1 + grad_alpha_a2 + grad_alpha_b1 + grad_alpha_b2)
+
+                # scatter the grad
+                grad_allalphas.scatter_add_(dim=-1, index=ao2shl0, src=grad_alpha_a1)
+                grad_allalphas.scatter_add_(dim=-1, index=ao2shl1, src=grad_alpha_a2)
+                grad_allalphas.scatter_add_(dim=-1, index=ao2shl2, src=grad_alpha_b1)
+
+        return grad_allcoeffs, grad_allalphas, grad_allposs, \
+            None, None, None
+
 class _Int4cFunction(torch.autograd.Function):
     # wrapper class for the 4-centre integrals
     @staticmethod
@@ -425,6 +578,8 @@ class Intor(object):
         self.integral_done = True
         if self.int_type == "int1e":
             return self._int2c()
+        elif self.int_type == "int3c2e":
+            return self._int3c()
         elif self.int_type == "int2e":
             return self._int4c()
         else:
@@ -450,9 +605,28 @@ class Intor(object):
         # TODO: check if we need to do the lines below for 3rd order grad and higher
         # if out.ndim > 2:
         #     out = np.moveaxis(out, -3, 0)
-        out_tensor = torch.as_tensor(out, dtype=self.wrapper0.dtype,
-                                     device=self.wrapper0.device)
-        return out_tensor
+        return self._to_tensor(out)
+
+    def _int3c(self) -> torch.Tensor:
+        # performing 3-centre integrals with libcint
+        drv = CGTO.GTOnr3c_drv
+        fill = CGTO.GTOnr3c_fill_s1
+        # TODO: create optimizer without the 3rd index like in
+        # https://github.com/pyscf/pyscf/blob/e833b9a4fd5fb24a061721e5807e92c44bb66d06/pyscf/gto/moleintor.py#L538
+        outsh = self.outshape
+        out = np.empty((*outsh[:-3], outsh[-1], outsh[-2], outsh[-3]), dtype=np.float64)
+        drv(self.op, fill,
+            out.ctypes.data_as(ctypes.c_void_p),
+            int2ctypes(self.ncomp),
+            (ctypes.c_int * len(self.shls_slice))(*self.shls_slice),
+            np2ctypes(self.wrapper0.full_shell_to_aoloc),
+            self.optimizer,
+            np2ctypes(self.atm), int2ctypes(self.atm.shape[0]),
+            np2ctypes(self.bas), int2ctypes(self.bas.shape[0]),
+            np2ctypes(self.env))
+
+        out = np.swapaxes(out, -3, -1)
+        return self._to_tensor(out)
 
     def _int4c(self) -> torch.Tensor:
         # performing 4-centre integrals with libcint
@@ -470,9 +644,12 @@ class Intor(object):
             np2ctypes(self.bas), int2ctypes(self.bas.shape[0]),
             np2ctypes(self.env))
 
-        out_tensor = torch.as_tensor(out, dtype=self.wrapper0.dtype,
-                                     device=self.wrapper0.device)
-        return out_tensor
+        return self._to_tensor(out)
+
+    def _to_tensor(self, out: np.ndarray) -> torch.Tensor:
+        # convert the numpy array to the appropriate tensor
+        return torch.as_tensor(out, dtype=self.wrapper0.dtype,
+                               device=self.wrapper0.device)
 
 def _get_intgl_name(int_type: str, shortname: str, spherical: bool) -> str:
     # convert the shortname into full name of the integral in libcint
@@ -516,6 +693,19 @@ def _get_intgl_deriv_shortname(int_type: str, shortname: str, derivmode: str) ->
                 return "%s%s" % (pattern, shortname)
             elif derivmode == "2":
                 return "%s%s" % (shortname, pattern)
+            else:
+                raise RuntimeError("Unknown derivmode: %s" % derivmode)
+    elif int_type == "int3c2e":
+        def _insert_pattern(shortname: str, derivmode: str, pattern: str) -> str:
+            if derivmode == "a1":
+                return "%s%s" % (pattern, shortname)
+            elif derivmode == "a2":
+                # insert after the first "a"
+                idx_a = shortname.find("a")
+                return shortname[:idx_a + 1] + pattern + shortname[idx_a + 1:]
+            elif derivmode == "b":
+                # insert the pattern as a suffix
+                return shortname + pattern
             else:
                 raise RuntimeError("Unknown derivmode: %s" % derivmode)
     elif int_type == "int2e":
@@ -608,6 +798,12 @@ def _intgl_shortname_equiv(s0: str, s1: str, int_type: str) -> Optional[List[Tup
         transpose_paths = [
             [],
             [(-1, -2)],
+        ]
+    elif int_type == "int3c2e":
+        patterns = ["r12", "a"]
+        transpose_paths = [
+            [],
+            [(-2, -3)],
         ]
     elif int_type == "int2e":
         patterns = ["r12", "a", "b"]
