@@ -82,16 +82,9 @@ def get_int_type_and_frac(int_type):
 def test_integral_vs_pyscf(int_type):
     # check if the integrals from dqc agrees with pyscf
 
-    dtype = torch.double
     atomenv = get_atom_env(dtype)
-    allbases = [
-        loadbasis("%d:%s" % (atomz, atomenv.basis), dtype=dtype, requires_grad=False)
-        for atomz in atomenv.atomzs
-    ]
+    env = get_wrapper(atomenv, spherical=True)
 
-    atombasis1 = AtomCGTOBasis(atomz=atomenv.atomzs[0], bases=allbases[0], pos=atomenv.poss[0])
-    atombasis2 = AtomCGTOBasis(atomz=atomenv.atomzs[1], bases=allbases[1], pos=atomenv.poss[1])
-    env = intor.LibcintWrapper([atombasis1, atombasis2], spherical=True)
     if int_type == "overlap":
         mat = intor.overlap(env)
     elif int_type == "kinetic":
@@ -126,16 +119,8 @@ def test_integral_vs_pyscf(int_type):
 def test_integral_with_subset(intc_type):
     # check if the integral with the subsets agrees with the subset of the full integrals
 
-    dtype = torch.double
     atomenv = get_atom_env(dtype)
-    allbases = [
-        loadbasis("%d:%s" % (atomz, atomenv.basis), dtype=dtype, requires_grad=False)
-        for atomz in atomenv.atomzs
-    ]
-
-    atombasis1 = AtomCGTOBasis(atomz=atomenv.atomzs[0], bases=allbases[0], pos=atomenv.poss[0])
-    atombasis2 = AtomCGTOBasis(atomz=atomenv.atomzs[1], bases=allbases[1], pos=atomenv.poss[1])
-    env = intor.LibcintWrapper([atombasis1, atombasis2], spherical=True)
+    env = get_wrapper(atomenv, spherical=True)
     env1 = env[: len(env) // 2]
     nenv1 = env1.nao()
     if intc_type == "int2c":
@@ -173,8 +158,6 @@ def test_integral_with_subset(intc_type):
 
 def test_nuc_integral_frac_atomz():
     # test the nuclear integral with fractional atomz
-    dtype = torch.double
-
     atomenv1 = get_atom_env(dtype, atomz=1)
     atomenv2 = get_atom_env(dtype, atomz=2)
     atomenv1f = get_atom_env(dtype, atomz=1.0)
@@ -205,7 +188,6 @@ def test_nuc_integral_frac_atomz():
 def test_nuc_integral_frac_atomz_grad():
     # test the gradient w.r.t. Z for nuclear integral with fractional Z
 
-    dtype = torch.double
     atomz = torch.tensor(2.1, dtype=dtype, requires_grad=True)
 
     def get_nuc_int1e(atomz):
@@ -226,7 +208,6 @@ def test_nuc_integral_frac_atomz_grad():
 )
 def test_integral_grad_pos(int_type):
     int_type, is_z_frac = get_int_type_and_frac(int_type)
-    dtype = torch.double
 
     atomz = 1.2 if is_z_frac else 1
     atomenv = get_atom_env(dtype, atomz=atomz)
@@ -266,7 +247,6 @@ def test_integral_grad_pos(int_type):
     ))
 )
 def test_integral_subset_grad_pos(intc_type, allsubsets):
-    dtype = torch.double
 
     atomz = 1
     atomenv = get_atom_env(dtype, atomz=atomz)
@@ -302,7 +282,6 @@ def test_integral_subset_grad_pos(intc_type, allsubsets):
 )
 def test_integral_grad_basis(int_type):
     int_type, is_z_frac = get_int_type_and_frac(int_type)
-    dtype = torch.double
     torch.manual_seed(123)
 
     atomz = 1.2 if is_z_frac else 1
@@ -357,7 +336,6 @@ def test_integral_grad_basis(int_type):
     ))
 )
 def test_integral_subset_grad_basis(intc_type, allsubsets):
-    dtype = torch.double
     torch.manual_seed(123)
 
     atomz = 1
@@ -412,19 +390,12 @@ def test_eval_gto_vs_pyscf(eval_type):
     # also check the partial eval_gto
 
     basis = "6-311++G**"
-    dtype = torch.double
     d = 0.8
 
     # setup the system for dqc
     atomenv = get_atom_env(dtype, ngrid=100)
     rgrid = atomenv.rgrid
-    allbases = [
-        loadbasis("%d:%s" % (atomz, atomenv.basis), dtype=dtype, requires_grad=False)
-        for atomz in atomenv.atomzs
-    ]
-    atombasis1 = AtomCGTOBasis(atomz=atomenv.atomzs[0], bases=allbases[0], pos=atomenv.poss[0])
-    atombasis2 = AtomCGTOBasis(atomz=atomenv.atomzs[1], bases=allbases[1], pos=atomenv.poss[1])
-    wrapper = intor.LibcintWrapper([atombasis1, atombasis2], spherical=True)
+    wrapper = get_wrapper(atomenv, spherical=True)
     wrapper1 = wrapper[:len(wrapper)]
     if eval_type == "":
         ao_value = intor.eval_gto(wrapper, rgrid)
@@ -456,7 +427,6 @@ def test_eval_gto_vs_pyscf(eval_type):
     ))
 )
 def test_eval_gto_grad_pos(eval_type, partial):
-    dtype = torch.double
 
     atomenv = get_atom_env(dtype, ngrid=3)
     pos1 = atomenv.poss[0]
@@ -493,22 +463,13 @@ def test_eval_gto_grad_pos(eval_type, partial):
 def test_pbc_integral_1e_vs_pyscf(int_type):
     # check if the pbc 1-electron integrals from dqc agrees with pyscf's pbc_intor
 
-    dtype = torch.double
     atomenv = get_atom_env(dtype)
-    allbases = [
-        loadbasis("%d:%s" % (atomz, atomenv.basis), dtype=dtype, requires_grad=False)
-        for atomz in atomenv.atomzs
-    ]
     a = torch.tensor([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]], dtype=dtype)
-    lattice = Lattice(a)
+    env = get_wrapper(atomenv, spherical=True, lattice=Lattice(a))
     kpts = torch.tensor([
         [0.0, 0.0, 0.0],
         [0.2, 0.1, 0.3],
     ], dtype=dtype)
-
-    atombasis1 = AtomCGTOBasis(atomz=atomenv.atomzs[0], bases=allbases[0], pos=atomenv.poss[0])
-    atombasis2 = AtomCGTOBasis(atomz=atomenv.atomzs[1], bases=allbases[1], pos=atomenv.poss[1])
-    env = intor.LibcintWrapper([atombasis1, atombasis2], spherical=True, lattice=lattice)
     if int_type == "overlap":
         mat = intor.pbc_overlap(env, kpts=kpts)
     elif int_type == "kinetic":
