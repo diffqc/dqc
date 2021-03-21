@@ -99,9 +99,9 @@ def elrep(wrapper: LibcintWrapper,
     return int2e("ar12b", wrapper, other1, other2, other3)
 
 def elrep3c(wrapper: LibcintWrapper,
-          other1: Optional[LibcintWrapper] = None,
-          other2: Optional[LibcintWrapper] = None,
-          ) -> torch.Tensor:
+            other1: Optional[LibcintWrapper] = None,
+            other2: Optional[LibcintWrapper] = None,
+            ) -> torch.Tensor:
     return int3c2e("ar12", wrapper, other1, other2)
 
 # misc functions

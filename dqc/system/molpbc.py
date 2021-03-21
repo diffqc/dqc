@@ -1,10 +1,10 @@
 from typing import Optional, Tuple, Union, List
 import torch
 from dqc.system.base_system import BaseSystem
+from dqc.grid.base_grid import BaseGrid
 from dqc.system.mol import _parse_moldesc, _parse_basis, _get_nelecs_spin, \
                            _get_orb_weights, AtomZsType, AtomPosType
-from dqc.utils.safeops import occnumber
-from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, SpinParam, ZType, is_z_float
+from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, ZType
 from dqc.system.tools import Lattice
 
 class MolPBC(BaseSystem):
@@ -66,7 +66,7 @@ class MolPBC(BaseSystem):
         # atomzs: (natoms,) dtype: torch.int or dtype for floating point
         # atompos: (natoms, ndim)
         atomzs, atompos = _parse_moldesc(moldesc, dtype, device)
-        allbases = _parse_basis(atomzs_int, basis)  # list of list of CGTOBasis
+        allbases = _parse_basis(atomzs, basis)  # list of list of CGTOBasis
         atombases = [AtomCGTOBasis(atomz=atz, bases=bas, pos=atpos)
                      for (atz, bas, atpos) in zip(atomzs, allbases, atompos)]
         self._atompos = atompos  # (natoms, ndim)

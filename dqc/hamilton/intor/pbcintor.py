@@ -1,7 +1,5 @@
-from typing import Optional, List, Tuple, Callable
+from typing import Optional, List, Tuple
 import ctypes
-import copy
-import re
 import operator
 import warnings
 from dataclasses import dataclass
@@ -9,14 +7,14 @@ from functools import reduce
 import numpy as np
 import torch
 from dqc.hamilton.intor.lcintwrap import LibcintWrapper
-from dqc.hamilton.intor.utils import np2ctypes, int2ctypes, NDIM, CINT, CPBC, \
-                                     CGTO, c_null_ptr
-from dqc.hamilton.intor.molintor import _check_and_set, Intor, _get_intgl_name, \
-                                        _get_intgl_components_shape
+from dqc.hamilton.intor.utils import np2ctypes, int2ctypes, CPBC, CGTO, c_null_ptr
 from dqc.utils.types import get_complex_dtype
+from dqc.system.tools import Lattice
+from dqc.hamilton.intor.molintor import _check_and_set, _get_intgl_name, \
+                                        _get_intgl_components_shape
 
 __all__ = ["PBCIntOption", "pbc_int1e",
-           "pbc_overlap", "pbc_kinetic", "pbc_nuclattr"]
+           "pbc_overlap", "pbc_kinetic"]
 
 @dataclass
 class PBCIntOption:
@@ -44,6 +42,7 @@ def pbc_int1e(shortname: str, wrapper: LibcintWrapper,
     else:
         kpts1 = kpts
 
+    assert isinstance(wrapper.lattice, Lattice)
     return _PBCInt2cFunction.apply(
         *wrapper.params,
         *wrapper.lattice.params,
@@ -58,14 +57,9 @@ def pbc_overlap(wrapper: LibcintWrapper, other: Optional[LibcintWrapper] = None,
     return pbc_int1e("ovlp", wrapper, other=other, kpts=kpts, options=options)
 
 def pbc_kinetic(wrapper: LibcintWrapper, other: Optional[LibcintWrapper] = None,
-            kpts: Optional[torch.Tensor] = None,
-            options: Optional[PBCIntOption] = None) -> torch.Tensor:
+                kpts: Optional[torch.Tensor] = None,
+                options: Optional[PBCIntOption] = None) -> torch.Tensor:
     return pbc_int1e("kin", wrapper, other=other, kpts=kpts, options=options)
-
-def pbc_nuclattr(wrapper: LibcintWrapper, other: Optional[LibcintWrapper] = None,
-             kpts: Optional[torch.Tensor] = None,
-             options: Optional[PBCIntOption] = None) -> torch.Tensor:
-    return int1e("nuc", wrapper, other=other, kpts=kpts, options=options)
 
 ################# torch autograd function wrappers #################
 class _PBCInt2cFunction(torch.autograd.Function):
@@ -107,6 +101,7 @@ class PBCIntor(object):
         kpts_np = kpts.detach().numpy()  # (nk, ndim)
         opname = _get_intgl_name(int_type, shortname, wrapper0.spherical)
         lattice = wrapper0.lattice
+        assert isinstance(lattice, Lattice)
         self.int_type = int_type
 
         # 2-centre integral (TODO: move it to int2c once int4c or int3c are known)
@@ -135,12 +130,12 @@ class PBCIntor(object):
 
         # estimate the rcut
         coeffs, alphas, _ = wrapper0.params
-        l = 1
-        C = (coeffs * coeffs + 1e-200) * (2 * l + 1) * alphas / options.precision
-        r0 = 20.0
+        langmom = 1
+        C = (coeffs * coeffs + 1e-200) * (2 * langmom + 1) * alphas / options.precision
+        r0 = torch.tensor(20.0, dtype=wrapper0.dtype, device=wrapper0.device)
         for i in range(2):
-            r0 = torch.sqrt(2.0 * torch.log(C * (r0 * r0 * alphas) ** (l + 1) + 1.) / alphas)
-        rcut = torch.max(r0)
+            r0 = torch.sqrt(2.0 * torch.log(C * (r0 * r0 * alphas) ** (langmom + 1) + 1.) / alphas)
+        rcut = float(torch.max(r0).detach())
 
         # get the lattice translation vectors and the exponential factors
         ls = np.asarray(lattice.get_lattice_ls(rcut=rcut))
@@ -148,7 +143,7 @@ class PBCIntor(object):
 
         # if the ls is too big, it might produce segfault
         if (ls.shape[0] > 1e6):
-            warnings.warn("The number of neighbors in the integral is too many, "\
+            warnings.warn("The number of neighbors in the integral is too many, "
                           "it might causes segfault")
 
         # perform the integration
@@ -210,9 +205,9 @@ def _concat_atm_bas_env(wrapper: LibcintWrapper, other: LibcintWrapper) -> Tuple
     atm2 = np.copy(atm2)
     bas2 = np.copy(bas2)
     atm2[:, PTR_COORD] += off
-    atm2[:, PTR_ZETA ] += off
-    bas2[:, ATOM_OF  ] += natm_off
-    bas2[:, PTR_EXP  ] += off
+    atm2[:, PTR_ZETA] += off
+    bas2[:, ATOM_OF] += natm_off
+    bas2[:, PTR_EXP] += off
     bas2[:, PTR_COEFF] += off
 
     # get the new ao_loc
