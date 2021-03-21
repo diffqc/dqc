@@ -17,9 +17,9 @@ except ImportError:
     raise ImportError("pyscf is needed for this test")
 
 AtomEnv = namedtuple("AtomEnv", ["poss", "basis", "rgrid", "atomzs"])
+dtype = torch.double
 
-def get_atom_env(dtype, basis="3-21G", ngrid=0, pos_requires_grad=True, atomz=1):
-    d = 0.8
+def get_atom_env(dtype, basis="3-21G", ngrid=0, pos_requires_grad=True, atomz=1, d=0.8):
     pos1 = torch.tensor([0.0, 0.0, d], dtype=dtype, requires_grad=pos_requires_grad)
     pos2 = torch.tensor([0.0, 0.0, -d], dtype=dtype, requires_grad=pos_requires_grad)
     poss = [pos1, pos2]
@@ -41,6 +41,20 @@ def get_atom_env(dtype, basis="3-21G", ngrid=0, pos_requires_grad=True, atomz=1)
     )
     return atomenv
 
+def get_wrapper(atomenv, spherical=True, lattice=None):
+    # get the wrapper from the given atom environment (i.e. the output of the
+    # get_atom_env function)
+    allbases = [
+        loadbasis("%d:%s" % (max(atomz, 1), atomenv.basis), dtype=dtype, requires_grad=False)
+        for atomz in atomenv.atomzs
+    ]
+    atombases = [
+        AtomCGTOBasis(atomz=atomenv.atomzs[0], bases=allbases[0], pos=atomenv.poss[0]),
+        AtomCGTOBasis(atomz=atomenv.atomzs[1], bases=allbases[1], pos=atomenv.poss[1]),
+    ]
+    wrap = intor.LibcintWrapper(atombases, spherical=spherical, lattice=lattice)
+    return wrap
+
 def get_mol_pyscf(dtype, basis="3-21G"):
     d = 0.8
     mol = pyscf.gto.M(atom="H 0 0 {d}; H 0 0 -{d}".format(d=d), basis=basis, unit="Bohr")
@@ -60,6 +74,7 @@ def get_int_type_and_frac(int_type):
         is_z_frac = True
     return int_type, is_z_frac
 
+#################### intors ####################
 @pytest.mark.parametrize(
     "int_type",
     ["overlap", "kinetic", "nuclattr", "elrep", "elrep3c"]
@@ -514,3 +529,66 @@ def test_pbc_integral_1e_vs_pyscf(int_type):
     print(mat)
     print(mat_scf)
     assert torch.allclose(torch.as_tensor(mat_scf, dtype=mat.dtype), mat, atol=2e-6)
+
+#################### misc properties of LibcintWrapper ####################
+def test_wrapper_concat():
+    # get the wrappers
+    atomenv1 = get_atom_env(dtype, d=2.0)
+    env1 = get_wrapper(atomenv1, spherical=True)
+    env1s = env1[: len(env1) // 2]
+
+    atomenv2 = get_atom_env(dtype, atomz=0, d=1.0)
+    env2 = get_wrapper(atomenv2, spherical=True)
+    env2s = env2[: len(env2) // 2]
+
+    env3 = get_wrapper(atomenv2, spherical=False)
+
+    # concatenate the wrappers (with the same spherical)
+    wrap1, wrap2 = intor.LibcintWrapper.concatenate(env1, env2)
+    assert len(wrap1) == len(env1)
+    assert len(wrap2) == len(env2)
+    assert wrap1.shell_idxs == (0, len(wrap1))
+    assert wrap2.shell_idxs == (len(wrap1), len(wrap1) + len(wrap2))
+    assert isinstance(wrap1, intor.SubsetLibcintWrapper)
+    assert wrap1.parent is wrap2.parent
+    assert wrap1.parent.atombases == env1.atombases + env2.atombases
+    for i in range(3):
+        assert len(wrap1.params[i]) == len(env1.params[i]) + len(env2.params[i])
+
+    # concatenate the subset with another subset
+    wrap1s, wrap2s = intor.LibcintWrapper.concatenate(env1s, env2s)
+    assert len(wrap1s) == len(env1s)
+    assert len(wrap2s) == len(env2s)
+    assert wrap1s.shell_idxs == env1s.shell_idxs
+    assert wrap2s.shell_idxs == (env2s.shell_idxs[0] + len(env1), env2s.shell_idxs[1] + len(env1))
+    assert isinstance(wrap1s, intor.SubsetLibcintWrapper)
+    assert wrap1s.parent is wrap2s.parent
+    assert wrap1s.parent.atombases == env1s.atombases + env2s.atombases
+    for i in range(3):
+        assert len(wrap1s.params[i]) == len(env1.params[i]) + len(env2.params[i])
+
+    # concatenate 3 wrappers with some share the same parent
+    wrap1, wrap2s, wrap1s = intor.LibcintWrapper.concatenate(env1, env2s, env1s)
+    assert len(wrap1) == len(env1)
+    assert len(wrap2s) == len(env2s)
+    assert len(wrap1s) == len(env1s)
+    off1 = len(env1)
+    assert wrap1.shell_idxs == env1.shell_idxs
+    assert wrap2s.shell_idxs == (env2s.shell_idxs[0] + off1, env2s.shell_idxs[1] + off1)
+    assert wrap1s.shell_idxs == env1s.shell_idxs  # it belongs to the first parent
+    for i in range(3):
+        assert len(wrap1.params[i]) == len(env1.params[i]) + len(env2.params[i])
+
+    # the case with the same parent
+    wrap1, wrap1s = intor.LibcintWrapper.concatenate(env1, env1s)
+    assert wrap1 is env1
+    assert wrap1s is env1s
+    for i in range(3):
+        assert len(wrap1.params[i]) == len(env1.params[i])
+
+    # concatenate with the unequal spherical
+    try:
+        wrap2, wrap3 = intor.LibcintWrapper.concatenate(env2, env3)
+        assert False
+    except AssertionError:  # TODO: change into ValueError
+        pass

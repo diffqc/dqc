@@ -1,7 +1,8 @@
 from __future__ import annotations
 from functools import lru_cache
 from contextlib import contextmanager
-from typing import List, Tuple, Iterator
+from typing import List, Tuple, Iterator, Optional, Dict
+import copy
 import torch
 import numpy as np
 from dqc.utils.datastruct import AtomCGTOBasis, CGTOBasis
@@ -129,8 +130,7 @@ class LibcintWrapper(object):
         return self._basis_normalized
 
     @property
-    def lattice(self) -> Lattice:
-        assert self._lattice is not None
+    def lattice(self) -> Optional[Lattice]:
         return self._lattice
 
     @property
@@ -275,6 +275,73 @@ class LibcintWrapper(object):
         uao2ao_res = torch.tensor(uao2ao, dtype=torch.long, device=self.device)
         return uncontr_wrapper, uao2ao_res
 
+    @staticmethod
+    def concatenate(*wrappers: LibcintWrapper) \
+            -> Tuple[LibcintWrapper, ...]:
+        """
+        Concatenate the parents of wrappers, then returns the subsets
+        corresponds to the wrappers.
+        This function returns an environment that contains all the atoms from
+        the parents of all the wrappers.
+        If all the wrappers are from the same parent, then this function does
+        not do anything.
+
+        Arguments
+        ---------
+        *wrappers: LibcintWrapper
+            List of LibcintWrapper to be concatenated
+        """
+
+        # construct the parent mapping
+        unique_parents: List[LibcintWrapper] = []
+        unique_pids: Dict[int, int] = {}
+        w2pidx: List[int] = []
+        shell_idxs: List[Tuple[int, int]] = []
+        cumsum_plen: List[int] = [0]
+        for w in wrappers:
+            parent = w.parent if isinstance(w, SubsetLibcintWrapper) else w
+            pid = id(parent)
+            shell_idxs.append(w.shell_idxs)
+            if pid not in unique_pids:
+                idx = len(unique_parents)
+                unique_pids[pid] = idx
+                unique_parents.append(parent)
+                cumsum_plen.append(cumsum_plen[-1] + len(parent))
+            w2pidx.append(unique_pids[pid])
+
+        # check the length of the unique parents, if there is only 1 unique parent,
+        # then just return as it is
+        assert len(unique_parents) > 0
+        if len(unique_parents) == 1:
+            return (*wrappers,)
+
+        # check if the unique parents have the same options (except for the atombases)
+        p0 = unique_parents[0]
+        sph = p0.spherical
+        latt = p0.lattice
+        basis_normed = p0.basis_normalized
+        atombases = copy.copy(p0.atombases)  # shallow copy
+        for p in unique_parents[1:]:
+            assert p.spherical == sph
+            assert p.lattice == latt
+            assert p.basis_normalized == basis_normed
+            atombases.extend(p.atombases)
+
+        # get the grand environment
+        grandp = LibcintWrapper(atombases, spherical=sph,
+                                basis_normalized=basis_normed, lattice=latt)
+
+        # get the subsets which correspond to the input wrappers
+        res: List[LibcintWrapper] = []
+        for i, w in enumerate(wrappers):
+            sh_idx0, sh_idx1 = shell_idxs[i]
+            offset = cumsum_plen[w2pidx[i]]
+            sh_idx0 = sh_idx0 + offset
+            sh_idx1 = sh_idx1 + offset
+            res.append(grandp[sh_idx0:sh_idx1])
+
+        return (*res,)
+
     ############### misc functions ###############
     @contextmanager
     def centre_on_r(self, r: torch.Tensor) -> Iterator:
@@ -331,6 +398,10 @@ class SubsetLibcintWrapper(LibcintWrapper):
     def __init__(self, parent: LibcintWrapper, subset: slice):
         self._parent = parent
         self._shell_idxs = subset.start, subset.stop
+
+    @property
+    def parent(self) -> LibcintWrapper:
+        return self._parent
 
     @property
     def shell_idxs(self) -> Tuple[int, int]:
