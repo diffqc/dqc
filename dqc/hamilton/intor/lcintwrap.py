@@ -253,13 +253,12 @@ class LibcintWrapper(object):
                 coeffs = shell.coeffs
                 normalized = shell.normalized
                 new_bases.extend([
-                    CGTOBasis(angmom, alpha[None], coeff[None], normalized=normalized) \
+                    CGTOBasis(angmom, alpha[None], coeff[None], normalized=normalized)
                     for (alpha, coeff) in zip(alphas, coeffs)
                 ])
             new_atombases.append(AtomCGTOBasis(atomz=atomz, bases=new_bases, pos=pos))
         uncontr_wrapper = LibcintWrapper(
-            new_atombases, spherical=self.spherical,
-            )
+            new_atombases, spherical=self.spherical)
 
         # get the mapping uncontracted ao to the contracted ao
         uao2ao: List[int] = []

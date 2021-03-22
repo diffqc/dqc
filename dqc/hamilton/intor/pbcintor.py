@@ -149,7 +149,7 @@ def pbc_kinetic(wrapper: LibcintWrapper, other: Optional[LibcintWrapper] = None,
     return pbc_int1e("kin", wrapper, other=other, kpts=kpts, options=options)
 
 def pbc_coul3c(wrapper: LibcintWrapper, other: Optional[LibcintWrapper] = None,
-               auxwrapper: Optional[torch.Tensor] = None,
+               auxwrapper: Optional[LibcintWrapper] = None,
                kpts_ij: Optional[torch.Tensor] = None,
                options: Optional[PBCIntOption] = None) -> torch.Tensor:
     return pbc_int3c2e("ar12", wrapper, other1=other, other2=auxwrapper,
@@ -199,7 +199,7 @@ class _PBCInt3cFunction(torch.autograd.Function):
         # kpts_ij: (nkpts, 2, ndim)
 
         out_tensor = PBCIntor(int_type, shortname, wrappers, kpts_ij, options).calc()
-        ctx.save_for_backward(allcoeffs, allalphas, allposs, alattice, kpts)
+        ctx.save_for_backward(allcoeffs, allalphas, allposs, alattice, kpts_ij)
         ctx.other_info = (wrappers, int_type, shortname, options)
         return out_tensor
 
@@ -312,9 +312,9 @@ class PBCIntor(object):
             np2ctypes(bas), int2ctypes(bas.shape[0]),
             np2ctypes(env), int2ctypes(env.size))
 
-        out = torch.as_tensor(out, dtype=get_complex_dtype(self.dtype),
-                              device=self.device)
-        return out
+        out_tensor = torch.as_tensor(out, dtype=get_complex_dtype(self.dtype),
+                                     device=self.device)
+        return out_tensor
 
     def _int3c(self) -> torch.Tensor:
         # 3-centre integral
@@ -380,9 +380,9 @@ class PBCIntor(object):
             np2ctypes(bas), int2ctypes(bas.shape[0]),
             np2ctypes(env), int2ctypes(env.size))
 
-        out = torch.as_tensor(out, dtype=get_complex_dtype(self.dtype),
-                              device=self.device)
-        return out
+        out_tensor = torch.as_tensor(out, dtype=get_complex_dtype(self.dtype),
+                                     device=self.device)
+        return out_tensor
 
 ################# helper functions #################
 def _check_and_set_pbc(wrapper: LibcintWrapper, other: Optional[LibcintWrapper]) -> LibcintWrapper:
