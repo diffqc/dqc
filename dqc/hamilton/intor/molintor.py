@@ -109,10 +109,12 @@ def _check_and_set(wrapper: LibcintWrapper, other: Optional[LibcintWrapper]) -> 
     # check the value and set the default value of "other" in the integrals
     if other is not None:
         atm0, bas0, env0 = wrapper.atm_bas_env
-        atm1, bas1, env1 = wrapper.atm_bas_env
-        assert id(atm0) == id(atm1)
-        assert id(bas0) == id(bas1)
-        assert id(env0) == id(env1)
+        atm1, bas1, env1 = other.atm_bas_env
+        msg = ("Argument `other*` does not have the same parent as the wrapper. "
+               "Please do `concatenate` on those wrappers first.")
+        assert id(atm0) == id(atm1), msg
+        assert id(bas0) == id(bas1), msg
+        assert id(env0) == id(env1), msg
     else:
         other = wrapper
     assert isinstance(other, LibcintWrapper)
