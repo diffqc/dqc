@@ -21,6 +21,7 @@ class CGTOBasis:
     angmom: int
     alphas: torch.Tensor  # (nbasis,)
     coeffs: torch.Tensor  # (nbasis,)
+    normalized: bool = False
 
 @dataclass
 class AtomCGTOBasis:

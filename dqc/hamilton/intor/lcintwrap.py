@@ -22,10 +22,9 @@ PTR_RINV_ORIG = 4  # from libcint/src/cint_const.h
 
 class LibcintWrapper(object):
     def __init__(self, atombases: List[AtomCGTOBasis], spherical: bool = True,
-                 basis_normalized: bool = False, lattice: Optional[Lattice] = None) -> None:
+                 lattice: Optional[Lattice] = None) -> None:
         self._atombases = atombases
         self._spherical = spherical
-        self._basis_normalized = basis_normalized
         self._fracz = False
         self._natoms = len(atombases)
         self._lattice = lattice
@@ -73,7 +72,7 @@ class LibcintWrapper(object):
             for shell in atombasis.bases:
                 assert shell.alphas.shape == shell.coeffs.shape and shell.alphas.ndim == 1,\
                     "Please report this bug in Github"
-                normcoeff = self._normalize_basis(basis_normalized, shell.alphas, shell.coeffs, shell.angmom)
+                normcoeff = self._normalize_basis(shell.normalized, shell.alphas, shell.coeffs, shell.angmom)
                 ngauss = len(shell.alphas)
                 #                iatom, angmom,       ngauss, ncontr, kappa, ptr_exp
                 bas_list.append([iatom, shell.angmom, ngauss, 1, 0, ptr_env,
@@ -124,10 +123,6 @@ class LibcintWrapper(object):
     def fracz(self) -> bool:
         # indicating whether we are working with fractional z
         return self._fracz
-
-    @property
-    def basis_normalized(self) -> bool:
-        return self._basis_normalized
 
     @property
     def lattice(self) -> Optional[Lattice]:
@@ -256,13 +251,15 @@ class LibcintWrapper(object):
                 angmom = shell.angmom
                 alphas = shell.alphas
                 coeffs = shell.coeffs
+                normalized = shell.normalized
                 new_bases.extend([
-                    CGTOBasis(angmom, alpha[None], coeff[None]) for (alpha, coeff) in zip(alphas, coeffs)
+                    CGTOBasis(angmom, alpha[None], coeff[None], normalized=normalized) \
+                    for (alpha, coeff) in zip(alphas, coeffs)
                 ])
             new_atombases.append(AtomCGTOBasis(atomz=atomz, bases=new_bases, pos=pos))
         uncontr_wrapper = LibcintWrapper(
             new_atombases, spherical=self.spherical,
-            basis_normalized=self.basis_normalized)
+            )
 
         # get the mapping uncontracted ao to the contracted ao
         uao2ao: List[int] = []
@@ -319,17 +316,15 @@ class LibcintWrapper(object):
         p0 = unique_parents[0]
         sph = p0.spherical
         latt = p0.lattice
-        basis_normed = p0.basis_normalized
         atombases = copy.copy(p0.atombases)  # shallow copy
         for p in unique_parents[1:]:
             assert p.spherical == sph
             assert p.lattice == latt
-            assert p.basis_normalized == basis_normed
             atombases.extend(p.atombases)
 
         # get the grand environment
         grandp = LibcintWrapper(atombases, spherical=sph,
-                                basis_normalized=basis_normed, lattice=latt)
+                                lattice=latt)
 
         # get the subsets which correspond to the input wrappers
         res: List[LibcintWrapper] = []

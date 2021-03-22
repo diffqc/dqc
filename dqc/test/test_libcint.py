@@ -293,16 +293,16 @@ def test_integral_grad_basis(int_type):
     def get_int1e(alphas1, alphas2, coeffs1, coeffs2, name):
         # alphas*: (nangmoms, ngauss)
         bases1 = [
-            CGTOBasis(angmom=i, alphas=alphas1[i], coeffs=coeffs1[i])
+            CGTOBasis(angmom=i, alphas=alphas1[i], coeffs=coeffs1[i], normalized=True)
             for i in range(len(alphas1))
         ]
         bases2 = [
-            CGTOBasis(angmom=i, alphas=alphas2[i], coeffs=coeffs2[i])
+            CGTOBasis(angmom=i, alphas=alphas2[i], coeffs=coeffs2[i], normalized=True)
             for i in range(len(alphas2))
         ]
         atombasis1 = AtomCGTOBasis(atomz=atomenv.atomzs[0], bases=bases1, pos=pos1)
         atombasis2 = AtomCGTOBasis(atomz=atomenv.atomzs[1], bases=bases2, pos=pos2)
-        env = intor.LibcintWrapper([atombasis1, atombasis2], spherical=True, basis_normalized=True)
+        env = intor.LibcintWrapper([atombasis1, atombasis2], spherical=True)
         if name == "overlap":
             return intor.overlap(env)
         elif name == "kinetic":
@@ -347,7 +347,7 @@ def test_integral_subset_grad_basis(intc_type, allsubsets):
     def get_int1e(alphas1, alphas2, coeffs1, coeffs2, name):
         # alphas*: (nangmoms, ngauss)
         bases1 = [
-            CGTOBasis(angmom=i, alphas=alphas1[i], coeffs=coeffs1[i])
+            CGTOBasis(angmom=i, alphas=alphas1[i], coeffs=coeffs1[i], normalized=True)
             for i in range(len(alphas1))
         ]
         bases2 = [
@@ -356,7 +356,7 @@ def test_integral_subset_grad_basis(intc_type, allsubsets):
         ]
         atombasis1 = AtomCGTOBasis(atomz=atomenv.atomzs[0], bases=bases1, pos=pos1)
         atombasis2 = AtomCGTOBasis(atomz=atomenv.atomzs[1], bases=bases2, pos=pos2)
-        env = intor.LibcintWrapper([atombasis1, atombasis2], spherical=True, basis_normalized=True)
+        env = intor.LibcintWrapper([atombasis1, atombasis2], spherical=True)
         env1 = env[: len(env) // 2]
         env2 = env[len(env) // 2:] if allsubsets else env
         if name == "int2c":
@@ -514,9 +514,11 @@ def atest_pbc_integral_3c_vs_pyscf():
 
     # create the neutral aux wrapper (hydrogen at 0.0)
     basis_h = CGTOBasis(angmom=0, alphas=torch.tensor([alpha1], dtype=dtype),
-                        coeffs=torch.tensor([coeff1], dtype=dtype))
+                        coeffs=torch.tensor([coeff1], dtype=dtype),
+                        normalized=True)
     basis_hcomp = CGTOBasis(angmom=0, alphas=torch.tensor([alpha2], dtype=dtype),
-                            coeffs=torch.tensor([coeff2], dtype=dtype))
+                            coeffs=torch.tensor([coeff2], dtype=dtype),
+                            normalized=True)
     aux_atombases = [
         # real atom
         AtomCGTOBasis(atomz=1, bases=[basis_h],
@@ -526,7 +528,7 @@ def atest_pbc_integral_3c_vs_pyscf():
                       pos=torch.tensor([0.0, 0.0, 0.0], dtype=dtype)),
     ]
     auxwrapper = intor.LibcintWrapper(aux_atombases, spherical=True,
-                                      lattice=latt, basis_normalized=True)
+                                      lattice=latt)
 
     # env, auxwrapper = intor.LibcintWrapper.concatenate(env, auxwrapper)
     # mat = intor.pbc_coul3c(env, auxwrapper=auxwrapper, kpts_ij=kpts_ij)
