@@ -2,6 +2,7 @@ from collections import namedtuple
 import itertools
 import torch
 import pytest
+import numpy as np
 import warnings
 from dqc.api.loadbasis import loadbasis
 import dqc.hamilton.intor as intor
@@ -490,6 +491,67 @@ def test_pbc_integral_1e_vs_pyscf(int_type):
     print(mat)
     print(mat_scf)
     assert torch.allclose(torch.as_tensor(mat_scf, dtype=mat.dtype), mat, atol=2e-6)
+
+def atest_pbc_integral_3c_vs_pyscf():
+    # check if the pbc 3-centre integrals from dqc agrees with pyscf's aux_e2
+
+    atomenv = get_atom_env(dtype)
+    a = torch.tensor([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]], dtype=dtype) * 3
+    latt = Lattice(a)
+    env = get_wrapper(atomenv, spherical=True, lattice=latt)
+    kpts_ij = torch.tensor([
+        [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
+        [[0.0, 0.0, 0.0], [0.2, 0.1, 0.3]],
+        [[0.2, 0.1, 0.3], [0.0, 0.0, 0.0]],
+        [[0.2, 0.1, 0.3], [0.2, 0.1, 0.3]],
+    ], dtype=dtype)
+
+    normfcn = lambda alphas: 1.4366969770013325 * alphas ** 1.5
+    alpha1 = 1e8  # fake nuclear gauss
+    coeff1 = normfcn(alpha1)
+    alpha2 = 0.2  # compensating basis
+    coeff2 = normfcn(alpha2)
+
+    # create the neutral aux wrapper (hydrogen at 0.0)
+    basis_h = CGTOBasis(angmom=0, alphas=torch.tensor([alpha1], dtype=dtype),
+                        coeffs=torch.tensor([coeff1], dtype=dtype))
+    basis_hcomp = CGTOBasis(angmom=0, alphas=torch.tensor([alpha2], dtype=dtype),
+                            coeffs=torch.tensor([coeff2], dtype=dtype))
+    aux_atombases = [
+        # real atom
+        AtomCGTOBasis(atomz=1, bases=[basis_h],
+                      pos=torch.tensor([0.0, 0.0, 0.0], dtype=dtype)),
+        # compensating basis
+        AtomCGTOBasis(atomz=-1, bases=[basis_hcomp],
+                      pos=torch.tensor([0.0, 0.0, 0.0], dtype=dtype)),
+    ]
+    auxwrapper = intor.LibcintWrapper(aux_atombases, spherical=True,
+                                      lattice=latt, basis_normalized=True)
+
+    # env, auxwrapper = intor.LibcintWrapper.concatenate(env, auxwrapper)
+    # mat = intor.pbc_coul3c(env, auxwrapper=auxwrapper, kpts_ij=kpts_ij)
+    # print(mat)
+    # print(mat.shape)
+    # raise RuntimeError
+
+    # construct the pyscf systems
+    cell = get_cell_pyscf(dtype, a.detach().numpy())
+    auxbasis = pyscf.gto.basis.parse("""
+    H     S
+          %f       1.0
+    H     S
+          %f       1.0
+    """ % (alpha1, alpha2))
+    auxcell = pyscf.pbc.gto.C(atom="H 0 0 0", a=a.detach().numpy(), spin=1, basis=auxbasis, unit="Bohr")
+    # manually change the coefficients of the basis
+    auxcell._env[-1] = coeff2
+    auxcell._env[-3] = coeff1
+    pyscf_mat_c = pyscf.pbc.df.incore.aux_e2(cell, auxcell, kptij_lst=kpts_ij.numpy())
+    pyscf_mat = pyscf_mat_c[..., 0] - pyscf_mat_c[..., 1]
+    print(pyscf_mat_c)
+    print(pyscf_mat)
+    print(pyscf_mat_c.shape)
+    raise RuntimeError
 
 #################### misc properties of LibcintWrapper ####################
 def test_wrapper_concat():
