@@ -115,6 +115,12 @@ class LibcintWrapper(object):
         self._ao_to_atom = torch.tensor(ao_to_atom, dtype=torch.long, device=self.device)
 
     @property
+    def parent(self) -> LibcintWrapper:
+        # parent is defined as the full LibcintWrapper where it takes the full
+        # shells for the integration (without the need for subsetting)
+        return self
+
+    @property
     def natoms(self) -> int:
         # return the number of atoms in the environment
         return self._natoms
@@ -295,7 +301,7 @@ class LibcintWrapper(object):
         shell_idxs: List[Tuple[int, int]] = []
         cumsum_plen: List[int] = [0]
         for w in wrappers:
-            parent = w.parent if isinstance(w, SubsetLibcintWrapper) else w
+            parent = w.parent
             pid = id(parent)
             shell_idxs.append(w.shell_idxs)
             if pid not in unique_pids:

@@ -492,7 +492,7 @@ def test_pbc_integral_1e_vs_pyscf(int_type):
     print(mat_scf)
     assert torch.allclose(torch.as_tensor(mat_scf, dtype=mat.dtype), mat, atol=2e-6)
 
-def atest_pbc_integral_3c_vs_pyscf():
+def test_pbc_integral_3c_vs_pyscf():
     # check if the pbc 3-centre integrals from dqc agrees with pyscf's aux_e2
 
     atomenv = get_atom_env(dtype)
@@ -524,36 +524,69 @@ def atest_pbc_integral_3c_vs_pyscf():
         AtomCGTOBasis(atomz=1, bases=[basis_h],
                       pos=torch.tensor([0.0, 0.0, 0.0], dtype=dtype)),
         # compensating basis
-        AtomCGTOBasis(atomz=-1, bases=[basis_hcomp],
+        AtomCGTOBasis(atomz=1, bases=[basis_hcomp],
                       pos=torch.tensor([0.0, 0.0, 0.0], dtype=dtype)),
     ]
     auxwrapper = intor.LibcintWrapper(aux_atombases, spherical=True,
                                       lattice=latt)
 
-    # env, auxwrapper = intor.LibcintWrapper.concatenate(env, auxwrapper)
-    # mat = intor.pbc_coul3c(env, auxwrapper=auxwrapper, kpts_ij=kpts_ij)
-    # print(mat)
-    # print(mat.shape)
-    # raise RuntimeError
+    env, auxwrapper = intor.LibcintWrapper.concatenate(env, auxwrapper)
+    mat_c = intor.pbc_coul3c(env, auxwrapper=auxwrapper, kpts_ij=kpts_ij)
+    mat = mat_c[..., 0] - mat_c[..., 1]
 
-    # construct the pyscf systems
-    cell = get_cell_pyscf(dtype, a.detach().numpy())
-    auxbasis = pyscf.gto.basis.parse("""
-    H     S
-          %f       1.0
-    H     S
-          %f       1.0
-    """ % (alpha1, alpha2))
-    auxcell = pyscf.pbc.gto.C(atom="H 0 0 0", a=a.detach().numpy(), spin=1, basis=auxbasis, unit="Bohr")
-    # manually change the coefficients of the basis
-    auxcell._env[-1] = coeff2
-    auxcell._env[-3] = coeff1
-    pyscf_mat_c = pyscf.pbc.df.incore.aux_e2(cell, auxcell, kptij_lst=kpts_ij.numpy())
-    pyscf_mat = pyscf_mat_c[..., 0] - pyscf_mat_c[..., 1]
-    print(pyscf_mat_c)
-    print(pyscf_mat)
-    print(pyscf_mat_c.shape)
-    raise RuntimeError
+    # matrix generated from pyscf (code to generate is below)
+
+    pyscf_mat = np.array(
+        [[2.10365731+0.00000000e+00j, 3.65363178+0.00000000e+00j,
+          1.46468006+0.00000000e+00j, 3.64358572+0.00000000e+00j,
+          3.65363178+0.00000000e+00j, 9.80184173+0.00000000e+00j,
+          3.64358572+0.00000000e+00j, 9.80160806+0.00000000e+00j,
+          1.46468006+0.00000000e+00j, 3.64358572+0.00000000e+00j,
+          2.10365731+0.00000000e+00j, 3.65363178+0.00000000e+00j,
+          3.64358572+0.00000000e+00j, 9.80160806+0.00000000e+00j,
+          3.65363178+0.00000000e+00j, 9.80184173+0.00000000e+00j],
+         [1.9332373 -2.20446277e-01j, 2.7657514 -5.59129356e-01j,
+          1.29893831+2.30596505e-01j, 2.69558993+7.53783995e-01j,
+          3.2646191 -4.79168666e-01j, 7.23089875-1.73984640e+00j,
+          3.25474826+4.79265696e-01j, 7.22941127+1.74381109e+00j,
+          1.29893831-2.30596505e-01j, 2.69558993-7.53783995e-01j,
+          1.9332373 +2.20446277e-01j, 2.7657514 +5.59129356e-01j,
+          3.25474826-4.79265696e-01j, 7.22941127-1.74381109e+00j,
+          3.2646191 +4.79168666e-01j, 7.23089875+1.73984640e+00j],
+         [1.9332373 +2.20446277e-01j, 3.2646191 +4.79168666e-01j,
+          1.29893831+2.30596505e-01j, 3.25474826+4.79265696e-01j,
+          2.7657514 +5.59129356e-01j, 7.23089875+1.73984640e+00j,
+          2.69558993+7.53783995e-01j, 7.22941127+1.74381109e+00j,
+          1.29893831-2.30596505e-01j, 3.25474826-4.79265696e-01j,
+          1.9332373 -2.20446277e-01j, 3.2646191 -4.79168666e-01j,
+          2.69558993-7.53783995e-01j, 7.22941127-1.74381109e+00j,
+          2.7657514 -5.59129356e-01j, 7.23089875-1.73984640e+00j],
+         [2.05974021-1.11716192e-15j, 2.9256911 -1.36705691e-01j,
+          1.22676707+4.73067139e-01j, 2.63603451+1.20083173e+00j,
+          2.9256911 +1.36705691e-01j, 6.69912144+7.10542736e-15j,
+          2.63603451+1.20083173e+00j, 5.95491913+3.06327919e+00j,
+          1.22676707-4.73067139e-01j, 2.63603451-1.20083173e+00j,
+          2.05974021-1.11022302e-15j, 2.9256911 +1.36705691e-01j,
+          2.63603451-1.20083173e+00j, 5.95491913-3.06327919e+00j,
+          2.9256911 -1.36705691e-01j, 6.69912144+8.88178420e-16j]])
+
+    # # code to generate the pyscf_mat
+    # cell = get_cell_pyscf(dtype, a.detach().numpy())
+    # auxbasis = pyscf.gto.basis.parse("""
+    # H     S
+    #       %f       1.0
+    # H     S
+    #       %f       1.0
+    # """ % (alpha1, alpha2))
+    # auxcell = pyscf.pbc.gto.C(atom="H 0 0 0", a=a.detach().numpy(), spin=1, basis=auxbasis, unit="Bohr")
+    # # manually change the coefficients of the basis
+    # auxcell._env[-1] = coeff2
+    # auxcell._env[-3] = coeff1
+    # pyscf_mat_c = pyscf.pbc.df.incore.aux_e2(cell, auxcell, kptij_lst=kpts_ij.numpy())
+    # pyscf_mat = pyscf_mat_c[..., 0] - pyscf_mat_c[..., 1]
+
+    print(mat.view(-1))
+    assert torch.allclose(mat.view(-1), torch.as_tensor(pyscf_mat, dtype=mat.dtype).view(-1))
 
 #################### misc properties of LibcintWrapper ####################
 def test_wrapper_concat():

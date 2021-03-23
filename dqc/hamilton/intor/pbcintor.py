@@ -276,7 +276,7 @@ class PBCIntor(object):
         atm, bas, env, ao_loc = _concat_atm_bas_env(self.wrappers[0], self.wrappers[1])
         i0, i1 = self.wrappers[0].shell_idxs
         j0, j1 = self.wrappers[1].shell_idxs
-        nshls0 = len(self.wrappers[0])
+        nshls0 = len(self.wrappers[0].parent)
         shls_slice = (i0, i1, j0 + nshls0, j1 + nshls0)
 
         # prepare the output
@@ -331,8 +331,8 @@ class PBCIntor(object):
         i0, i1 = self.wrappers[0].shell_idxs
         j0, j1 = self.wrappers[1].shell_idxs
         k0, k1 = self.wrappers[2].shell_idxs
-        nshls0 = len(self.wrappers[0])
-        nshls01 = len(self.wrappers[1]) + nshls0
+        nshls0 = len(self.wrappers[0].parent)
+        nshls01 = len(self.wrappers[1].parent) + nshls0
         shls_slice = (i0, i1, j0 + nshls0, j1 + nshls0, k0 + nshls01, k1 + nshls01)
 
         # kpts is actually kpts_ij in this function
@@ -349,7 +349,7 @@ class PBCIntor(object):
                                  axis=0, return_index=True)
         kpts = kpts_stack[kpts_idxs, :]
         nkpts = len(kpts)
-        expkl = np.exp(1j * np.dot(kpts, self.ls.T))
+        expkl = np.asarray(np.exp(1j * np.dot(kpts, self.ls.T)), order="C")
 
         # get the kpts_ij_idxs
         # TODO: check if it is the index inverse from unique
@@ -359,7 +359,8 @@ class PBCIntor(object):
 
         # prepare the optimizers
         # TODO: use proper optimizers
-        cintopt = _get_intgl_optimizer(self.opname, atm, bas, env)
+        # NOTE: using _get_intgl_optimizer in this case produce wrong results (I don't know why)
+        cintopt = c_null_ptr()  # _get_intgl_optimizer(self.opname, atm, bas, env)
         cpbcopt = c_null_ptr()
 
         # do the integration
