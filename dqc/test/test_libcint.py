@@ -492,6 +492,46 @@ def test_pbc_integral_1e_vs_pyscf(int_type):
     print(mat_scf)
     assert torch.allclose(torch.as_tensor(mat_scf, dtype=mat.dtype), mat, atol=2e-6)
 
+@pytest.mark.parametrize(
+    "int_type",
+    ["overlap", "kinetic"]
+)
+def test_pbc_integral_1e_vs_pyscf_subset(int_type):
+    # check if the pbc 1-electron integrals from dqc agrees with pyscf's pbc_intor
+    # this function specifically test the integral with a subset
+
+    atomenv = get_atom_env(dtype)
+    a = torch.tensor([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]], dtype=dtype)
+    env = get_wrapper(atomenv, spherical=True, lattice=Lattice(a))
+    env1 = env[: len(env) // 2]
+    env2 = env[len(env) // 2:]
+    kpts = torch.tensor([
+        [0.0, 0.0, 0.0],
+        [0.2, 0.1, 0.3],
+    ], dtype=dtype)
+    if int_type == "overlap":
+        fcn = intor.pbc_overlap
+    elif int_type == "kinetic":
+        fcn = intor.pbc_kinetic
+    else:
+        raise RuntimeError("Unknown int_type: %s" % int_type)
+    mat_full = fcn(env, kpts=kpts)
+    mat1_0 = fcn(env , other=env1, kpts=kpts)
+    mat1_1 = fcn(env1, other=env1, kpts=kpts)
+    mat1_2 = fcn(env1, other=env , kpts=kpts)
+    mat2_0 = fcn(env , other=env2, kpts=kpts)
+    mat2_1 = fcn(env2, other=env2, kpts=kpts)
+    mat2_2 = fcn(env2, other=env , kpts=kpts)
+    nenv1 = env1.nao()
+    nenv2 = env2.nao()
+
+    assert torch.allclose(mat_full[:, :, :nenv1], mat1_0)
+    assert torch.allclose(mat_full[:, :nenv1, :nenv1], mat1_1)
+    assert torch.allclose(mat_full[:, :nenv1, :], mat1_2)
+    assert torch.allclose(mat_full[:, :, nenv2:], mat2_0)
+    assert torch.allclose(mat_full[:, nenv2:, nenv2:], mat2_1)
+    assert torch.allclose(mat_full[:, nenv2:, :], mat2_2)
+
 def test_pbc_integral_3c_vs_pyscf():
     # check if the pbc 3-centre integrals from dqc agrees with pyscf's aux_e2
 
