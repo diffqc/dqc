@@ -1,4 +1,4 @@
-from typing import List, Union, Optional, Tuple, Dict
+from typing import List, Union, Optional, Tuple
 import torch
 import numpy as np
 from dqc.hamilton.base_hamilton import BaseHamilton
