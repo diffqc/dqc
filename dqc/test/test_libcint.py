@@ -542,6 +542,76 @@ def test_pbc_integral_1e_vs_pyscf_subset(int_type):
     assert torch.allclose(mat_full[:, nenv2:, nenv2:], mat2_1)
     assert torch.allclose(mat_full[:, nenv2:, :], mat2_2)
 
+def test_pbc_integral_2c2e_vs_pyscf():
+    # check if the pbc 2-centre 2-electron integrals from dqc agrees with
+    # pyscf's int2c2e_sph
+    # this test uses compensating charge to make the integral converge
+
+    a = torch.tensor([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]], dtype=dtype) * 3
+    latt = Lattice(a)
+    kpts = torch.tensor([
+        [0.0, 0.0, 0.0],
+        [0.2, 0.1, 0.3],
+    ], dtype=dtype)
+
+    normfcn = lambda alphas: 1.4366969770013325 * alphas ** 1.5
+    alpha1 = 1.0  # dummy alpha
+    alpha2 = 0.2  # compensating basis
+
+    # create the neutral aux wrapper (hydrogen at 0.0)
+    basis_h0 = CGTOBasis(angmom=0, alphas=torch.tensor([alpha1], dtype=dtype),
+                         coeffs=torch.tensor([normfcn(alpha1)], dtype=dtype),
+                         normalized=True)
+    basis_h1 = CGTOBasis(angmom=0, alphas=torch.tensor([2 * alpha1], dtype=dtype),
+                         coeffs=torch.tensor([normfcn(2 * alpha1)], dtype=dtype),
+                         normalized=True)
+    basis_hcomp0 = CGTOBasis(angmom=0, alphas=torch.tensor([alpha2], dtype=dtype),
+                             coeffs=torch.tensor([normfcn(alpha2)], dtype=dtype),
+                             normalized=True)
+    basis_hcomp1 = CGTOBasis(angmom=0, alphas=torch.tensor([alpha2], dtype=dtype),
+                             coeffs=torch.tensor([normfcn(alpha2)], dtype=dtype),
+                             normalized=True)
+    aux_atombases = [
+        # real atom
+        AtomCGTOBasis(atomz=1, bases=[basis_h0, basis_h1],
+                      pos=torch.tensor([0.0, 0.0, 0.0], dtype=dtype)),
+        # compensating basis
+        AtomCGTOBasis(atomz=-1, bases=[basis_hcomp0, basis_hcomp1],
+                      pos=torch.tensor([0.0, 0.0, 0.0], dtype=dtype)),
+    ]
+    n = 2  # number of nao per atom
+    auxwrapper = intor.LibcintWrapper(aux_atombases, spherical=True,
+                                      lattice=latt)
+
+    mat_c = intor.pbc_coul2c(auxwrapper, other=auxwrapper, kpts=kpts)  # (nkpts, ni, nj)
+    # get the sum of charge (+compensating basis to make it converge)
+    mat = mat_c[..., :n, :n] - mat_c[..., :n, n:] - mat_c[..., n:, :n] + mat_c[..., n:, n:]
+
+    # code to generate the pyscf_mat
+    auxbasis = pyscf.gto.basis.parse("""
+    H     S
+          %f       1.0
+    H     S
+          %f       1.0
+    H     S
+          %f       1.0
+    H     S
+          %f       1.0
+    """ % (alpha1, 2 * alpha1, alpha2, alpha2))
+    int_name = "int2c2e_sph"
+    auxcell = pyscf.pbc.gto.C(atom="H 0 0 0", a=a.detach().numpy(), spin=1, basis=auxbasis, unit="Bohr")
+    # manually change the coefficients of the basis
+    auxcell._env[-1] = normfcn(alpha2)
+    auxcell._env[-3] = normfcn(alpha2)
+    auxcell._env[-5] = normfcn(2 * alpha1)
+    auxcell._env[-7] = normfcn(alpha1)
+    pyscf_mat_c = np.asarray(auxcell.pbc_intor(int_name, kpts=kpts.detach().numpy()))
+    pyscf_mat = pyscf_mat_c[..., :n, :n] - pyscf_mat_c[..., :n, n:] \
+                - pyscf_mat_c[..., n:, :n] + pyscf_mat_c[..., n:, n:]
+
+    print(mat.view(-1))
+    assert torch.allclose(mat.view(-1), torch.as_tensor(pyscf_mat, dtype=mat.dtype).view(-1))
+
 def test_pbc_integral_3c_vs_pyscf():
     # check if the pbc 3-centre integrals from dqc agrees with pyscf's aux_e2
 
