@@ -249,7 +249,6 @@ class _Int2cFunction(torch.autograd.Function):
         # gradient for the basis coefficients
         grad_allcoeffs: Optional[torch.Tensor] = None
         grad_allalphas: Optional[torch.Tensor] = None
-        print("OK1")
         if allcoeffs.requires_grad or allalphas.requires_grad:
             # obtain the uncontracted wrapper and mapping
             # uao2aos: list of (nu_ao0,), (nu_ao1,)
@@ -266,7 +265,6 @@ class _Int2cFunction(torch.autograd.Function):
             ao2shl1 = u_wrappers[1].ao_to_shell()
 
             # calculate the gradient w.r.t. coeffs
-            print("OK2")
             if allcoeffs.requires_grad:
                 grad_allcoeffs = torch.zeros_like(allcoeffs)  # (ngauss)
 
@@ -294,34 +292,26 @@ class _Int2cFunction(torch.autograd.Function):
                 grad_allcoeffs.scatter_add_(dim=-1, index=ao2shl1, src=grad_dcoeff_j)
 
             # calculate the gradient w.r.t. alphas
-            print("OK3")
             if allalphas.requires_grad:
                 grad_allalphas = torch.zeros_like(allalphas)  # (ngauss)
 
-                print("OK4")
                 u_int_fcn = lambda u_wrappers, name: _Int2cFunction.apply(
                     *u_params, rinv_pos, u_wrappers, int_type, name)
 
                 # get the uncontracted integrals
-                print("OK5")
                 sname_derivs = [_get_intgl_deriv_shortname(int_type, shortname, s) for s in ("a1", "a2")]
-                print("OK6")
                 dout_dalphas = _get_integrals(sname_derivs, u_wrappers, int_type, u_int_fcn)
 
                 # (nu_ao)
                 # negative because the exponent is negative alpha * (r-ra)^2
-                print("OK7")
                 grad_dalpha_i = -torch.einsum("...ij,...ij->i", u_grad_out, dout_dalphas[0])
                 grad_dalpha_j = -torch.einsum("...ij,...ij->j", u_grad_out, dout_dalphas[1])
                 # grad_dalpha = (grad_dalpha_i + grad_dalpha_j)  # (nu_ao)
 
                 # scatter the grad
-                print("OK8")
                 grad_allalphas.scatter_add_(dim=-1, index=ao2shl0, src=grad_dalpha_i)
                 grad_allalphas.scatter_add_(dim=-1, index=ao2shl1, src=grad_dalpha_j)
-                print("OK9")
 
-        print("Done")
         return grad_allcoeffs, grad_allalphas, grad_allposs, \
             grad_rinv_pos, \
             None, None, None
@@ -806,7 +796,6 @@ def _get_integrals(int_names: List[str],
                 # only if the integral is available in the libcint-generated
                 # files
                 elif int_avail[j]:
-                    print("int_avail[j]:", int_names[j])
                     res_i = int_fcn(twrappers, int_names[j])
                     res_i = _transpose(res_i, transpose_path)
                     break
@@ -818,7 +807,6 @@ def _get_integrals(int_names: List[str],
         if res_i is None:
             # successfully executing the line below indicates that the integral
             # is available in the libcint-generated files
-            print("res_i:", int_names[i])
             res_i = int_fcn(wrappers, int_names[i])
             int_avail[i] = True
 
