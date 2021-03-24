@@ -9,6 +9,11 @@ from dqc.test.utils import assert_no_memleak_tensor
 
 # checks on memory leaks in Kohn-Sham iterations
 
+# This file is renamed to "test_a_mem.py" to make sure this file is executed
+# first before everything else.
+# Running other tests first with memory leak will increase the memory leak
+# consumption, so the small changes due to this test is undetectable.
+
 dtype = torch.float64
 
 class PseudoLDA(BaseXC):

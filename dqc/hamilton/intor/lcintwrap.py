@@ -8,6 +8,7 @@ import numpy as np
 from dqc.utils.datastruct import AtomCGTOBasis, CGTOBasis
 from dqc.hamilton.intor.utils import np2ctypes, int2ctypes, NDIM, CINT
 from dqc.system.tools import Lattice
+from dqc.utils.misc import memoize_method
 
 __all__ = ["LibcintWrapper", "SubsetLibcintWrapper"]
 
@@ -187,19 +188,19 @@ class LibcintWrapper(object):
         # returns the number of gaussian basis at the given shell
         return self._ngauss_at_shell_list
 
-    @lru_cache(maxsize=32)
+    @memoize_method
     def __len__(self) -> int:
         # total shells
         return self.shell_idxs[-1] - self.shell_idxs[0]
 
-    @lru_cache(maxsize=32)
+    @memoize_method
     def nao(self) -> int:
         # returns the number of atomic orbitals
         shell_idxs = self.shell_idxs
         return self.full_shell_to_aoloc[shell_idxs[-1]] - \
             self.full_shell_to_aoloc[shell_idxs[0]]
 
-    @lru_cache(maxsize=32)
+    @memoize_method
     def ao_idxs(self) -> Tuple[int, int]:
         # returns the lower and upper indices of the atomic orbitals of this object
         # in the full ao map (i.e. absolute indices)
@@ -207,14 +208,14 @@ class LibcintWrapper(object):
         return self.full_shell_to_aoloc[shell_idxs[0]], \
             self.full_shell_to_aoloc[shell_idxs[1]]
 
-    @lru_cache(maxsize=32)
+    @memoize_method
     def ao_to_atom(self) -> torch.Tensor:
         # get the relative mapping from atomic orbital relative index to the
         # absolute atom position
         # this is usually used in scatter in backward calculation
         return self.full_ao_to_atom[slice(*self.ao_idxs())]
 
-    @lru_cache(maxsize=32)
+    @memoize_method
     def ao_to_shell(self) -> torch.Tensor:
         # get the relative mapping from atomic orbital relative index to the
         # absolute shell position
@@ -243,7 +244,7 @@ class LibcintWrapper(object):
 
         return SubsetLibcintWrapper(self, inp)
 
-    @lru_cache(maxsize=32)
+    @memoize_method
     def get_uncontracted_wrapper(self) -> Tuple[LibcintWrapper, torch.Tensor]:
         # returns the uncontracted LibcintWrapper as well as the mapping from
         # uncontracted atomic orbital (relative index) to the relative index
@@ -407,7 +408,7 @@ class SubsetLibcintWrapper(LibcintWrapper):
     def shell_idxs(self) -> Tuple[int, int]:
         return self._shell_idxs
 
-    @lru_cache(maxsize=32)
+    @memoize_method
     def get_uncontracted_wrapper(self):
         # returns the uncontracted LibcintWrapper as well as the mapping from
         # uncontracted atomic orbital (relative index) to the relative index
