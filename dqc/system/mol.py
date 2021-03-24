@@ -1,4 +1,4 @@
-from typing import List, Union, Optional, Tuple
+from typing import List, Union, Optional, Tuple, Dict
 import torch
 import numpy as np
 from dqc.hamilton.base_hamilton import BaseHamilton
@@ -6,7 +6,8 @@ from dqc.hamilton.hcgto import HamiltonCGTO
 from dqc.system.base_system import BaseSystem
 from dqc.grid.base_grid import BaseGrid
 from dqc.grid.factory import get_grid
-from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, SpinParam, ZType, is_z_float
+from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, SpinParam, ZType, \
+                                 is_z_float, BasisInpType
 from dqc.utils.periodictable import get_atomz
 from dqc.utils.safeops import eps as util_eps, occnumber
 from dqc.api.loadbasis import loadbasis
@@ -55,7 +56,7 @@ class Mol(BaseSystem):
 
     def __init__(self,
                  moldesc: Union[str, Tuple[AtomZsType, AtomPosType]],
-                 basis: Union[str, List[CGTOBasis], List[str], List[List[CGTOBasis]]],
+                 basis: BasisInpType,
                  grid: Union[int, str] = "sg3",
                  spin: Optional[ZType] = None,
                  charge: ZType = 0,
@@ -212,9 +213,7 @@ def _parse_moldesc(moldesc: Union[str, Tuple[AtomZsType, AtomPosType]],
 
     return atomzs, atompos
 
-def _parse_basis(atomzs: torch.Tensor,
-                 basis: Union[str, List[CGTOBasis], List[str], List[List[CGTOBasis]]]) -> \
-        List[List[CGTOBasis]]:
+def _parse_basis(atomzs: torch.Tensor, basis: BasisInpType) -> List[List[CGTOBasis]]:
     # returns the list of cgto basis for every atoms
     natoms = len(atomzs)
 

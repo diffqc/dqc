@@ -1,3 +1,4 @@
+from __future__ import annotations
 import torch
 from dataclasses import dataclass
 from typing import Optional, Union, List, TypeVar, Generic
@@ -29,6 +30,9 @@ class AtomCGTOBasis:
     bases: List[CGTOBasis]
     pos: torch.Tensor  # (ndim,)
 
+# input basis type
+BasisInpType = Union[str, List[CGTOBasis], List[str], List[List[CGTOBasis]]]
+
 @dataclass
 class SpinParam(Generic[T]):
     u: T
@@ -41,22 +45,19 @@ class ValGrad:
     # ``(..., 3)``
     lapl: Optional[torch.Tensor] = None  # torch.Tensor of the laplace of the value
 
-def _add_densinfo(a: ValGrad, b: ValGrad) -> ValGrad:
-    return ValGrad(
-        value=a.value + b.value,
-        grad=a.grad + b.grad if a.grad is not None else None,
-        lapl=a.lapl + b.lapl if a.lapl is not None else None,
-    )
+    def __add__(self, b: ValGrad) -> ValGrad:
+        return ValGrad(
+            value=self.value + b.value,
+            grad=self.grad + b.grad if self.grad is not None else None,
+            lapl=self.lapl + b.lapl if self.lapl is not None else None,
+        )
 
-def _mul_densinfo(a: ValGrad, f: Union[float, int, torch.Tensor]) -> ValGrad:
-    if isinstance(f, torch.Tensor):
-        assert f.numel() == 1, "ValGrad multiplication with tensor can only be done with 1-element tensor"
+    def __mul__(self, f: Union[float, int, torch.Tensor]) -> ValGrad:
+        if isinstance(f, torch.Tensor):
+            assert f.numel() == 1, "ValGrad multiplication with tensor can only be done with 1-element tensor"
 
-    return ValGrad(
-        value=a.value * f,
-        grad=a.grad * f if a.grad is not None else None,
-        lapl=a.lapl * f if a.lapl is not None else None,
-    )
-
-ValGrad.__add__ = _add_densinfo  # type: ignore
-ValGrad.__mul__ = _mul_densinfo  # type: ignore
+        return ValGrad(
+            value=self.value * f,
+            grad=self.grad * f if self.grad is not None else None,
+            lapl=self.lapl * f if self.lapl is not None else None,
+        )
