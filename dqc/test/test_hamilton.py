@@ -20,7 +20,7 @@ def test_cgto_ao2dm(system1):
     # test ao2dm with a simple case
 
     hamilton1 = system1.get_hamiltonian()
-    nao = hamilton1.get_kinnucl().shape[-1]
+    nao = hamilton1.nao
     norb = nao // 2
     nbatch_orbw = (3,)
     nbatch_orb  = (2, 1)
@@ -49,7 +49,7 @@ def test_cgto_dm2grid(system1):
 
     torch.manual_seed(123)
     hamilton1 = system1.get_hamiltonian()
-    nao = hamilton1.get_kinnucl().shape[-1]
+    nao = hamilton1.nao
     nb = 4
 
     # prepare the density matrix

@@ -24,8 +24,7 @@ class HamiltonCGTO(BaseHamilton):
 
     @property
     def nao(self) -> int:
-        assert self.is_built, "Must run .build() first before calling this function"
-        return self.olp_mat.shape[-1]
+        return self.libcint_wrapper.nao()
 
     def build(self):
         # get the matrices (all (nao, nao), except el_mat)
