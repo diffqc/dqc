@@ -1,3 +1,4 @@
+from __future__ import annotations
 import torch
 import xitorch as xt
 from abc import abstractmethod, abstractproperty
@@ -19,9 +20,10 @@ class BaseHamilton(xt.EditableModule):
         pass
 
     @abstractmethod
-    def build(self) -> None:
+    def build(self) -> BaseHamilton:
         """
         Construct the elements needed for the Hamiltonian.
+        Heavy-lifting operations should be put here.
         """
         pass
 

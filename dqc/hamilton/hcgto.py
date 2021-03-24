@@ -26,7 +26,7 @@ class HamiltonCGTO(BaseHamilton):
     def nao(self) -> int:
         return self.libcint_wrapper.nao()
 
-    def build(self):
+    def build(self) -> BaseHamilton:
         # get the matrices (all (nao, nao), except el_mat)
         # these matrices have already been normalized
         self.olp_mat = intor.overlap(self.libcint_wrapper)
@@ -35,6 +35,7 @@ class HamiltonCGTO(BaseHamilton):
         self.kinnucl_mat = kin_mat + nucl_mat
         self.el_mat = intor.elrep(self.libcint_wrapper)  # (nao^4)
         self.is_built = True
+        return self
 
     def get_kinnucl(self) -> xt.LinearOperator:
         # kinnucl_mat: (nao, nao)

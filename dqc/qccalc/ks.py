@@ -138,8 +138,7 @@ class _KSEngine(xt.EditableModule):
 
         # build and setup basis and grid
         self.system.setup_grid()
-        self.hamilton = system.get_hamiltonian()
-        self.hamilton.build()
+        self.hamilton = system.get_hamiltonian().build()
         self.hamilton.setup_grid(system.get_grid(), self.xc)
 
         # get the orbital info
