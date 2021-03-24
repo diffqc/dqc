@@ -87,7 +87,7 @@ class BaseHamilton(xt.EditableModule):
     @abstractmethod
     def get_vext(self, vext: torch.Tensor) -> xt.LinearOperator:
         r"""
-        Returns a LinearOperatorof the external potential in the grid.
+        Returns a LinearOperator of the external potential in the grid.
 
         .. math::
             \mathbf{V}_{ij} = \int b_i(\mathbf{r}) V(\mathbf{r}) b_j(\mathbf{r})\ d\mathbf{r}
@@ -99,7 +99,7 @@ class BaseHamilton(xt.EditableModule):
     @abstractmethod
     def get_grad_vext(self, grad_vext: torch.Tensor) -> xt.LinearOperator:
         r"""
-        Returns a LinearOperatorof the external gradient potential in the grid.
+        Returns a LinearOperator of the external gradient potential in the grid.
 
         .. math::
             \mathbf{G}_{ij} = \int b_i(\mathbf{r}) \mathbf{G}(\mathbf{r}) \cdot \nabla b_j(\mathbf{r})\ d\mathbf{r}
