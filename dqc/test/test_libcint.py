@@ -78,7 +78,7 @@ def get_int_type_and_frac(int_type):
 #################### intors ####################
 @pytest.mark.parametrize(
     "int_type",
-    ["overlap", "kinetic", "nuclattr", "elrep", "elrep3c"]
+    ["overlap", "kinetic", "nuclattr", "elrep", "elrep2c", "elrep3c"]
 )
 def test_integral_vs_pyscf(int_type):
     # check if the integrals from dqc agrees with pyscf
@@ -94,6 +94,8 @@ def test_integral_vs_pyscf(int_type):
         mat = intor.nuclattr(env)
     elif int_type == "elrep":
         mat = intor.elrep(env)
+    elif int_type == "elrep2c":
+        mat = intor.elrep2c(env)
     elif int_type == "elrep3c":
         mat = intor.elrep3c(env)
 
@@ -107,6 +109,8 @@ def test_integral_vs_pyscf(int_type):
         int_name = "int1e_nuc_sph"
     elif int_type == "elrep":
         int_name = "int2e_sph"
+    elif int_type == "elrep2c":
+        int_name = "int2c2e_sph"
     elif int_type == "elrep3c":
         int_name = "int3c2e_sph"
     mat_scf = pyscf.gto.moleintor.getints(int_name, mol._atm, mol._bas, mol._env)
@@ -205,7 +209,8 @@ def test_nuc_integral_frac_atomz_grad():
 
 @pytest.mark.parametrize(
     "int_type",
-    ["overlap", "kinetic", "nuclattr", "nuclattr-frac", "elrep", "elrep3c"]
+    ["overlap", "kinetic", "nuclattr", "nuclattr-frac",
+     "elrep", "elrep2c", "elrep3c"]
 )
 def test_integral_grad_pos(int_type):
     int_type, is_z_frac = get_int_type_and_frac(int_type)
@@ -231,6 +236,8 @@ def test_integral_grad_pos(int_type):
             return intor.nuclattr(env)
         elif name == "elrep":
             return intor.elrep(env)
+        elif name == "elrep2c":
+            return intor.elrep2c(env)
         elif name == "elrep3c":
             return intor.elrep3c(env)
         else:
@@ -279,7 +286,8 @@ def test_integral_subset_grad_pos(intc_type, allsubsets):
 
 @pytest.mark.parametrize(
     "int_type",
-    ["overlap", "kinetic", "nuclattr", "nuclattr-frac", "elrep", "elrep3c"]
+    ["overlap", "kinetic", "nuclattr", "nuclattr-frac",
+     "elrep", "elrep2c", "elrep3c"]
 )
 def test_integral_grad_basis(int_type):
     int_type, is_z_frac = get_int_type_and_frac(int_type)
@@ -311,6 +319,8 @@ def test_integral_grad_basis(int_type):
             return intor.nuclattr(env)
         elif name == "elrep":
             return intor.elrep(env)
+        elif name == "elrep2c":
+            return intor.elrep2c(env)
         elif name == "elrep3c":
             return intor.elrep3c(env)
         else:

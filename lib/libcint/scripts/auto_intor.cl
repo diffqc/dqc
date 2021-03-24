@@ -243,6 +243,14 @@
   '("int3c2e_ip1ip2"            ( nabla \, \| nabla ))
   '("int2c2e_ipip1"             ( nabla nabla \| r12 \|))
   '("int2c2e_ip1ip2"            ( nabla \| r12 \| nabla))
+;
+  '("int2c2e_r12"               ( \| r12 \| ))
+  '("int2c2e_ipr12"             ( nabla \| r12 \| ))
+  '("int2c2e_ipipr12"           ( nabla nabla \| r12 \| ))
+  '("int2c2e_ipr12ip"           ( nabla \| r12 \| nabla ))
+  '("int2c2e_rrr12"             ( ri dot ri \| r12 \| ))
+  '("int2c2e_rrrrr12"           ( ri dot ri ri dot ri \| r12 \| ))
+  '("int2c2e_rrr12rr"           ( ri dot ri \| r12 \| rk dot rk ))
 )
 
 (gen-cint "int3c1e.c"

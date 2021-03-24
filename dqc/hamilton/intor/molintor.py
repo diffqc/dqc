@@ -10,7 +10,7 @@ from dqc.hamilton.intor.lcintwrap import LibcintWrapper
 from dqc.hamilton.intor.utils import np2ctypes, int2ctypes, NDIM, CINT, CGTO
 
 __all__ = ["int1e", "int3c2e", "int2e",
-           "overlap", "kinetic", "nuclattr", "elrep", "elrep3c"]
+           "overlap", "kinetic", "nuclattr", "elrep", "elrep2c", "elrep3c"]
 
 # integrals
 def int1e(shortname: str, wrapper: LibcintWrapper, other: Optional[LibcintWrapper] = None, *,
@@ -32,6 +32,26 @@ def int1e(shortname: str, wrapper: LibcintWrapper, other: Optional[LibcintWrappe
                                 rinv_pos,
                                 [wrapper, other1],
                                 "int1e", shortname)
+
+def int2c2e(shortname: str, wrapper: LibcintWrapper,
+            other: Optional[LibcintWrapper] = None) -> torch.Tensor:
+    """
+    2-centre 2-electron integrals where the `wrapper` and `other1` correspond
+    to the first electron, and `other2` corresponds to another electron.
+    The returned indices are sorted based on `wrapper`, `other1`, and `other2`.
+    The available shortname: "ar12"
+    """
+
+    # don't really care, it will be ignored
+    rinv_pos = torch.zeros(1, dtype=wrapper.dtype, device=wrapper.device)
+
+    # check and set the others
+    otherw = _check_and_set(wrapper, other)
+    return _Int2cFunction.apply(
+        *wrapper.params,
+        rinv_pos,
+        [wrapper, otherw],
+        "int2c2e", shortname)
 
 def int3c2e(shortname: str, wrapper: LibcintWrapper,
             other1: Optional[LibcintWrapper] = None,
@@ -97,6 +117,11 @@ def elrep(wrapper: LibcintWrapper,
           other3: Optional[LibcintWrapper] = None,
           ) -> torch.Tensor:
     return int2e("ar12b", wrapper, other1, other2, other3)
+
+def elrep2c(wrapper: LibcintWrapper,
+            other: Optional[LibcintWrapper] = None,
+            ) -> torch.Tensor:
+    return int2c2e("r12", wrapper, other)
 
 def elrep3c(wrapper: LibcintWrapper,
             other1: Optional[LibcintWrapper] = None,
@@ -224,6 +249,7 @@ class _Int2cFunction(torch.autograd.Function):
         # gradient for the basis coefficients
         grad_allcoeffs: Optional[torch.Tensor] = None
         grad_allalphas: Optional[torch.Tensor] = None
+        print("OK1")
         if allcoeffs.requires_grad or allalphas.requires_grad:
             # obtain the uncontracted wrapper and mapping
             # uao2aos: list of (nu_ao0,), (nu_ao1,)
@@ -240,6 +266,7 @@ class _Int2cFunction(torch.autograd.Function):
             ao2shl1 = u_wrappers[1].ao_to_shell()
 
             # calculate the gradient w.r.t. coeffs
+            print("OK2")
             if allcoeffs.requires_grad:
                 grad_allcoeffs = torch.zeros_like(allcoeffs)  # (ngauss)
 
@@ -267,26 +294,34 @@ class _Int2cFunction(torch.autograd.Function):
                 grad_allcoeffs.scatter_add_(dim=-1, index=ao2shl1, src=grad_dcoeff_j)
 
             # calculate the gradient w.r.t. alphas
+            print("OK3")
             if allalphas.requires_grad:
                 grad_allalphas = torch.zeros_like(allalphas)  # (ngauss)
 
+                print("OK4")
                 u_int_fcn = lambda u_wrappers, name: _Int2cFunction.apply(
                     *u_params, rinv_pos, u_wrappers, int_type, name)
 
                 # get the uncontracted integrals
+                print("OK5")
                 sname_derivs = [_get_intgl_deriv_shortname(int_type, shortname, s) for s in ("a1", "a2")]
+                print("OK6")
                 dout_dalphas = _get_integrals(sname_derivs, u_wrappers, int_type, u_int_fcn)
 
                 # (nu_ao)
                 # negative because the exponent is negative alpha * (r-ra)^2
+                print("OK7")
                 grad_dalpha_i = -torch.einsum("...ij,...ij->i", u_grad_out, dout_dalphas[0])
                 grad_dalpha_j = -torch.einsum("...ij,...ij->j", u_grad_out, dout_dalphas[1])
                 # grad_dalpha = (grad_dalpha_i + grad_dalpha_j)  # (nu_ao)
 
                 # scatter the grad
+                print("OK8")
                 grad_allalphas.scatter_add_(dim=-1, index=ao2shl0, src=grad_dalpha_i)
                 grad_allalphas.scatter_add_(dim=-1, index=ao2shl1, src=grad_dalpha_j)
+                print("OK9")
 
+        print("Done")
         return grad_allcoeffs, grad_allalphas, grad_allposs, \
             grad_rinv_pos, \
             None, None, None
@@ -578,7 +613,7 @@ class Intor(object):
     def calc(self) -> torch.Tensor:
         assert not self.integral_done
         self.integral_done = True
-        if self.int_type == "int1e":
+        if self.int_type == "int1e" or self.int_type == "int2c2e":
             return self._int2c()
         elif self.int_type == "int3c2e":
             return self._int3c()
@@ -689,7 +724,7 @@ def _get_intgl_deriv_shortname(int_type: str, shortname: str, derivmode: str) ->
     # get the operation required for the derivation of the integration operator
 
     # get the _insert_pattern function
-    if int_type == "int1e":
+    if int_type == "int1e" or int_type == "int2c2e":
         def _insert_pattern(shortname: str, derivmode: str, pattern: str) -> str:
             if derivmode == "1":
                 return "%s%s" % (pattern, shortname)
@@ -771,6 +806,7 @@ def _get_integrals(int_names: List[str],
                 # only if the integral is available in the libcint-generated
                 # files
                 elif int_avail[j]:
+                    print("int_avail[j]:", int_names[j])
                     res_i = int_fcn(twrappers, int_names[j])
                     res_i = _transpose(res_i, transpose_path)
                     break
@@ -782,6 +818,7 @@ def _get_integrals(int_names: List[str],
         if res_i is None:
             # successfully executing the line below indicates that the integral
             # is available in the libcint-generated files
+            print("res_i:", int_names[i])
             res_i = int_fcn(wrappers, int_names[i])
             int_avail[i] = True
 
@@ -797,6 +834,12 @@ def _intgl_shortname_equiv(s0: str, s1: str, int_type: str) -> Optional[List[Tup
 
     if int_type == "int1e":
         patterns = ["nuc", "ovlp", "rinv", "kin"]
+        transpose_paths = [
+            [],
+            [(-1, -2)],
+        ]
+    elif int_type == "int2c2e":
+        patterns = ["r12"]
         transpose_paths = [
             [],
             [(-1, -2)],
