@@ -78,7 +78,7 @@ def get_int_type_and_frac(int_type):
 #################### intors ####################
 @pytest.mark.parametrize(
     "int_type",
-    ["overlap", "kinetic", "nuclattr", "elrep", "elrep2c", "elrep3c"]
+    ["overlap", "kinetic", "nuclattr", "elrep", "coul2c", "coul3c"]
 )
 def test_integral_vs_pyscf(int_type):
     # check if the integrals from dqc agrees with pyscf
@@ -94,10 +94,10 @@ def test_integral_vs_pyscf(int_type):
         mat = intor.nuclattr(env)
     elif int_type == "elrep":
         mat = intor.elrep(env)
-    elif int_type == "elrep2c":
-        mat = intor.elrep2c(env)
-    elif int_type == "elrep3c":
-        mat = intor.elrep3c(env)
+    elif int_type == "coul2c":
+        mat = intor.coul2c(env)
+    elif int_type == "coul3c":
+        mat = intor.coul3c(env)
 
     # get the matrix from pyscf
     mol = get_mol_pyscf(dtype)
@@ -109,9 +109,9 @@ def test_integral_vs_pyscf(int_type):
         int_name = "int1e_nuc_sph"
     elif int_type == "elrep":
         int_name = "int2e_sph"
-    elif int_type == "elrep2c":
+    elif int_type == "coul2c":
         int_name = "int2c2e_sph"
-    elif int_type == "elrep3c":
+    elif int_type == "coul3c":
         int_name = "int3c2e_sph"
     mat_scf = pyscf.gto.moleintor.getints(int_name, mol._atm, mol._bas, mol._env)
 
@@ -139,10 +139,10 @@ def test_integral_with_subset(intc_type):
         assert torch.allclose(mat_full[:nenv1, :], mat2)
 
     elif intc_type == "int3c":
-        mat_full = intor.elrep3c(env)
-        mat = intor.elrep3c(env, other1=env1, other2=env1)
-        mat1 = intor.elrep3c(env1, other1=env, other2=env)
-        mat2 = intor.elrep3c(env1, other1=env1, other2=env1)
+        mat_full = intor.coul3c(env)
+        mat = intor.coul3c(env, other1=env1, other2=env1)
+        mat1 = intor.coul3c(env1, other1=env, other2=env)
+        mat2 = intor.coul3c(env1, other1=env1, other2=env1)
 
         assert torch.allclose(mat_full[:, :nenv1, :nenv1], mat)
         assert torch.allclose(mat_full[:nenv1, :, :], mat1)
@@ -210,7 +210,7 @@ def test_nuc_integral_frac_atomz_grad():
 @pytest.mark.parametrize(
     "int_type",
     ["overlap", "kinetic", "nuclattr", "nuclattr-frac",
-     "elrep", "elrep2c", "elrep3c"]
+     "elrep", "coul2c", "coul3c"]
 )
 def test_integral_grad_pos(int_type):
     int_type, is_z_frac = get_int_type_and_frac(int_type)
@@ -236,10 +236,10 @@ def test_integral_grad_pos(int_type):
             return intor.nuclattr(env)
         elif name == "elrep":
             return intor.elrep(env)
-        elif name == "elrep2c":
-            return intor.elrep2c(env)
-        elif name == "elrep3c":
-            return intor.elrep3c(env)
+        elif name == "coul2c":
+            return intor.coul2c(env)
+        elif name == "coul3c":
+            return intor.coul3c(env)
         else:
             raise RuntimeError()
 
@@ -274,7 +274,7 @@ def test_integral_subset_grad_pos(intc_type, allsubsets):
         if name == "int2c":
             return intor.nuclattr(env2, other=env1)
         elif name == "int3c":
-            return intor.elrep3c(env2, other1=env1, other2=env2)
+            return intor.coul3c(env2, other1=env1, other2=env2)
         elif name == "int4c":
             return intor.elrep(env2, other1=env1, other2=env2, other3=env1)
         else:
@@ -287,7 +287,7 @@ def test_integral_subset_grad_pos(intc_type, allsubsets):
 @pytest.mark.parametrize(
     "int_type",
     ["overlap", "kinetic", "nuclattr", "nuclattr-frac",
-     "elrep", "elrep2c", "elrep3c"]
+     "elrep", "coul2c", "coul3c"]
 )
 def test_integral_grad_basis(int_type):
     int_type, is_z_frac = get_int_type_and_frac(int_type)
@@ -319,10 +319,10 @@ def test_integral_grad_basis(int_type):
             return intor.nuclattr(env)
         elif name == "elrep":
             return intor.elrep(env)
-        elif name == "elrep2c":
-            return intor.elrep2c(env)
-        elif name == "elrep3c":
-            return intor.elrep3c(env)
+        elif name == "coul2c":
+            return intor.coul2c(env)
+        elif name == "coul3c":
+            return intor.coul3c(env)
         else:
             raise RuntimeError()
 
@@ -372,7 +372,7 @@ def test_integral_subset_grad_basis(intc_type, allsubsets):
         if name == "int2c":
             return intor.nuclattr(env2, other=env1)
         elif name == "int3c":
-            return intor.elrep3c(env2, other1=env1, other2=env1)
+            return intor.coul3c(env2, other1=env1, other2=env1)
         elif name == "int4c":
             return intor.elrep(env2, other1=env1, other2=env1, other3=env1)
         else:

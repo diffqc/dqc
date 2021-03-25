@@ -10,7 +10,7 @@ from dqc.hamilton.intor.lcintwrap import LibcintWrapper
 from dqc.hamilton.intor.utils import np2ctypes, int2ctypes, NDIM, CINT, CGTO
 
 __all__ = ["int1e", "int3c2e", "int2e",
-           "overlap", "kinetic", "nuclattr", "elrep", "elrep2c", "elrep3c"]
+           "overlap", "kinetic", "nuclattr", "elrep", "coul2c", "coul3c"]
 
 # integrals
 def int1e(shortname: str, wrapper: LibcintWrapper, other: Optional[LibcintWrapper] = None, *,
@@ -118,14 +118,14 @@ def elrep(wrapper: LibcintWrapper,
           ) -> torch.Tensor:
     return int2e("ar12b", wrapper, other1, other2, other3)
 
-def elrep2c(wrapper: LibcintWrapper,
-            other: Optional[LibcintWrapper] = None,
+def coul2c(wrapper: LibcintWrapper,
+           other: Optional[LibcintWrapper] = None,
             ) -> torch.Tensor:
     return int2c2e("r12", wrapper, other)
 
-def elrep3c(wrapper: LibcintWrapper,
-            other1: Optional[LibcintWrapper] = None,
-            other2: Optional[LibcintWrapper] = None,
+def coul3c(wrapper: LibcintWrapper,
+           other1: Optional[LibcintWrapper] = None,
+           other2: Optional[LibcintWrapper] = None,
             ) -> torch.Tensor:
     return int3c2e("ar12", wrapper, other1, other2)
 
