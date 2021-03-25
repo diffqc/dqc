@@ -120,13 +120,13 @@ def elrep(wrapper: LibcintWrapper,
 
 def coul2c(wrapper: LibcintWrapper,
            other: Optional[LibcintWrapper] = None,
-            ) -> torch.Tensor:
+           ) -> torch.Tensor:
     return int2c2e("r12", wrapper, other)
 
 def coul3c(wrapper: LibcintWrapper,
            other1: Optional[LibcintWrapper] = None,
            other2: Optional[LibcintWrapper] = None,
-            ) -> torch.Tensor:
+           ) -> torch.Tensor:
     return int3c2e("ar12", wrapper, other1, other2)
 
 # misc functions
