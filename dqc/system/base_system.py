@@ -1,16 +1,24 @@
+from __future__ import annotations
 from abc import abstractmethod, abstractproperty
 import torch
 import xitorch as xt
-from typing import List, Union
+from typing import List, Union, Optional
 from dqc.hamilton.base_hamilton import BaseHamilton
 from dqc.grid.base_grid import BaseGrid
-from dqc.utils.datastruct import SpinParam, ZType
+from dqc.utils.datastruct import SpinParam, ZType, BasisInpType
 
 class BaseSystem(xt.EditableModule):
     """
     System is a class describing the environment before doing the quantum
     chemistry calculation.
     """
+    @abstractmethod
+    def densityfit(self, method: Optional[str] = None,
+                   auxbasis: Optional[BasisInpType] = None) -> BaseSystem:
+        """
+        Indicate that the system's Hamiltonian will use density fitting.
+        """
+        pass
 
     @abstractmethod
     def get_hamiltonian(self) -> BaseHamilton:

@@ -7,7 +7,7 @@ from dqc.system.base_system import BaseSystem
 from dqc.grid.base_grid import BaseGrid
 from dqc.grid.factory import get_grid
 from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, SpinParam, ZType, \
-                                 is_z_float, BasisInpType
+                                 is_z_float, BasisInpType, DensityFitInfo
 from dqc.utils.periodictable import get_atomz
 from dqc.utils.safeops import eps as util_eps, occnumber
 from dqc.api.loadbasis import loadbasis
@@ -68,6 +68,7 @@ class Mol(BaseSystem):
         self._dtype = dtype
         self._device = device
         self._grid_inp = grid
+        self._basis_inp = basis
         self._grid: Optional[BaseGrid] = None
 
         # get the AtomCGTOBasis & the hamiltonian
@@ -78,6 +79,7 @@ class Mol(BaseSystem):
         allbases = _parse_basis(atomzs_int, basis)  # list of list of CGTOBasis
         atombases = [AtomCGTOBasis(atomz=atz, bases=bas, pos=atpos)
                      for (atz, bas, atpos) in zip(atomzs, allbases, atompos)]
+        self._atombases = atombases
         self._hamilton = HamiltonCGTO(atombases)
         self._atompos = atompos  # (natoms, ndim)
         self._atomzs = atomzs  # (natoms,) int-type or dtype if floating point
@@ -115,6 +117,42 @@ class Mol(BaseSystem):
             self._orb_weights_u = orb_weights.u
             self._orb_weights_d = orb_weights.d
             self._orb_weights = orb_weights.u + orb_weights.d
+
+    def densityfit(self, method: Optional[str] = None,
+                   auxbasis: Optional[BasisInpType] = None) -> BaseSystem:
+        """
+        Indicate that the system's Hamiltonian uses density fit for its integral.
+
+        Arguments
+        ---------
+        method: Optional[str]
+            Density fitting method. Available methods in this class are:
+
+            * "coulomb": Minimizing the Coulomb inner product, i.e. min <p-p_fit|r_12|p-p_fit>
+              Ref: Eichkorn, et al. Chem. Phys. Lett. 240 (1995) 283-290.
+              (default)
+            * "overlap": Minimizing the overlap inner product, i.e. min <p-p_fit|p-p_fit>
+
+        auxbasis: Optional[BasisInpType]
+            Auxiliary basis for the density fit. If not specified, then it uses
+            "cc-pvtz-jkfit".
+        """
+        if method is None:
+            method = "coulomb"
+        if auxbasis is None:
+            # TODO: choose the auxbasis properly
+            auxbasis = "cc-pvtz-jkfit"
+
+        # get the auxiliary basis
+        assert auxbasis is not None
+        auxbasis_lst = _parse_basis(self._atomzs_int, auxbasis)
+        atomauxbases = [AtomCGTOBasis(atomz=atz, bases=bas, pos=atpos)
+                        for (atz, bas, atpos) in zip(self._atomzs, auxbasis_lst, self._atompos)]
+
+        # change the hamiltonian to have density fit
+        df = DensityFitInfo(method=method, auxbases=atomauxbases)
+        self._hamilton = HamiltonCGTO(self._atombases, df=df)
+        return self
 
     def get_hamiltonian(self) -> BaseHamilton:
         return self._hamilton

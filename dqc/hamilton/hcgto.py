@@ -3,16 +3,19 @@ import torch
 import xitorch as xt
 import dqc.hamilton.intor as intor
 from dqc.hamilton.base_hamilton import BaseHamilton
-from dqc.utils.datastruct import AtomCGTOBasis, ValGrad, SpinParam
+from dqc.utils.datastruct import AtomCGTOBasis, ValGrad, SpinParam, DensityFitInfo
 from dqc.grid.base_grid import BaseGrid
 from dqc.xc.base_xc import BaseXC
 
 class HamiltonCGTO(BaseHamilton):
-    def __init__(self, atombases: List[AtomCGTOBasis], spherical: bool = True) -> None:
+    def __init__(self, atombases: List[AtomCGTOBasis], spherical: bool = True,
+                 df: Optional[DensityFitInfo] = None) -> None:
         self.atombases = atombases
+        self.spherical = spherical
         self.libcint_wrapper = intor.LibcintWrapper(atombases, spherical)
         self.dtype = self.libcint_wrapper.dtype
         self.device = self.libcint_wrapper.device
+        self.df = df
 
         self.is_grid_set = False
         self.is_ao_set = False
@@ -33,7 +36,10 @@ class HamiltonCGTO(BaseHamilton):
         kin_mat = intor.kinetic(self.libcint_wrapper)
         nucl_mat = intor.nuclattr(self.libcint_wrapper)
         self.kinnucl_mat = kin_mat + nucl_mat
-        self.el_mat = intor.elrep(self.libcint_wrapper)  # (nao^4)
+        if self.df is None:
+            self.el_mat = intor.elrep(self.libcint_wrapper)  # (nao^4)
+        else:
+            self.el_mat, self.el_mat3c = self._construct_elmat_df()  # (nao, nao, nxao)
         self.is_built = True
         return self
 
@@ -51,7 +57,11 @@ class HamiltonCGTO(BaseHamilton):
         # dm: (*BD, nao, nao)
         # elrep_mat: (nao, nao, nao, nao)
         # return: (*BD, nao, nao)
-        mat = torch.einsum("...ij,ijkl->...kl", dm, self.el_mat)
+        if self.df is None:
+            mat = torch.einsum("...ij,ijkl->...kl", dm, self.el_mat)
+        else:
+            df_coeffs = torch.einsum("...ij,ijk->...k", dm, self.el_mat)  # (*BD, nxao)
+            mat = torch.einsum("...k,ijk->...ij", df_coeffs, self.el_mat3c)  # (*BD, nao, nao)
         mat = (mat + mat.transpose(-2, -1)) * 0.5  # reduce numerical instability
         return xt.LinearOperator.m(mat, is_hermitian=True)
 
@@ -226,6 +236,26 @@ class HamiltonCGTO(BaseHamilton):
             # gdens: (*BD, ngrid, ndim)
             res = ValGrad(value=dens, grad=gdens)
             return res
+
+    def _construct_elmat_df(self):
+        # construct the matrix used to calculate the electron repulsion for
+        # density fitting method
+        method = self.df.method
+        auxbasiswrapper = intor.LibcintWrapper(self.df.auxbases, spherical=self.spherical)
+        basisw, auxbw = intor.LibcintWrapper.concatenate(self.libcint_wrapper, auxbasiswrapper)
+
+        if method == "coulomb":
+            j2c = intor.coul2c(auxbw)  # (nxao, nxao)
+            j3c = intor.coul3c(basisw, other1=basisw,
+                               other2=auxbw)  # (nao, nao, nxao)
+        elif method == "overlap":
+            j2c = intor.overlap(auxbw)  # (nxao, nxao)
+            # TODO: implement overlap3c
+            raise NotImplementedError(
+                "Density fitting with overlap minimization is not implemented")
+
+        el_mat = torch.matmul(j3c, torch.inverse(j2c))  # (nao, nao, nxao)
+        return el_mat, j3c
 
     def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
         if methodname == "get_kinnucl":

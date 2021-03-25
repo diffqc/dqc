@@ -50,6 +50,23 @@ energies = {
         -112.75427978513514,
     ]
 }
+energies_df = {
+    # from pyscf (with def2-svp-jkfit auxbasis)
+    "lda_x": [
+        -9.79243952e-01,
+        -1.43927923e+01,
+        -1.07726138e+02,
+        -1.97005351e+02,
+        -1.11490701e+02,
+    ],
+    "gga_x_pbe": [
+        -1.06837142e+00,
+        -1.48282616e+01,
+        -1.08980217e+02,
+        -1.98773033e+02,
+        -1.12754299e+02,
+    ]
+}
 
 @pytest.mark.parametrize(
     "xc,atomzs,dist,energy_true,grid",
@@ -217,6 +234,16 @@ u_mols_energies = {
         -149.64097658035521,
     ]
 }
+u_mols_energies_df = {
+    "lda_x": [
+        # numbers from pyscf with basis 6-311++G** with grid level 3 and LDA x
+        # with def2-svp-jkfit auxbasis
+        -1.48150027e+02,  # O2
+    ],
+    "gga_x_pbe": [
+        -1.49641013e+02,
+    ]
+}
 
 @pytest.mark.parametrize(
     "xc,atomzs,dist,energy_true",
@@ -280,6 +307,38 @@ def test_uks_grad_vxc(xccls, xcparams, atomz):
 
     params = tuple(torch.tensor(p, dtype=dtype).requires_grad_() for p in xcparams)
     torch.autograd.gradcheck(get_energy, params)
+
+############## density fit ##############
+@pytest.mark.parametrize(
+    "xc,atomzs,dist,energy_true,grid",
+    [("lda_x", *atomz_pos, energy, "sg2") for (atomz_pos, energy) in zip(atomzs_poss, energies_df["lda_x"])] + \
+    [("gga_x_pbe", *atomz_pos, energy, "sg2") for (atomz_pos, energy) in zip(atomzs_poss, energies_df["gga_x_pbe"])]
+)
+def test_rks_energy_df(xc, atomzs, dist, energy_true, grid):
+    # test to see if the energy calculated by DQC agrees with PySCF using
+    # density fitting
+    poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist
+    mol = Mol((atomzs, poss), basis="6-311++G**", dtype=dtype, grid=grid)
+    mol.densityfit(method="coulomb", auxbasis="def2-sv(p)-jkfit")
+    qc = KS(mol, xc=xc, restricted=True).run()
+    ene = qc.energy()
+    assert torch.allclose(ene, ene * 0 + energy_true)
+
+@pytest.mark.parametrize(
+    "xc,atomzs,dist,spin,energy_true",
+    [("lda_x", atomzs, dist, spin, energy) for ((atomzs, dist, spin), energy)
+        in zip(u_mols_dists_spins, u_mols_energies_df["lda_x"])] + \
+    [("gga_x_pbe", atomzs, dist, spin, energy) for ((atomzs, dist, spin), energy)
+        in zip(u_mols_dists_spins, u_mols_energies_df["gga_x_pbe"])]
+)
+def test_uks_energy_mols_df(xc, atomzs, dist, spin, energy_true):
+    # check the energy of molecules with non-0 spins with density fitting
+    poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist
+    mol = Mol((atomzs, poss), basis="6-311++G**", grid=3, dtype=dtype, spin=spin)
+    mol.densityfit(method="coulomb", auxbasis="def2-sv(p)-jkfit")
+    qc = KS(mol, xc=xc, restricted=False).run()
+    ene = qc.energy()
+    assert torch.allclose(ene, ene * 0 + energy_true, rtol=1e-6, atol=0.0)
 
 ############## Fractional charge ##############
 def test_rks_frac_energy():

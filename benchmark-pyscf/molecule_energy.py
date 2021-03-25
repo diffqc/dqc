@@ -28,13 +28,16 @@ def get_atom(atom):
     mol = gto.M(atom="%s 0 0 0"%atom, basis=basis, unit="Bohr")
     return mol
 
-def get_molecules_energy():
+def get_molecules_energy(xc="lda", with_df=False):
     molnames = ["H2", "Li2", "N2", "CO", "F2", "O2"]
     for molname in molnames:
         t0 = time.time()
         mol = get_molecule(molname)
         mf = dft.KS(mol)
-        mf.xc = "lda"
+        if with_df:
+            mf = mf.density_fit()
+            mf.with_df.auxbasis = "def2-svp-jkfit"
+        mf.xc = xc
         mf.grids.level = 4
         energy = mf.kernel()
         t1 = time.time()
@@ -58,5 +61,5 @@ if __name__ == "__main__":
     # mf.xc = "lda"
     # mf.grids.level = 4
     # print(mf.kernel())
-    get_molecules_energy()
+    get_molecules_energy(xc="gga_x_pbe", with_df=True)
     get_atoms_energy()

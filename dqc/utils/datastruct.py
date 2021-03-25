@@ -25,6 +25,7 @@ class CGTOBasis:
     normalized: bool = False
 
     def wfnormalize_(self) -> CGTOBasis:
+        # wavefunction normalization
         # the normalization is obtained from CINTgto_norm from
         # libcint/src/misc.c, or
         # https://github.com/sunqm/libcint/blob/b8594f1d27c3dad9034984a2a5befb9d607d4932/src/misc.c#L80
@@ -47,12 +48,6 @@ class CGTOBasis:
         self.coeffs = self.coeffs * torch.sqrt(factor * (2 * self.alphas) ** (self.angmom + 1.5))
         self.normalized = True
         return self
-
-    def densnormalize_(self) -> CGTOBasis:
-        # if the basis has been normalized before, then do nothing
-        if self.normalized:
-            return self
-        pass
 
 @dataclass
 class AtomCGTOBasis:
