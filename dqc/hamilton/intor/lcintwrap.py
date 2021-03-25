@@ -72,19 +72,19 @@ class LibcintWrapper(object):
             for shell in atombasis.bases:
                 assert shell.alphas.shape == shell.coeffs.shape and shell.alphas.ndim == 1,\
                     "Please report this bug in Github"
-                normcoeff = self._normalize_basis(shell.normalized, shell.alphas, shell.coeffs, shell.angmom)
+                shell.wfnormalize_()
                 ngauss = len(shell.alphas)
                 #                iatom, angmom,       ngauss, ncontr, kappa, ptr_exp
                 bas_list.append([iatom, shell.angmom, ngauss, 1, 0, ptr_env,
                                  # ptr_coeffs,           unused
                                  ptr_env + ngauss, 0])
                 env_list.extend(shell.alphas.detach())
-                env_list.extend(normcoeff.detach())
+                env_list.extend(shell.coeffs.detach())
                 ptr_env += 2 * ngauss
 
                 # add the alphas and coeffs to the parameters list
                 allalphas.append(shell.alphas)
-                allcoeffs.append(normcoeff)
+                allcoeffs.append(shell.coeffs)
                 ngauss_at_shell.append(ngauss)
 
         # compile the parameters of this object
@@ -354,30 +354,6 @@ class LibcintWrapper(object):
             yield
         finally:
             env[PTR_RINV_ORIG: PTR_RINV_ORIG + NDIM] = prev_centre
-
-    def _normalize_basis(self, basis_normalized: bool, alphas: torch.Tensor,
-                         coeffs: torch.Tensor, angmom: int) -> torch.Tensor:
-        # the normalization is obtained from CINTgto_norm from
-        # libcint/src/misc.c, or
-        # https://github.com/sunqm/libcint/blob/b8594f1d27c3dad9034984a2a5befb9d607d4932/src/misc.c#L80
-
-        # if the basis has been normalized before, then just return the coeffs
-        if basis_normalized:
-            return coeffs
-
-        # precomputed factor:
-        # 2 ** (2 * angmom + 3) * factorial(angmom + 1) * / \
-        # (factorial(angmom * 2 + 2) * np.sqrt(np.pi)))
-        factor = [
-            2.256758334191025,  # 0
-            1.5045055561273502,  # 1
-            0.6018022224509401,  # 2
-            0.17194349212884005,  # 3
-            0.03820966491752001,  # 4
-            0.006947211803185456,  # 5
-            0.0010688018158746854,  # 6
-        ]
-        return coeffs * torch.sqrt(factor[angmom] * (2 * alphas) ** (angmom + 1.5))
 
     def _nao_at_shell(self, sh: int) -> int:
         # returns the number of atomic orbital at the given shell index

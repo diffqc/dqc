@@ -24,6 +24,36 @@ class CGTOBasis:
     coeffs: torch.Tensor  # (nbasis,)
     normalized: bool = False
 
+    def wfnormalize_(self) -> CGTOBasis:
+        # the normalization is obtained from CINTgto_norm from
+        # libcint/src/misc.c, or
+        # https://github.com/sunqm/libcint/blob/b8594f1d27c3dad9034984a2a5befb9d607d4932/src/misc.c#L80
+
+        # if the basis has been normalized before, then do nothing
+        if self.normalized:
+            return self
+
+        # precomputed factor:
+        # 2 ** (2 * angmom + 3) * factorial(angmom + 1) * / (factorial(angmom * 2 + 2) * np.sqrt(np.pi)))
+        factor = [
+            2.256758334191025,  # 0
+            1.5045055561273502,  # 1
+            0.6018022224509401,  # 2
+            0.17194349212884005,  # 3
+            0.03820966491752001,  # 4
+            0.006947211803185456,  # 5
+            0.0010688018158746854,  # 6
+        ][self.angmom]
+        self.coeffs = self.coeffs * torch.sqrt(factor * (2 * self.alphas) ** (self.angmom + 1.5))
+        self.normalized = True
+        return self
+
+    def densnormalize_(self) -> CGTOBasis:
+        # if the basis has been normalized before, then do nothing
+        if self.normalized:
+            return self
+        pass
+
 @dataclass
 class AtomCGTOBasis:
     atomz: ZType
@@ -32,6 +62,11 @@ class AtomCGTOBasis:
 
 # input basis type
 BasisInpType = Union[str, List[CGTOBasis], List[str], List[List[CGTOBasis]]]
+
+@dataclass
+class DensityFitInfo:
+    method: str
+    auxbases: List[AtomCGTOBasis]
 
 @dataclass
 class SpinParam(Generic[T]):
