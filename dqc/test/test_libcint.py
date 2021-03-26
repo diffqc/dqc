@@ -708,6 +708,55 @@ def test_pbc_integral_3c_vs_pyscf():
     print(mat.view(-1))
     assert torch.allclose(mat.view(-1), torch.as_tensor(pyscf_mat, dtype=mat.dtype).view(-1))
 
+@pytest.mark.parametrize(
+    "angmom",
+    [0, 1]
+)
+def test_eval_ft_gto(angmom):
+    # test the evaluation of fourier transform of the gto
+
+    # setup the system
+    alphas = torch.tensor([1.0, 2.0, 3.0], dtype=dtype)[:, None]  # (nb, 1)
+    coeffs = torch.tensor([1.5, 2.5, 0.5], dtype=dtype)[:, None]
+    all_basis = [
+        CGTOBasis(
+            angmom = angmom,
+            alphas = alphas[i],
+            coeffs = coeffs[i],
+            normalized = True,
+        )
+        for i in range(len(alphas))
+    ]
+    atom_basis = AtomCGTOBasis(
+        atomz = 0,
+        bases = all_basis,
+        pos = torch.tensor([0.0, 0.0, 0.0], dtype=dtype)
+    )
+    wrapper = intor.LibcintWrapper([atom_basis], spherical=True)
+    ngrid = 100
+    Gvgrid = torch.zeros(ngrid, 3, dtype=dtype)  # (ngrid, ndim)
+    Gvgrid[:, 0] = torch.linspace(-5, 5, ngrid, dtype=dtype)
+    if angmom == 0:
+        c = np.sqrt(4 * np.pi)  # s-normalization
+    elif angmom == 1:
+        c = np.sqrt(4 * np.pi / 3)  # p-normalization
+    ao_ft_value = intor.eval_gto_ft(wrapper, Gvgrid) * c
+
+    assert ao_ft_value.shape[0] == wrapper.nao()
+    assert ao_ft_value.shape[1] == ngrid
+
+    # compare with analytically calculated values
+    exp_part = torch.exp(-Gvgrid[:, 0] ** 2 / (4 * alphas))  # (ngrid,)
+    if angmom == 0:
+        true_value = coeffs * (np.pi / alphas) ** 1.5 * exp_part  # (nb, ngrid)
+    elif angmom == 1:
+        true_value = -1j * coeffs * np.pi ** 1.5 / 2. / alphas ** 2.5 * exp_part  # (nb, ngrid)
+        true_value = true_value.unsqueeze(-2) * Gvgrid.transpose(-2, -1)  # (ndim, nb, ngrid)
+        true_value = true_value.reshape(-1, ngrid)
+    true_value = true_value.to(torch.complex128)
+
+    assert torch.allclose(true_value, ao_ft_value)
+
 #################### misc properties of LibcintWrapper ####################
 def test_wrapper_concat():
     # get the wrappers

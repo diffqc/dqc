@@ -30,6 +30,9 @@ class CGTOBasis:
         # libcint/src/misc.c, or
         # https://github.com/sunqm/libcint/blob/b8594f1d27c3dad9034984a2a5befb9d607d4932/src/misc.c#L80
 
+        # Please note that the square of normalized wavefunctions do not integrate
+        # to 1, but e.g. for s: 4*pi, p: (4*pi/3)
+
         # if the basis has been normalized before, then do nothing
         if self.normalized:
             return self
