@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from dqc.hamilton.intor.lcintwrap import LibcintWrapper
 from dqc.hamilton.intor.utils import np2ctypes, int2ctypes, CPBC, CGTO, NDIM, \
-                                     c_null_ptr
+                                     c_null_ptr, estimate_ovlp_rcut
 from dqc.utils.types import get_complex_dtype
 from dqc.system.tools import Lattice
 from dqc.hamilton.intor.molintor import _check_and_set, _get_intgl_name, \
@@ -284,12 +284,7 @@ class PBCIntor(object):
 
         # estimate the rcut and the lattice translation vectors
         coeffs, alphas, _ = wrapper0.params
-        langmom = 1
-        C = (coeffs * coeffs + 1e-200) * (2 * langmom + 1) * alphas / options.precision
-        r0 = torch.tensor(20.0, dtype=wrapper0.dtype, device=wrapper0.device)
-        for i in range(2):
-            r0 = torch.sqrt(2.0 * torch.log(C * (r0 * r0 * alphas) ** (langmom + 1) + 1.) / alphas)
-        rcut = float(torch.max(r0).detach())
+        rcut = estimate_ovlp_rcut(options.precision, coeffs, alphas)
         ls = np.asarray(lattice.get_lattice_ls(rcut=rcut))
 
         self.int_type = int_type

@@ -28,3 +28,14 @@ def np2ctypes(a: np.ndarray) -> ctypes.c_void_p:
 def int2ctypes(a: int) -> ctypes.c_int:
     # convert the python's integer to ctypes' integer
     return ctypes.c_int(a)
+
+def estimate_ovlp_rcut(precision: float, coeffs: torch.Tensor, alphas: torch.Tensor) -> float:
+    # estimate the rcut for lattice sum to achieve the given precision
+    # it is estimated based on the overlap integral
+    langmom = 1
+    C = (coeffs * coeffs + 1e-200) * (2 * langmom + 1) * alphas / precision
+    r0 = torch.tensor(20.0, dtype=coeffs.dtype, device=coeffs.device)
+    for i in range(2):
+        r0 = torch.sqrt(2.0 * torch.log(C * (r0 * r0 * alphas) ** (langmom + 1) + 1.) / alphas)
+    rcut = float(torch.max(r0).detach())
+    return rcut
