@@ -10,7 +10,7 @@ from dqc.hamilton.intor.lcintwrap import LibcintWrapper
 from dqc.hamilton.intor.utils import np2ctypes, int2ctypes, CPBC, CGTO, NDIM, \
                                      c_null_ptr, estimate_ovlp_rcut
 from dqc.utils.types import get_complex_dtype
-from dqc.system.tools import Lattice
+from dqc.hamilton.intor.lattice import Lattice
 from dqc.hamilton.intor.molintor import _check_and_set, _get_intgl_name, \
                                         _get_intgl_components_shape, \
                                         _get_intgl_optimizer

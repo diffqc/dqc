@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import pytest
 from dqc.system.mol import Mol
-from dqc.system.tools import Lattice
+from dqc.hamilton.intor.lattice import Lattice
 
 # these tests to make sure the systems parse the inputs correctly
 

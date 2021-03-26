@@ -7,7 +7,7 @@ import warnings
 from dqc.api.loadbasis import loadbasis
 import dqc.hamilton.intor as intor
 from dqc.utils.datastruct import AtomCGTOBasis, CGTOBasis
-from dqc.system.tools import Lattice
+from dqc.hamilton.intor.lattice import Lattice
 
 # import pyscf
 try:

@@ -5,7 +5,7 @@ from dqc.grid.base_grid import BaseGrid
 from dqc.system.mol import _parse_moldesc, _parse_basis, _get_nelecs_spin, \
                            _get_orb_weights, AtomZsType, AtomPosType
 from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, ZType
-from dqc.system.tools import Lattice
+from dqc.hamilton.intor.lattice import Lattice
 
 class MolPBC(BaseSystem):
     """

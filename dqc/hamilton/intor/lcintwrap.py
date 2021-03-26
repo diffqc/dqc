@@ -6,7 +6,7 @@ import torch
 import numpy as np
 from dqc.utils.datastruct import AtomCGTOBasis, CGTOBasis
 from dqc.hamilton.intor.utils import np2ctypes, int2ctypes, NDIM, CINT
-from dqc.system.tools import Lattice
+from dqc.hamilton.intor.lattice import Lattice
 from dqc.utils.misc import memoize_method
 
 __all__ = ["LibcintWrapper", "SubsetLibcintWrapper"]

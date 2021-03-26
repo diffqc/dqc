@@ -8,7 +8,7 @@ from dqc.hamilton.intor.utils import estimate_ke_cutoff
 from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, SpinParam, DensityFitInfo
 from dqc.grid.base_grid import BaseGrid
 from dqc.xc.base_xc import BaseXC
-from dqc.system.tools import Lattice
+from dqc.hamilton.intor.lattice import Lattice
 
 class HamiltonCGTO_PBC(BaseHamilton):
     """

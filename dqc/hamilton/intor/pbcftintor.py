@@ -12,7 +12,7 @@ from dqc.hamilton.intor.pbcintor import PBCIntOption, _check_and_set_pbc, \
                                         _get_default_options, _get_default_kpts, \
                                         _concat_atm_bas_env
 from dqc.utils.types import get_complex_dtype
-from dqc.system.tools import Lattice
+from dqc.hamilton.intor.lattice import Lattice
 from dqc.hamilton.intor.molintor import _get_intgl_components_shape
 
 __all__ = ["pbcft_int1e", "pbcft_overlap"]
