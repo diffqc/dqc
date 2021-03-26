@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Tuple
 import torch
 import numpy as np
 
@@ -44,17 +44,14 @@ class Lattice(object):
         """
         return (self.a,)
 
-    def get_lattice_ls(self, nimgs: Optional[int] = None, rcut: Optional[float] = None) -> torch.Tensor:
+    def get_lattice_ls(self, rcut: float) -> torch.Tensor:
         """
         Returns a tensor that contains the coordinates of the neighboring
         lattices.
 
         Arguments
         ---------
-        nimgs: Optional[int]
-            Number of neighbors from every side (e.g. for 3D: up, down, left,
-            right, front, back). If specified, the `rcut` is ignored.
-        rcut: Optional[float]
+        rcut: float
             The threshold of the distance from the main cell to be included
             in the neighbor.
 
@@ -68,12 +65,9 @@ class Lattice(object):
         # https://github.com/pyscf/pyscf/blob/e6c569932d5bab5e49994ae3dd365998fc5202b5/pyscf/pbc/tools/pbc.py#L473
 
         a = self.lattice_vectors()
-        # TODO: do this properly
-        if nimgs is None:
-            assert rcut is not None, "At least one of nimgs or rcut must be specified"
-            b = self.recip_vectors() / (2 * np.pi)  # (nv, ndim)
-            heights_inv = torch.max(torch.norm(b, dim=-1)).detach().numpy()  # scalar
-            nimgs = int(rcut * heights_inv + 1.1)
+        b = self.recip_vectors() / (2 * np.pi)  # (nv, ndim)
+        heights_inv = torch.max(torch.norm(b, dim=-1)).detach().numpy()  # scalar
+        nimgs = int(rcut * heights_inv + 1.1)
 
         assert isinstance(nimgs, int)
         n1_0 = torch.arange(-nimgs, nimgs + 1, dtype=torch.int32, device=self.device)  # (nimgs2,)
@@ -82,3 +76,47 @@ class Lattice(object):
         ls = ls + n1_0[:, None, None, None] * a[2, :]  # (nimgs2, nimgs2, nimgs2, ndim)
         ls = ls.view(-1, ls.shape[-1])  # (nb, ndim)
         return ls
+
+    def get_gvgrids(self, kecut: float, exclude_zeros: bool = True) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Returns a tensor that contains the coordinate in reciprocal space of the
+        neighboring Brillouin zones.
+
+        Arguments
+        ---------
+        kecut: float
+            Kinetic energy cut off for generating the G-points.
+        exclude_zeros: bool
+            If True, then exclude the G-points where all the elements are 0.
+
+        Returns
+        -------
+        gvgrids: torch.Tensor
+            Tensor with size `(ng, ndim)` containing the G-coordinates of the
+            Brillouin zones.
+        weights: torch.Tensor
+            Tensor with size `(ng)` representing the weights of the G-points.
+        """
+        gcut = np.sqrt(kecut * 2)  # KE ~ 1/2 * G^2
+        a = self.lattice_vectors()
+        heights = torch.max(torch.norm(a, dim=-1)).detach().numpy()  # scalar
+        ng1 = int(gcut * heights + 1.1)
+
+        # generate the frequency data points
+        rx = np.fft.fftfreq(ng1, 1.0 / ng1)  # (ng1,)
+
+        # TODO: check if it is b[i, :] or b[:, i]
+        b = self.recip_vectors()  # (ndim, ndim)
+        gvgrids = rx[:, None] * b[0, :]  # (ng1, ndim)
+        gvgrids = gvgrids + rx[:, None, None] * b[1, :]  # (ng1, ng1, ndim)
+        gvgrids = gvgrids + rx[:, None, None, None] * b[2, :]  # (ng1, ng1, ng1, ndim)
+        gvgrids = gvgrids.view(-1, gvgrids.shape[-1])  # (ng, ndim)
+
+        if exclude_zeros:
+            gvgrids = gvgrids[torch.norm(gvgrids, dim=-1) > 1e-9]
+
+        # 1 / cell.vol == det(b) / (2 pi)^3
+        weights = torch.zeros(gvgrids.shape[0], dtype=self.dtype, device=self.device)
+        weights = weights + torch.abs(torch.det(b)) / (2 * np.pi) ** 3
+
+        return gvgrids, weights

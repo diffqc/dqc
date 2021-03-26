@@ -2,6 +2,7 @@ import os
 import ctypes
 import torch
 import numpy as np
+import scipy.special
 
 # contains functions and constants that are used specifically for
 # dqc.hamilton.intor files
@@ -40,3 +41,22 @@ def estimate_ovlp_rcut(precision: float, coeffs: torch.Tensor, alphas: torch.Ten
         r0 = torch.sqrt(2.0 * torch.log(C * (r0 * r0 * alphas) ** (langmom + 1) + 1.) / alphas)
     rcut = float(torch.max(r0).detach())
     return rcut
+
+def estimate_ke_cutoff(precision: float, coeffs: torch.Tensor, alphas: torch.Tensor) -> float:
+    # kinetic energy cut off estimation based on cubic lattice
+    # based on _estimate_ke_cutoff from pyscf
+    # https://github.com/pyscf/pyscf/blob/c9aa2be600d75a97410c3203abf35046af8ca615/pyscf/pbc/gto/cell.py#L498
+
+    langmom = 1
+    log_k0 = 3 + torch.log(alphas) / 2
+    l2fac2 = scipy.special.factorial2(langmom * 2 + 1)
+    a = precision * l2fac2 ** 2 * (4 * alphas) ** (langmom * 2 + 1) / (128 * np.pi ** 4 * coeffs ** 4)
+    log_rest = torch.log(a)
+    Ecut = 2 * alphas * (log_k0 * (4 * langmom + 3) - log_rest)
+    Ecut[Ecut <= 0] = .5
+    log_k0 = .5 * torch.log(Ecut * 2)
+    Ecut = 2 * alphas * (log_k0 * (4 * langmom + 3) - log_rest)
+    Ecut[Ecut <= 0] = .5
+    Ecut_max = float(torch.max(Ecut).detach())
+
+    return Ecut_max
