@@ -11,6 +11,34 @@ __all__ = ["evl_ft", "eval_gto_ft"]
 
 # evaluation of the Fourier Transform of the CGTO basis
 def evl_ft(shortname: str, wrapper: LibcintWrapper, Gvgrid: torch.Tensor) -> torch.Tensor:
+    """
+    Evaluate the Fourier Transform-ed gaussian type orbital at the given Gvgrid.
+    The Fourier Transform is defined as:
+
+    $$
+    F(\mathbf{G}) = \int f(\mathbf{r}) e^{-i\mathbf{G}\cdot\mathbf{r}}\ \mathrm{d}\mathbf{r}
+    $$
+
+    The results need to be divided by square root of the orbital normalization.
+
+    Arguments
+    ---------
+    shortname: str
+        The type of integral (currently only "" is accepted).
+    wrapper: LibcintWrapper
+        The gaussian basis wrapper to be evaluated.
+    Gvgrid: torch.Tensor
+        Tensor with shape `(nggrid, ndim)` where the fourier transformed function
+        is evaluated
+
+    Returns
+    -------
+    torch.Tensor
+        Tensor with shape `(*, nao, nggrid)` of the evaluated value. The shape
+        `*` is the number of components, i.e. 3 for ``shortname == "ip"``
+    """
+    if shortname != "":
+        raise NotImplementedError("FT evaluation for '%s' is not implemented" % shortname)
     return _EvalGTO_FT.apply(*wrapper.params, Gvgrid, wrapper, shortname)
 
 # shortcuts
