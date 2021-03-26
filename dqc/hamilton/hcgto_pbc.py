@@ -53,14 +53,19 @@ class HamiltonCGTO_PBC(BaseHamilton):
         self._olp_mat = intor.pbc_overlap(self._basiswrapper, kpts=self._kpts)
         self._kin_mat = intor.pbc_kinetic(self._basiswrapper, kpts=self._kpts)
         self._nucl_mat = self._calc_nucl_attr()
-        pass  # nucl_attr and elrep
+        self._kinnucl_mat = self._kin_mat + self._nucl_mat
+        pass  # elrep
         self._is_built = True
         return self
 
+    def get_nuclattr(self) -> xt.LinearOperator:
+        # return: (nkpts, nao, nao)
+        return xt.LinearOperator.m(self._nucl_mat, is_hermitian=True)
+
     def get_kinnucl(self) -> xt.LinearOperator:
-        # kinnucl_mat: (nao, nao)
-        # return: (nao, nao)
-        return xt.LinearOperator.m(self._kinnucl_mat, is_hermitian=True)  # ???
+        # kinnucl_mat: (nkpts, nao, nao)
+        # return: (nkpts, nao, nao)
+        return xt.LinearOperator.m(self._kinnucl_mat, is_hermitian=True)
 
     def get_overlap(self) -> xt.LinearOperator:
         # olp_mat: (nao, nao)

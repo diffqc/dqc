@@ -1,6 +1,10 @@
 import torch
 import pytest
 from dqc.system.mol import Mol
+from dqc.hamilton.hcgto_pbc import HamiltonCGTO_PBC
+from dqc.hamilton.intor.lattice import Lattice
+from dqc.api.loadbasis import loadbasis
+from dqc.utils.datastruct import DensityFitInfo, AtomCGTOBasis
 
 dtype = torch.float64
 
@@ -15,6 +19,28 @@ def system1():
     hamilton.build()
     hamilton.setup_grid(m.get_grid())
     return m
+
+@pytest.fixture
+def pbc_h1():
+    # get the hamiltonian for pbc system
+    # setup the environment
+    pos = torch.tensor([0.0, 0.0, 0.0], dtype=dtype)
+    bases = loadbasis("3:3-21G", dtype=dtype)
+    atombases = [AtomCGTOBasis(atomz=3, bases=bases, pos=pos)]
+
+    # setup the lattice
+    a = torch.tensor([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]], dtype=dtype) * 10
+    latt = Lattice(a)
+
+    # setup the auxbasis
+    auxbases = loadbasis("3:def2-sv(p)-jkfit", dtype=dtype)
+    atomauxbases = [AtomCGTOBasis(atomz=3, bases=auxbases, pos=pos)]
+    df = DensityFitInfo(method="gdf", auxbases=atomauxbases)
+
+    # build the hamiltonian
+    h = HamiltonCGTO_PBC(atombases, latt=latt, df=df)
+    h.build()
+    return h
 
 def test_cgto_ao2dm(system1):
     # test ao2dm with a simple case
@@ -112,3 +138,8 @@ def test_cgto_vext(system1):
     vext = torch.ones((ngrid, ), dtype=dtype) * w
     a = hamilton1.get_vext(vext).fullmatrix()
     assert torch.allclose(torch.diagonal(a), torch.tensor(w, dtype=dtype))
+
+def atest_pbc_cgto_nuclattr(pbc_h1):
+    # TODO: pass the test!
+    print(pbc_h1.get_nuclattr().fullmatrix())
+    raise RuntimeError

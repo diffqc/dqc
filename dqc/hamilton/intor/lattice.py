@@ -103,7 +103,11 @@ class Lattice(object):
         ng1 = int(gcut * heights + 1.1)
 
         # generate the frequency data points
-        rx = np.fft.fftfreq(ng1, 1.0 / ng1)  # (ng1,)
+        rx = torch.as_tensor(np.fft.fftfreq(ng1, 1.0 / ng1), dtype=self.dtype, device=self.device)  # (ng1,)
+
+        # kecut is too large!
+        # print(gcut, kecut)
+        # raise RuntimeError
 
         # TODO: check if it is b[i, :] or b[:, i]
         b = self.recip_vectors()  # (ndim, ndim)

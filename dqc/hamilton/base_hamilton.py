@@ -28,6 +28,14 @@ class BaseHamilton(xt.EditableModule):
         pass
 
     @abstractmethod
+    def get_nuclattr(self) -> xt.LinearOperator:
+        """
+        Returns the LinearOperator of the nuclear Coulomb attraction.
+        """
+        # return: (*BH, nao, nao)
+        pass
+
+    @abstractmethod
     def get_kinnucl(self) -> xt.LinearOperator:
         """
         Returns the LinearOperator of the one-electron operator (i.e. kinetic

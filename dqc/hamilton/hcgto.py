@@ -35,6 +35,7 @@ class HamiltonCGTO(BaseHamilton):
         self.olp_mat = intor.overlap(self.libcint_wrapper)
         kin_mat = intor.kinetic(self.libcint_wrapper)
         nucl_mat = intor.nuclattr(self.libcint_wrapper)
+        self.nucl_mat = nucl_mat
         self.kinnucl_mat = kin_mat + nucl_mat
         if self.df is None:
             self.el_mat = intor.elrep(self.libcint_wrapper)  # (nao^4)
@@ -42,6 +43,11 @@ class HamiltonCGTO(BaseHamilton):
             self.el_mat, self.el_mat3c = self._construct_elmat_df()  # (nao, nao, nxao)
         self.is_built = True
         return self
+
+    def get_nuclattr(self) -> xt.LinearOperator:
+        # nucl_mat: (nao, nao)
+        # return: (nao, nao)
+        return xt.LinearOperator.m(self.nucl_mat, is_hermitian=True)
 
     def get_kinnucl(self) -> xt.LinearOperator:
         # kinnucl_mat: (nao, nao)
