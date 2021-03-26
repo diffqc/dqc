@@ -98,9 +98,8 @@ class Lattice(object):
             Tensor with size `(ng)` representing the weights of the G-points.
         """
         a = self.lattice_vectors()
-        heights = torch.max(torch.norm(a, dim=-1)).detach().numpy()  # scalar
+        heights = torch.max(torch.norm(a, dim=-1)).detach().numpy() / (2 * np.pi)  # scalar
         ng1 = int(gcut * heights + 1.1)
-        ng1 = ng1 // 100  # HACK!
 
         # generate the frequency data points
         rx = torch.as_tensor(np.fft.fftfreq(ng1, 1.0 / ng1), dtype=self.dtype, device=self.device)  # (ng1,)

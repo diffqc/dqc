@@ -175,7 +175,7 @@ class HamiltonCGTO_PBC(BaseHamilton):
         coeffs_basis, alphas_basis, _ = self._basiswrapper.params
         gcut_cnucl = estimate_g_cutoff(self._lattsum_opt.precision, coeffs_cnucl, alphas_cnucl)
         gcut_basis = estimate_g_cutoff(self._lattsum_opt.precision, coeffs_basis, alphas_basis)
-        gcut = max(gcut_cnucl, gcut_basis)
+        gcut = min(gcut_cnucl, gcut_basis)  # choosing min because the two FTs are multiplied
         # gvgrids: (ngv, ndim), gvweights: (ngv,)
         gvgrids, gvweights = self._lattice.get_gvgrids(gcut, exclude_zeros=True)
 

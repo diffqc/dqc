@@ -6,6 +6,9 @@ from dqc.hamilton.intor.lattice import Lattice
 from dqc.api.loadbasis import loadbasis
 from dqc.utils.datastruct import DensityFitInfo, AtomCGTOBasis
 
+import pyscf
+import pyscf.pbc
+
 dtype = torch.float64
 
 @pytest.fixture
@@ -25,21 +28,28 @@ def pbc_h1():
     # get the hamiltonian for pbc system
     # setup the environment
     pos = torch.tensor([0.0, 0.0, 0.0], dtype=dtype)
-    bases = loadbasis("3:3-21G", dtype=dtype)
-    atombases = [AtomCGTOBasis(atomz=3, bases=bases, pos=pos)]
+    atomz = 1
+    bases = loadbasis("%d:3-21G" % atomz, dtype=dtype)
+    atombases = [AtomCGTOBasis(atomz=atomz, bases=bases, pos=pos)]
 
     # setup the lattice
     a = torch.tensor([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]], dtype=dtype) * 10
     latt = Lattice(a)
 
     # setup the auxbasis
-    auxbases = loadbasis("3:def2-sv(p)-jkfit", dtype=dtype)
-    atomauxbases = [AtomCGTOBasis(atomz=3, bases=auxbases, pos=pos)]
+    auxbases = loadbasis("%d:def2-sv(p)-jkfit" % atomz, dtype=dtype)
+    atomauxbases = [AtomCGTOBasis(atomz=atomz, bases=auxbases, pos=pos)]
     df = DensityFitInfo(method="gdf", auxbases=atomauxbases)
 
     # build the hamiltonian
     h = HamiltonCGTO_PBC(atombases, latt=latt, df=df)
     h.build()
+
+    # pyscf system build
+    mol = pyscf.pbc.gto.C(atom="H 0 0 0", a=a.numpy(), basis="3-21G", unit="Bohr")
+    df = pyscf.pbc.df.GDF(mol)
+    df.auxbasis = "def2-svp-jkfit"
+    # h = df
     return h
 
 def test_cgto_ao2dm(system1):
@@ -141,5 +151,10 @@ def test_cgto_vext(system1):
 
 def test_pbc_cgto_nuclattr(pbc_h1):
     # TODO: pass the test! (gcut and rcut might be too large, especially gcut)
-    print(pbc_h1.get_nuclattr().fullmatrix())
+    import numpy as np
+    # nuc = pbc_h1.get_nuc()
+    # nuc[np.abs(nuc) < 1e-9] = 0
+    nuc = pbc_h1.get_nuclattr().fullmatrix().real
+    print(nuc)
+    # print(pbc_h1.eta)
     raise RuntimeError
