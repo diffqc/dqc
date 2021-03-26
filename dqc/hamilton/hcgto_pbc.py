@@ -166,7 +166,7 @@ class HamiltonCGTO_PBC(BaseHamilton):
                                   auxwrapper=nucl_wrapper1, kpts_ij=kpts_ij,
                                   options=self._lattsum_opt)
         nuc1 = -nuc1_c[..., :natoms] + nuc1_c[..., natoms:]
-        nuc1 = nuc1.sum(axis=-1)  # (nkpts, nao, nao)
+        nuc1 = torch.sum(nuc1, dim=-1)  # (nkpts, nao, nao)
 
         ############# 2nd part of nuclear attraction: long range #############
         # get the 2nd part from the Fourier Transform
