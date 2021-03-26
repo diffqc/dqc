@@ -42,8 +42,8 @@ def estimate_ovlp_rcut(precision: float, coeffs: torch.Tensor, alphas: torch.Ten
     rcut = float(torch.max(r0).detach())
     return rcut
 
-def estimate_ke_cutoff(precision: float, coeffs: torch.Tensor, alphas: torch.Tensor) -> float:
-    # kinetic energy cut off estimation based on cubic lattice
+def estimate_g_cutoff(precision: float, coeffs: torch.Tensor, alphas: torch.Tensor) -> float:
+    # g-point cut off estimation based on cubic lattice
     # based on _estimate_ke_cutoff from pyscf
     # https://github.com/pyscf/pyscf/blob/c9aa2be600d75a97410c3203abf35046af8ca615/pyscf/pbc/gto/cell.py#L498
 
@@ -59,4 +59,6 @@ def estimate_ke_cutoff(precision: float, coeffs: torch.Tensor, alphas: torch.Ten
     Ecut[Ecut <= 0] = .5
     Ecut_max = float(torch.max(Ecut).detach())
 
-    return Ecut_max
+    # KE ~ 1/2 * g^2
+    gcut = (2 * Ecut_max) ** 0.5
+    return gcut

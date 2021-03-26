@@ -4,7 +4,7 @@ import numpy as np
 import xitorch as xt
 import dqc.hamilton.intor as intor
 from dqc.hamilton.base_hamilton import BaseHamilton
-from dqc.hamilton.intor.utils import estimate_ke_cutoff
+from dqc.hamilton.intor.utils import estimate_g_cutoff
 from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, SpinParam, DensityFitInfo
 from dqc.grid.base_grid import BaseGrid
 from dqc.xc.base_xc import BaseXC
@@ -149,7 +149,8 @@ class HamiltonCGTO_PBC(BaseHamilton):
         nucl_atbases_all = nucl_atbases + cnucl_atbases
         nucl_wrapper = intor.LibcintWrapper(
             nucl_atbases_all, spherical=self._spherical, lattice=self._lattice)
-        cnucl_wrapper = nucl_wrapper[len(nucl_wrapper) // 2:]
+        cnucl_wrapper = intor.LibcintWrapper(
+            cnucl_atbases, spherical=self._spherical, lattice=self._lattice)
         natoms = nucl_wrapper.nao() // 2
 
         # construct the k-points ij
@@ -158,23 +159,25 @@ class HamiltonCGTO_PBC(BaseHamilton):
 
         ############# 1st part of nuclear attraction: short range #############
         # get the 1st part of the nuclear attraction: the charge and compensating charge
-        # nuc1: (nao, nao, 2 * natoms)
+        # nuc1: (nkpts, nao, nao, 2 * natoms)
+        # nuc1 is not hermitian
         basiswrapper1, nucl_wrapper1 = intor.LibcintWrapper.concatenate(self._basiswrapper, nucl_wrapper)
         nuc1_c = intor.pbc_coul3c(basiswrapper1, other=basiswrapper1,
                                   auxwrapper=nucl_wrapper1, kpts_ij=kpts_ij,
                                   options=self._lattsum_opt)
         nuc1 = -nuc1_c[..., :natoms] + nuc1_c[..., natoms:]
+        nuc1 = nuc1.sum(axis=-1)  # (nkpts, nao, nao)
 
         ############# 2nd part of nuclear attraction: long range #############
         # get the 2nd part from the Fourier Transform
         # get the G-points
         coeffs_cnucl, alphas_cnucl, _ = cnucl_wrapper.params
         coeffs_basis, alphas_basis, _ = self._basiswrapper.params
-        kecut_cnucl = estimate_ke_cutoff(self._lattsum_opt.precision, coeffs_cnucl, alphas_cnucl)
-        kecut_basis = estimate_ke_cutoff(self._lattsum_opt.precision, coeffs_basis, alphas_basis)
-        kecut = max(kecut_cnucl, kecut_basis)
+        gcut_cnucl = estimate_g_cutoff(self._lattsum_opt.precision, coeffs_cnucl, alphas_cnucl)
+        gcut_basis = estimate_g_cutoff(self._lattsum_opt.precision, coeffs_basis, alphas_basis)
+        gcut = max(gcut_cnucl, gcut_basis)
         # gvgrids: (ngv, ndim), gvweights: (ngv,)
-        gvgrids, gvweights = self._lattice.get_gvgrids(kecut, exclude_zeros=True)
+        gvgrids, gvweights = self._lattice.get_gvgrids(gcut, exclude_zeros=True)
 
         # the compensating charge's Fourier Transform
         # TODO: split gvgrids and gvweights to reduce the memory usage
@@ -184,12 +187,20 @@ class HamiltonCGTO_PBC(BaseHamilton):
             self._basiswrapper, Gvgrid=-gvgrids, kpts=self._kpts,
             options=self._lattsum_opt)  # (nkpts, nao, nao, ngv)
         # coulomb kernel Fourier Transform
-        coul_ft = 4 * np.pi / (gvgrids * gvgrids) * gvweights  # (ngv)
-        # nuc2: (nkpts, nao, nao)
-        nuc2 = -torch.einsum("tg,kabg,g->kab", cnucl_ft, cbas_ft, coul_ft)
+        coul_ft = 4 * np.pi / torch.einsum("xd,xd->x", gvgrids, gvgrids) * gvweights  # (ngv)
+        coul_ft = coul_ft.to(cbas_ft.dtype)  # cast to complex
+
+        # optimized by opt_einsum
+        # nuc2 = -torch.einsum("tg,kabg,g->kab", cnucl_ft, cbas_ft, coul_ft)
+        nuc2_temp = torch.einsum("g,tg->g", coul_ft, cnucl_ft)
+        nuc2 = -torch.einsum("g,kabg->kab", nuc2_temp, cbas_ft)  # (nkpts, nao, nao)
+        # print((nuc2 - nuc2.conj().transpose(-2, -1)).abs().max())  # check hermitian-ness
 
         # get the total contribution from the short range and long range
         nuc = nuc1 + nuc2
+
+        # symmetrize for more stable numerical calculation
+        nuc = (nuc + nuc.conj().transpose(-2, -1)) * 0.5
         return nuc
 
     def _create_fake_nucl_bases(self, alpha: float, chargemult: int) -> List[AtomCGTOBasis]:

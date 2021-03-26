@@ -77,15 +77,15 @@ class Lattice(object):
         ls = ls.view(-1, ls.shape[-1])  # (nb, ndim)
         return ls
 
-    def get_gvgrids(self, kecut: float, exclude_zeros: bool = True) -> Tuple[torch.Tensor, torch.Tensor]:
+    def get_gvgrids(self, gcut: float, exclude_zeros: bool = True) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Returns a tensor that contains the coordinate in reciprocal space of the
         neighboring Brillouin zones.
 
         Arguments
         ---------
-        kecut: float
-            Kinetic energy cut off for generating the G-points.
+        gcut: float
+            Cut off for generating the G-points.
         exclude_zeros: bool
             If True, then exclude the G-points where all the elements are 0.
 
@@ -97,10 +97,10 @@ class Lattice(object):
         weights: torch.Tensor
             Tensor with size `(ng)` representing the weights of the G-points.
         """
-        gcut = np.sqrt(kecut * 2)  # KE ~ 1/2 * G^2
         a = self.lattice_vectors()
         heights = torch.max(torch.norm(a, dim=-1)).detach().numpy()  # scalar
         ng1 = int(gcut * heights + 1.1)
+        ng1 = ng1 // 100  # HACK!
 
         # generate the frequency data points
         rx = torch.as_tensor(np.fft.fftfreq(ng1, 1.0 / ng1), dtype=self.dtype, device=self.device)  # (ng1,)

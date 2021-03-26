@@ -139,7 +139,7 @@ def test_cgto_vext(system1):
     a = hamilton1.get_vext(vext).fullmatrix()
     assert torch.allclose(torch.diagonal(a), torch.tensor(w, dtype=dtype))
 
-def atest_pbc_cgto_nuclattr(pbc_h1):
-    # TODO: pass the test!
+def test_pbc_cgto_nuclattr(pbc_h1):
+    # TODO: pass the test! (gcut and rcut might be too large, especially gcut)
     print(pbc_h1.get_nuclattr().fullmatrix())
     raise RuntimeError
