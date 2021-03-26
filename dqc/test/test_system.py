@@ -64,10 +64,8 @@ def test_lattice():
     assert torch.allclose(latt.volume(), torch.det(a))
 
     # check the lattice_ls function returns the correct shape
-    nimgs = 2
-    ls0 = latt.get_lattice_ls(nimgs=nimgs)  # (nb, ndim)
+    ls0 = latt.get_lattice_ls(rcut=1.5)  # (nb, ndim)
     assert ls0.ndim == 2
-    assert ls0.shape[0] == (2 * nimgs + 1) ** 3
     assert ls0.shape[1] == 3
 
     # check the ls has no repeated coordinates
