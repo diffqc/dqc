@@ -11,7 +11,7 @@ __all__ = ["evl_ft", "eval_gto_ft"]
 
 # evaluation of the Fourier Transform of the CGTO basis
 def evl_ft(shortname: str, wrapper: LibcintWrapper, Gvgrid: torch.Tensor) -> torch.Tensor:
-    """
+    r"""
     Evaluate the Fourier Transform-ed gaussian type orbital at the given Gvgrid.
     The Fourier Transform is defined as:
 
@@ -102,15 +102,15 @@ def gto_ft_evaluator(wrapper: LibcintWrapper, Gvgrid: torch.Tensor) -> torch.Ten
     # add another dummy basis to provide the multiplier
     c = np.sqrt(4 * np.pi)  # s-type normalization
     ghost_basis = CGTOBasis(
-        angmom = 0,
-        alphas = torch.tensor([0.], dtype=dtype, device=device),
-        coeffs = torch.tensor([c], dtype=dtype, device=device),
-        normalized = True,
+        angmom=0,
+        alphas=torch.tensor([0.], dtype=dtype, device=device),
+        coeffs=torch.tensor([c], dtype=dtype, device=device),
+        normalized=True,
     )
     ghost_atom_basis = AtomCGTOBasis(
-        atomz = 0,
-        bases = [ghost_basis],
-        pos = torch.tensor([0.0, 0.0, 0.0], dtype=dtype, device=device)
+        atomz=0,
+        bases=[ghost_basis],
+        pos=torch.tensor([0.0, 0.0, 0.0], dtype=dtype, device=device)
     )
     ghost_wrapper = LibcintWrapper(
         [ghost_atom_basis], spherical=wrapper.spherical, lattice=wrapper.lattice)

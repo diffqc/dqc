@@ -1,5 +1,6 @@
 import os
 import ctypes
+import torch
 import numpy as np
 
 # contains functions and constants that are used specifically for

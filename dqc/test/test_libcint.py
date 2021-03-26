@@ -709,6 +709,111 @@ def test_pbc_integral_3c_vs_pyscf():
     assert torch.allclose(mat.view(-1), torch.as_tensor(pyscf_mat, dtype=mat.dtype).view(-1))
 
 @pytest.mark.parametrize(
+    "int_type",
+    ["overlap"]
+)
+def test_pbc_ft_integral_1e(int_type):
+    # test various aspects of the pbcft integrator, including comparing it with
+    # pyscf value
+
+    atomenv = get_atom_env(dtype)
+    a = torch.tensor([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]], dtype=dtype)
+    env = get_wrapper(atomenv, spherical=True, lattice=Lattice(a))
+    kpts = torch.tensor([
+        [0.0, 0.0, 0.0],
+        [0.2, 0.1, 0.3],
+    ], dtype=dtype)
+    ngrid = 3
+    Gvgrid = torch.zeros(ngrid, 3, dtype=dtype)  # (ngrid, ndim)
+    Gvgrid[:, 0] = torch.linspace(-5, 5, ngrid, dtype=dtype)
+
+    if int_type == "overlap":
+        opft = intor.pbcft_overlap
+        op = intor.pbc_overlap
+    else:
+        raise RuntimeError("Unknown int_type: %s" % int_type)
+
+    # check the shape of the integral
+    mat_ft = opft(env, kpts=kpts, Gvgrid=Gvgrid)
+    assert mat_ft.shape[0] == kpts.shape[0]
+    assert mat_ft.shape[-1] == ngrid
+    assert mat_ft.shape[-2] == env.nao()
+    assert mat_ft.shape[-3] == env.nao()
+
+    # check the subset
+    env1 = env[: len(env) // 2]
+    mat_ft1 = opft(env, other=env1, kpts=kpts, Gvgrid=Gvgrid)
+    mat_ft2 = opft(env1, other=env1, kpts=kpts, Gvgrid=Gvgrid)
+    nenv1 = env1.nao()
+    assert torch.allclose(mat_ft[:, :, :nenv1], mat_ft1)
+    assert torch.allclose(mat_ft[:, :nenv1, :nenv1], mat_ft2)
+
+    # check if the results are equal if Gvgrid is all zeros (i.e. ignored)
+    mat0ft = opft(env, kpts=kpts).squeeze(-1)
+    mat0 = op(env, kpts=kpts)
+    assert torch.allclose(mat0ft, mat0)
+
+    # compare it with precomputed values from pyscf
+    # the code to obtain the tensor is written below
+    mat_scf_t = torch.tensor(
+       [[[[3.2569e-01-8.8605e-18j, 1.8695e+01+0.0000e+00j, 3.2569e-01+8.8605e-18j],
+          [8.1269e-01-1.2339e-17j, 6.1272e+01+0.0000e+00j, 8.1269e-01+1.2339e-17j],
+          [3.2425e-01+5.9150e-18j, 1.8692e+01+0.0000e+00j, 3.2425e-01-5.9150e-18j],
+          [8.1269e-01-3.9181e-17j, 6.1272e+01+0.0000e+00j, 8.1269e-01+3.9181e-17j]],
+         [[4.2610e-02+4.2165e-17j, 6.1272e+01+0.0000e+00j, 4.2610e-02-4.2165e-17j],
+          [3.0625e-13-6.2574e-23j, 2.0087e+02+0.0000e+00j, 3.0625e-13+6.2574e-23j],
+          [4.2610e-02+4.6474e-18j, 6.1272e+01+0.0000e+00j, 4.2610e-02-4.6474e-18j],
+          [3.0616e-13-1.1547e-22j, 2.0087e+02+0.0000e+00j, 3.0616e-13+1.1547e-22j]],
+         [[3.2425e-01+2.0121e-18j, 1.8692e+01+0.0000e+00j, 3.2425e-01-2.0121e-18j],
+          [8.1269e-01+2.0708e-17j, 6.1272e+01+0.0000e+00j, 8.1269e-01-2.0708e-17j],
+          [3.2569e-01-1.2330e-17j, 1.8695e+01+0.0000e+00j, 3.2569e-01+1.2330e-17j],
+          [8.1269e-01-1.2339e-17j, 6.1272e+01+0.0000e+00j, 8.1269e-01+1.2339e-17j]],
+         [[4.2610e-02+1.7034e-17j, 6.1272e+01+0.0000e+00j, 4.2610e-02-1.7034e-17j],
+          [3.0616e-13-6.3944e-23j, 2.0087e+02+0.0000e+00j, 3.0616e-13+6.3944e-23j],
+          [4.2610e-02+4.2165e-17j, 6.1272e+01+0.0000e+00j, 4.2610e-02-4.2165e-17j],
+          [3.0625e-13-6.2574e-23j, 2.0087e+02+0.0000e+00j, 3.0625e-13+6.2574e-23j]]],
+        [[[3.0862e-01-4.2323e-18j, 1.7225e+01-1.6411e-16j, 3.2262e-01+7.3108e-18j],
+          [5.9903e-01-1.2090e-16j, 4.8584e+01-1.2698e-15j, 7.4776e-01+7.1463e-18j],
+          [2.7234e-01+1.4197e-01j, 1.5275e+01+7.9529e+00j, 2.8471e-01+1.4841e-01j],
+          [5.3134e-01+2.7662e-01j, 4.3094e+01+2.2435e+01j, 6.6326e-01+3.4530e-01j]],
+         [[7.9138e-02-7.9139e-17j, 4.8584e+01-1.1439e-15j, 1.5461e-02-2.3334e-17j],
+          [1.3540e-14-2.3577e-22j, 1.3708e+02-4.2823e-15j, 3.2017e-12+6.0924e-23j],
+          [7.0195e-02+3.6544e-02j, 4.3094e+01+2.2435e+01j, 1.3714e-02+7.1397e-03j],
+          [1.1918e-14+6.3494e-15j, 1.2159e+02+6.3299e+01j, 2.8399e-12+1.4784e-12j]],
+         [[2.7234e-01-1.4197e-01j, 1.5275e+01-7.9529e+00j, 2.8471e-01-1.4841e-01j],
+          [5.3134e-01-2.7662e-01j, 4.3094e+01-2.2435e+01j, 6.6326e-01-3.4530e-01j],
+          [3.0862e-01-2.4976e-18j, 1.7225e+01-2.7513e-16j, 3.2262e-01+3.7188e-19j],
+          [5.9903e-01-1.2090e-16j, 4.8584e+01-1.2698e-15j, 7.4776e-01-3.2620e-18j]],
+         [[7.0195e-02-3.6544e-02j, 4.3094e+01-2.2435e+01j, 1.3714e-02-7.1397e-03j],
+          [1.1918e-14-6.3494e-15j, 1.2159e+02-6.3299e+01j, 2.8399e-12-1.4784e-12j],
+          [7.9138e-02-7.9139e-17j, 4.8584e+01-1.1439e-15j, 1.5461e-02-2.3334e-17j],
+          [1.3540e-14-2.3577e-22j, 1.3708e+02-1.1388e-14j, 3.2017e-12+6.0924e-23j]]]],
+          dtype=torch.complex128)
+
+    # # code to generate the matrix above
+    # try:
+    #     from pyscf.pbc.df.ft_ao import ft_aopair_kpts
+    # except ImportError:
+    #     # older version of PySCF
+    #     from pyscf.pbc.df.ft_ao import _ft_aopair_kpts as ft_aopair_kpts
+    #
+    # # construct the pyscf system
+    # cell = get_cell_pyscf(dtype, a.detach().numpy())
+    # if int_type == "overlap":
+    #     int_name = "GTO_ft_ovlp"
+    # else:
+    #     raise RuntimeError("Unknown int_type: %s" % int_type)
+    #
+    # mat_scf = ft_aopair_kpts(cell, Gvgrid, kptjs=kpts.numpy(), intor=int_name)
+    # mat_scf = np.rollaxis(mat_scf, 1, 4)
+    # mat_scf_t = torch.as_tensor(mat_scf)
+    # print(mat_scf_t)
+    # raise RuntimeError
+
+    # high rtol because mat_scf_t is precomputed
+    assert torch.allclose(mat_ft, mat_scf_t, rtol=5e-5)
+
+@pytest.mark.parametrize(
     "angmom",
     [0, 1]
 )
