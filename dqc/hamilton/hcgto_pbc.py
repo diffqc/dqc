@@ -142,7 +142,7 @@ class HamiltonCGTO_PBC(BaseHamilton):
 
         # construct the fake nuclei atombases for nuclei
         # (in this case, we assume each nucleus is a very sharp s-type orbital)
-        nucl_atbases = self._create_fake_nucl_bases(alpha=1e6, chargemult=1)
+        nucl_atbases = self._create_fake_nucl_bases(alpha=1e16, chargemult=1)
         # add a compensating charge
         cnucl_atbases = self._create_fake_nucl_bases(alpha=self._eta, chargemult=-1)
         # real charge + compensating charge
@@ -208,7 +208,8 @@ class HamiltonCGTO_PBC(BaseHamilton):
         res: List[AtomCGTOBasis] = []
         alphas = torch.tensor([alpha], dtype=self.dtype, device=self.device)
         # normalizing so the integral of the cgto is 1
-        norm_coeff = 1.4366969770013325 * alphas ** 1.5
+        # 0.5 / np.sqrt(np.pi) * 2 / scipy.special.gamma(1.5) * alphas ** 1.5
+        norm_coeff = 0.6366197723675814 * alphas ** 1.5
         for atb in self._atombases:
             # put the charge in the coefficients
             coeffs = atb.atomz * norm_coeff
