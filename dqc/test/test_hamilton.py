@@ -32,6 +32,7 @@ def pbc_h1():
     atom = "He"
     bases = loadbasis("%d:3-21G" % atomz, dtype=dtype)
     atombases = [AtomCGTOBasis(atomz=atomz, bases=bases, pos=pos)]
+    kpts = torch.tensor([[0.0, 0.0, 0.0], [0.1, 0.2, 0.15]], dtype=dtype)
 
     # setup the lattice
     a = torch.tensor([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]], dtype=dtype) * 3
@@ -43,12 +44,12 @@ def pbc_h1():
     df = DensityFitInfo(method="gdf", auxbases=atomauxbases)
 
     # build the hamiltonian
-    h = HamiltonCGTO_PBC(atombases, latt=latt, df=df)
+    h = HamiltonCGTO_PBC(atombases, latt=latt, df=df, kpts=kpts)
     h.build()
 
     # pyscf system build
-    mol = pyscf.pbc.gto.C(atom="%s 0 0 0" % atom, a=a.numpy(), basis="3-21G", unit="Bohr", spin=1)
-    df = pyscf.pbc.df.GDF(mol)
+    mol = pyscf.pbc.gto.C(atom="%s 0 0 0" % atom, a=a.numpy(), basis="3-21G", unit="Bohr", spin=0)
+    df = pyscf.pbc.df.GDF(mol, kpts=kpts.detach().numpy())
     df.auxbasis = "def2-svp-jkfit"
 
     return h, df
@@ -157,7 +158,7 @@ def test_pbc_cgto_nuclattr(pbc_h1):
     # nuc[np.abs(nuc) < 1e-9] = 0
     h_dqc, df_scf = pbc_h1
     nuc_dqc = h_dqc.get_nuclattr().fullmatrix()
-    nuc_scf = torch.as_tensor(df_scf.get_nuc(), dtype=nuc_dqc.dtype)
+    nuc_scf = torch.as_tensor(df_scf.get_nuc(kpts=df_scf.kpts), dtype=nuc_dqc.dtype)
     print(nuc_dqc.shape)
     print(nuc_scf.shape)
 
