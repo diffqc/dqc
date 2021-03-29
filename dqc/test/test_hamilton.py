@@ -28,12 +28,13 @@ def pbc_h1():
     # get the hamiltonian for pbc system
     # setup the environment
     pos = torch.tensor([0.0, 0.0, 0.0], dtype=dtype)
-    atomz = 1
+    atomz = 2
+    atom = "He"
     bases = loadbasis("%d:3-21G" % atomz, dtype=dtype)
     atombases = [AtomCGTOBasis(atomz=atomz, bases=bases, pos=pos)]
 
     # setup the lattice
-    a = torch.tensor([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]], dtype=dtype) * 10
+    a = torch.tensor([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]], dtype=dtype) * 3
     latt = Lattice(a)
 
     # setup the auxbasis
@@ -46,11 +47,11 @@ def pbc_h1():
     h.build()
 
     # pyscf system build
-    mol = pyscf.pbc.gto.C(atom="H 0 0 0", a=a.numpy(), basis="3-21G", unit="Bohr")
+    mol = pyscf.pbc.gto.C(atom="%s 0 0 0" % atom, a=a.numpy(), basis="3-21G", unit="Bohr", spin=1)
     df = pyscf.pbc.df.GDF(mol)
     df.auxbasis = "def2-svp-jkfit"
-    # h = df
-    return h
+
+    return h, df
 
 def test_cgto_ao2dm(system1):
     # test ao2dm with a simple case
@@ -154,7 +155,12 @@ def test_pbc_cgto_nuclattr(pbc_h1):
     import numpy as np
     # nuc = pbc_h1.get_nuc()
     # nuc[np.abs(nuc) < 1e-9] = 0
-    nuc = pbc_h1.get_nuclattr().fullmatrix().real
-    print(nuc)
-    # print(pbc_h1.eta)
-    raise RuntimeError
+    h_dqc, df_scf = pbc_h1
+    nuc_dqc = h_dqc.get_nuclattr().fullmatrix()
+    nuc_scf = torch.as_tensor(df_scf.get_nuc(), dtype=nuc_dqc.dtype)
+    print(nuc_dqc.shape)
+    print(nuc_scf.shape)
+
+    print(nuc_dqc)
+    print(nuc_scf)
+    assert torch.allclose(nuc_dqc, nuc_scf)

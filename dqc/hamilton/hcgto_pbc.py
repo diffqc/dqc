@@ -28,7 +28,9 @@ class HamiltonCGTO_PBC(BaseHamilton):
         self._spherical = spherical
         self._lattice = latt
         self._df = df
-        self._eta = 0.2  # alpha for the compensating charge
+        # alpha for the compensating charge
+        # TODO: calculate eta properly or put it in lattsum_opt
+        self._eta = 0.2
         # lattice sum integral options
         self._lattsum_opt = intor.PBCIntOption() if lattsum_opt is None else lattsum_opt
 
@@ -167,6 +169,14 @@ class HamiltonCGTO_PBC(BaseHamilton):
                                   options=self._lattsum_opt)
         nuc1 = -nuc1_c[..., :natoms] + nuc1_c[..., natoms:]
         nuc1 = torch.sum(nuc1, dim=-1)  # (nkpts, nao, nao)
+
+        # add vbar for 3 dimensional cell
+        # vbar is the interaction between the background charge and the
+        # compensating function.
+        # https://github.com/pyscf/pyscf/blob/c9aa2be600d75a97410c3203abf35046af8ca615/pyscf/pbc/df/aft.py#L239
+        nucbar = sum([-atb.atomz / self._eta for atb in self._atombases])
+        nuc1_b = -nucbar * np.pi / self._lattice.volume() * self._olp_mat
+        nuc1 = nuc1 + nuc1_b
 
         ############# 2nd part of nuclear attraction: long range #############
         # get the 2nd part from the Fourier Transform
