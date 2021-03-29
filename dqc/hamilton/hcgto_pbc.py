@@ -197,7 +197,7 @@ class HamiltonCGTO_PBC(BaseHamilton):
             self._basiswrapper, Gvgrid=-gvgrids, kpts=self._kpts,
             options=self._lattsum_opt)  # (nkpts, nao, nao, ngv)
         # coulomb kernel Fourier Transform
-        coul_ft = 4 * np.pi / torch.einsum("xd,xd->x", gvgrids, gvgrids) * gvweights  # (ngv)
+        coul_ft = self._unweighted_coul_ft(gvgrids) * gvweights  # (ngv,)
         coul_ft = coul_ft.to(cbas_ft.dtype)  # cast to complex
 
         # optimized by opt_einsum
@@ -226,3 +226,13 @@ class HamiltonCGTO_PBC(BaseHamilton):
             basis = CGTOBasis(angmom=0, alphas=alphas, coeffs=coeffs, normalized=True)
             res.append(AtomCGTOBasis(atomz=0, bases=[basis], pos=atb.pos))
         return res
+
+    def _unweighted_coul_ft(self, gvgrids: torch.Tensor) -> torch.Tensor:
+        # Returns the unweighted fourier transform of the coulomb kernel: 4*pi/|gv|^2
+        # If |gv| == 0, then it is 0.
+        # gvgrids: (ngv, ndim)
+        # returns: (ngv,)
+        gnorm2 = torch.einsum("xd,xd->x", gvgrids, gvgrids)
+        gnorm2[gnorm2 < 1e-12] = float("inf")
+        coulft = 4 * np.pi / gnorm2
+        return coulft
