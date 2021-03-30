@@ -44,13 +44,15 @@ def pbc_h1():
     df = DensityFitInfo(method="gdf", auxbases=atomauxbases)
 
     # build the hamiltonian
-    h = HamiltonCGTO_PBC(atombases, latt=latt, df=df, kpts=kpts)
+    h = HamiltonCGTO_PBC(atombases, latt=latt, df=df, kpts=kpts,
+                         lattsum_opt={"precision": 1e-8})
     h.build()
 
     # pyscf system build
     mol = pyscf.pbc.gto.C(atom="%s 0 0 0" % atom, a=a.numpy(), basis="3-21G", unit="Bohr", spin=0)
     df = pyscf.pbc.df.GDF(mol, kpts=kpts.detach().numpy())
     df.auxbasis = "def2-svp-jkfit"
+    df.build()
 
     return h, df
 
@@ -152,7 +154,6 @@ def test_cgto_vext(system1):
     assert torch.allclose(torch.diagonal(a), torch.tensor(w, dtype=dtype))
 
 def test_pbc_cgto_nuclattr(pbc_h1):
-    # TODO: pass the test! (gcut and rcut might be too large, especially gcut)
     import numpy as np
     # nuc = pbc_h1.get_nuc()
     # nuc[np.abs(nuc) < 1e-9] = 0
@@ -165,3 +166,7 @@ def test_pbc_cgto_nuclattr(pbc_h1):
     print(nuc_dqc)
     print(nuc_scf)
     assert torch.allclose(nuc_dqc, nuc_scf)
+
+def atest_pbc_cgto_elrep(pbc_h1):
+    h_dqc, df_scf = pbc_h1
+    raise RuntimeError

@@ -78,6 +78,7 @@ def loadbasis(cmd: str, dtype: torch.dtype = _dtype,
         for i in range(ncoeffs):
             coeff = torch.tensor(coeffs[i], dtype=dtype, device=device, requires_grad=requires_grad)
             basis = CGTOBasis(angmom=angmoms[i], alphas=alpha, coeffs=coeff)
+            basis.wfnormalize_()
             res.append(basis)
     return res
 

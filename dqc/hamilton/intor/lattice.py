@@ -77,7 +77,7 @@ class Lattice(object):
         ls = ls.view(-1, ls.shape[-1])  # (nb, ndim)
         return ls
 
-    def get_gvgrids(self, gcut: float, exclude_zeros: bool = True) -> Tuple[torch.Tensor, torch.Tensor]:
+    def get_gvgrids(self, gcut: float) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Returns a tensor that contains the coordinate in reciprocal space of the
         neighboring Brillouin zones.
@@ -86,8 +86,6 @@ class Lattice(object):
         ---------
         gcut: float
             Cut off for generating the G-points.
-        exclude_zeros: bool
-            If True, then exclude the G-points where all the elements are 0.
 
         Returns
         -------
@@ -114,9 +112,6 @@ class Lattice(object):
         gvgrids = gvgrids + rx[:, None, None] * b[1, :]  # (ng1, ng1, ndim)
         gvgrids = gvgrids + rx[:, None, None, None] * b[2, :]  # (ng1, ng1, ng1, ndim)
         gvgrids = gvgrids.view(-1, gvgrids.shape[-1])  # (ng, ndim)
-
-        if exclude_zeros:
-            gvgrids = gvgrids[torch.norm(gvgrids, dim=-1) > 1e-9]
 
         # 1 / cell.vol == det(b) / (2 pi)^3
         weights = torch.zeros(gvgrids.shape[0], dtype=self.dtype, device=self.device)
