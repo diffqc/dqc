@@ -2,6 +2,7 @@ from __future__ import annotations
 import torch
 from dataclasses import dataclass
 from typing import Optional, Union, List, TypeVar, Generic
+from dqc.utils.misc import gaussian_int
 
 __all__ = ["CGTOBasis", "AtomCGTOBasis", "ValGrad"]
 
@@ -37,18 +38,19 @@ class CGTOBasis:
         if self.normalized:
             return self
 
-        # precomputed factor:
-        # 2 ** (2 * angmom + 3) * factorial(angmom + 1) * / (factorial(angmom * 2 + 2) * np.sqrt(np.pi)))
-        factor = [
-            2.256758334191025,  # 0
-            1.5045055561273502,  # 1
-            0.6018022224509401,  # 2
-            0.17194349212884005,  # 3
-            0.03820966491752001,  # 4
-            0.006947211803185456,  # 5
-            0.0010688018158746854,  # 6
-        ][self.angmom]
-        self.coeffs = self.coeffs * torch.sqrt(factor * (2 * self.alphas) ** (self.angmom + 1.5))
+        coeffs = self.coeffs
+
+        # normalize to have individual gaussian integral to be 1 (if coeff is 1)
+        coeffs = coeffs / torch.sqrt(gaussian_int(2 * self.angmom + 2, 2 * self.alphas))
+
+        # normalize the coefficients in the basis (because some basis such as
+        # def2-svp-jkfit is not normalized to have 1 in overlap)
+        ee = self.alphas.unsqueeze(-1) + self.alphas.unsqueeze(-2)  # (ngauss, ngauss)
+        ee = gaussian_int(2 * self.angmom + 2, ee)
+        s1 = 1 / torch.sqrt(torch.einsum("a,ab,b", coeffs, ee, coeffs))
+        coeffs = coeffs * s1
+
+        self.coeffs = coeffs
         self.normalized = True
         return self
 
