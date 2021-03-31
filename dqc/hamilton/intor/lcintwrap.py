@@ -41,11 +41,14 @@ class LibcintWrapper(object):
         allpos: List[torch.Tensor] = []
         allalphas: List[torch.Tensor] = []
         allcoeffs: List[torch.Tensor] = []
+        allangmoms: List[int] = []
         shell_to_atom: List[int] = []
         ngauss_at_shell: List[int] = []
+        gauss_to_shell: List[int] = []
 
         # constructing the triplet lists and also collecting the parameters
         nshells = 0
+        ishell = 0
         for iatom, atombasis in enumerate(atombases):
             # construct the atom environment
             assert atombasis.pos.numel() == NDIM, "Please report this bug in Github"
@@ -85,12 +88,17 @@ class LibcintWrapper(object):
                 # add the alphas and coeffs to the parameters list
                 allalphas.append(shell.alphas)
                 allcoeffs.append(shell.coeffs)
+                allangmoms.extend([shell.angmom] * ngauss)
                 ngauss_at_shell.append(ngauss)
+                gauss_to_shell.extend([ishell] * ngauss)
+                ishell += 1
 
         # compile the parameters of this object
         self._allpos_params = torch.cat(allpos, dim=0)  # (natom, NDIM)
         self._allalphas_params = torch.cat(allalphas, dim=0)  # (ntot_gauss)
         self._allcoeffs_params = torch.cat(allcoeffs, dim=0)  # (ntot_gauss)
+        self._allangmoms = torch.tensor(allangmoms, dtype=torch.int32, device=self.device)  # (ntot_gauss)
+        self._gauss_to_shell = torch.tensor(gauss_to_shell, dtype=torch.int32, device=self.device)
 
         # convert the lists to numpy to make it contiguous (Python lists are not contiguous)
         self._atm = np.array(atm_list, dtype=np.int32, order="C")
@@ -151,6 +159,10 @@ class LibcintWrapper(object):
         return self._atm, self._bas, self._env
 
     @property
+    def full_angmoms(self) -> torch.Tensor:
+        return self._allangmoms
+
+    @property
     def params(self) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # returns all the parameters of this object
         # this shouldn't change in the sliced wrapper
@@ -169,6 +181,12 @@ class LibcintWrapper(object):
         # (self.full_shell_to_aoloc[i], self.full_shell_to_aoloc[i + 1])
         # if this object is a subset, then returns the complete mapping
         return self._shell_to_aoloc
+
+    @property
+    def full_gauss_to_shell(self) -> torch.Tensor:
+        # returns the full index mapping from gaussian to shell tensor
+        # if this object is a subset, then returns the complete mapping
+        return self._gauss_to_shell
 
     @property
     def full_ao_to_atom(self) -> torch.Tensor:

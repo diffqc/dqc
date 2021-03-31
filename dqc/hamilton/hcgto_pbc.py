@@ -7,6 +7,7 @@ from dqc.hamilton.base_hamilton import BaseHamilton
 from dqc.hamilton.intor.utils import estimate_g_cutoff
 from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, SpinParam, DensityFitInfo
 from dqc.utils.misc import gaussian_int
+from dqc.utils.types import get_complex_dtype
 from dqc.grid.base_grid import BaseGrid
 from dqc.xc.base_xc import BaseXC
 from dqc.hamilton.intor.lattice import Lattice
@@ -63,7 +64,7 @@ class HamiltonCGTO_PBC(BaseHamilton):
         self._kin_mat = intor.pbc_kinetic(self._basiswrapper, kpts=self._kpts)
         self._nucl_mat = self._calc_nucl_attr()
         self._kinnucl_mat = self._kin_mat + self._nucl_mat
-        self._elrep_mat, self._elrep_mat_3c = self._calc_elrep_df(self._df)
+        # self._elrep_mat, self._elrep_mat_3c = self._calc_elrep_df(self._df)
         self._is_built = True
         return self
 
@@ -77,8 +78,8 @@ class HamiltonCGTO_PBC(BaseHamilton):
         return xt.LinearOperator.m(self._kinnucl_mat, is_hermitian=True)
 
     def get_overlap(self) -> xt.LinearOperator:
-        # olp_mat: (nao, nao)
-        # return: (nao, nao)
+        # olp_mat: (nkpts, nao, nao)
+        # return: (nkpts, nao, nao)
         return xt.LinearOperator.m(self._olp_mat, is_hermitian=True)
 
     def get_elrep(self, dm: torch.Tensor) -> xt.LinearOperator:
@@ -229,10 +230,6 @@ class HamiltonCGTO_PBC(BaseHamilton):
                                                 lattice=self._lattice)
         aux_wrapper = intor.LibcintWrapper(df_auxbases, spherical=self._spherical,
                                            lattice=self._lattice)
-        print("auxwrapper atm bas env:")
-        print(aux_wrapper.atm_bas_env)
-        print("aux_comp_wrapper atm bas env:")
-        print(aux_comp_wrapper.atm_bas_env)
         nxcao = aux_comp_wrapper.nao()  # number of aux compensating basis wrapper
         nxao = fuse_aux_wrapper.nao() - nxcao  # number of aux basis wrapper
         assert nxcao == nxao
@@ -278,28 +275,37 @@ class HamiltonCGTO_PBC(BaseHamilton):
         auxb_ft_c = intor.eval_gto_ft(aux_wrapper, gvk)  # (nxao, ngv * nkpts_ij)
         auxb_ft_c = auxb_ft_c.view(-1, ngv, nkpts_ij)  # (nxao, ngv, nkpts_ij)
         auxb_ft = auxb_ft_c - comp_ft  # (nxao, ngv, nkpts_ij)
-        # # ft of the overlap integral of the basis
-        # aoao_ft = intor.pbcft_overlap(
-        #     self._basiswrapper, Gvgrid=gvk, kpts=self._kpts,
-        #     options=self._lattsum_opt)  # (nkpts, nao, nao, ngv * nkpts_ij)
+        # ft of the overlap integral of the basis (nkpts_ij, nao, nao, ngv)
+        aoao_ft = self._get_pbc_overlap_with_kpts_ij(gvgrids, kpts_reduce, kpts_ij[..., 1, :])
         # ft of the coulomb kernel
         coul_ft = self._unweighted_coul_ft(gvk)  # (ngv * nkpts_ij,)
         coul_ft = coul_ft.to(comp_ft.dtype).view(ngv, nkpts_ij) * gvweights.unsqueeze(-1)  # (ngv, nkpts_ij)
 
         # 1: (nkpts_ij, nxao, nxao)
         pattern = "gi,xgi,ygi->ixy"
-        j2c_long  = torch.einsum(pattern, coul_ft, comp_ft.conj(), auxb_ft)
+        j2c_long = torch.einsum(pattern, coul_ft, comp_ft.conj(), auxb_ft)
         # 2: (nkpts_ij, nxao, nxao)
         j2c_long += torch.einsum(pattern, coul_ft, auxb_ft.conj(), comp_ft)
         # 3: (nkpts_ij, nxao, nxao)
         j2c_long += torch.einsum(pattern, coul_ft, comp_ft.conj(), comp_ft)
 
         # TODO: complete this
-        j3c_long = 0
+        patternj3 = "gi,xgi,iyzg->iyzx"
+        # (nkpts_ij, nao, nao, nxao)
+        j3c_long = torch.einsum(patternj3, coul_ft, comp_ft.conj(), aoao_ft)
+        auxbar_f = self._auxbar(kpts_reduce, fuse_aux_wrapper)  # (nkpts_ij, nxao + nxcao)
+        auxbar = auxbar_f[:, :nxao] - auxbar_f[:, nxao:]  # (nkpts_ij, nxao)
+        # j3c_bar = auxbar[:, None, None, :] * self._olp_mat[..., None]  # (nkpts_ij, nao, nao, nxao)
 
         ######################## combining integrals ########################
         j2c = j2c_short + j2c_long  # (nkpts_ij, nxao, nxao)
-        j3c = j3c_short + j3c_long  # (nkpts_ij, nao, nao, nxao)
+        j3c = j3c_short + j3c_long #+ j3c_bar  # (nkpts_ij, nao, nao, nxao)
+        # print("j3c_short:")
+        # print(j3c_short)
+        # print("j3c_long:")
+        # print(j3c_long)
+        # print("j3c_bar:")
+        # print(j3c_bar)
         el_mat = torch.matmul(j3c, torch.inverse(j2c.unsqueeze(1)))  # (nkpts_ij, nao, nao, nxao)
         return el_mat, j3c
 
@@ -381,6 +387,70 @@ class HamiltonCGTO_PBC(BaseHamilton):
             return max(*gcuts)
         else:
             raise ValueError("Unknown reduce: %s" % reduce)
+
+    def _get_pbc_overlap_with_kpts_ij(self, gvgrids: torch.Tensor,
+                                      kpts_reduce: torch.Tensor,
+                                      kpts_j: torch.Tensor) -> torch.Tensor:
+        # compute the pbcft overlap integral for the basis by filling in
+        # the k-points one by one.
+        # this is to compute eq. (16) on Sun et al., https://doi.org/10.1063/1.4998644
+
+        # gvgrids: (ngv, ndim)
+        # kpts_reduce: (nkpts_ij, ndim)
+        # kpts_j: (nkpts_ij, ndim)
+        # returns: (nkpts_ij, nao, nao, ngv)
+        nkpts_ij = kpts_reduce.shape[0]
+        nao = self._basiswrapper.nao()
+        ngv = gvgrids.shape[0]
+        dctype = get_complex_dtype(self.dtype)
+        res = torch.empty((nkpts_ij, nao, nao, ngv), dtype=dctype, device=self.device)
+        for i in range(nkpts_ij):
+            kpt_ij = kpts_reduce[i]  # (ndim,)
+            kpt_j = kpts_j[i:i+1]  # (1, ndim)
+            gvk = gvgrids + kpt_ij  # (ngv, ndim)
+            aoao_ft_i = intor.pbcft_overlap(
+                self._basiswrapper, Gvgrid=gvk, kpts=kpt_j,
+                options=self._lattsum_opt)  # (1, nao, nao, ngv)
+            res[i] = aoao_ft_i[0]
+        return res
+
+    def _auxbar(self, kpts: torch.Tensor, fuse_wrapper: intor.LibcintWrapper) -> torch.Tensor:
+        # computing the single basis integral in equation (14) in
+        # Sun et al., https://doi.org/10.1063/1.4998644
+        # kpts: (nkpts, ndim)
+        # returns (nkpts, nao(fuse_wrapper))
+
+        # retrieve the parameters needed from the wrapper
+        ao_to_shell = torch.as_tensor(fuse_wrapper.full_ao_to_shell)  # (nao_tot,)
+        shell_to_ao = torch.as_tensor(fuse_wrapper.full_shell_to_aoloc)  # (nshells_tot,)
+        ao_idx0, ao_idx1 = fuse_wrapper.ao_idxs()
+        coeffs, alphas, _ = fuse_wrapper.params  # coeffs, alphas: (ngauss_tot,)
+        angmoms = torch.as_tensor(fuse_wrapper.full_angmoms)  # (ngauss_tot,)
+        gauss_to_shell = torch.as_tensor(fuse_wrapper.full_gauss_to_shell, dtype=torch.int64)  # (ngauss_tot,)
+
+        # calculate the vbar for each gauss
+        half_sph_norm = 0.5 / np.sqrt(np.pi)
+        bar = -1.0 / alphas  # (ngauss_tot,)
+        norms = half_sph_norm / gaussian_int(2, alphas)  # (ngauss_tot,)
+        vbar = coeffs * (angmoms == 0) / norms / bar  # (ngauss_tot,)
+
+        # scatter the vbar to the appropriate shell
+        nshells_tot = len(ao_to_shell)
+        vbar_shell = torch.zeros((nshells_tot,), dtype=self.dtype, device=self.device)
+        vbar_shell.scatter_add_(dim=0, index=gauss_to_shell, src=vbar)  # (nshells_tot,)
+
+        # gather vbar to ao
+        vbar_ao = torch.gather(vbar_shell, dim=0, index=ao_to_shell)  # (nao_tot,)
+        vbar_ao = vbar_ao[ao_idx0:ao_idx1]  # (nao,)
+        vbar_ao = vbar_ao * np.pi / self._lattice.volume()
+
+        # gather the results to the indices where k-points are 0
+        nkpts = kpts.shape[0]
+        kpts_zero = kpts.norm(dim=-1) < 1e-9  # (nkpts,)
+        res = torch.zeros((nkpts, vbar_ao.shape[0]), dtype=self.dtype, device=self.device)
+        res[kpts_zero, :] = vbar_ao
+
+        return res
 
 def _combine_kpts_to_kpts_ij(kpts: torch.Tensor) -> torch.Tensor:
     # combine the k-points into pair of k-points
