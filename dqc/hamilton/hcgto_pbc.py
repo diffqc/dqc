@@ -4,13 +4,12 @@ import numpy as np
 import xitorch as xt
 import dqc.hamilton.intor as intor
 from dqc.hamilton.base_hamilton import BaseHamilton
-from dqc.hamilton.intor.tools import get_gcut
 from dqc.df.base_df import BaseDF
 from dqc.df.dfpbc import DFPBC
 from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, SpinParam, DensityFitInfo
 from dqc.utils.misc import gaussian_int
 from dqc.utils.types import get_complex_dtype
-from dqc.utils.pbc import unweighted_coul_ft
+from dqc.utils.pbc import unweighted_coul_ft, get_gcut
 from dqc.grid.base_grid import BaseGrid
 from dqc.xc.base_xc import BaseXC
 from dqc.hamilton.intor.lattice import Lattice

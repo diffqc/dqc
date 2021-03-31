@@ -5,11 +5,10 @@ import xitorch as xt
 import dqc.hamilton.intor as intor
 from dqc.utils.misc import gaussian_int
 from dqc.df.base_df import BaseDF
-from dqc.hamilton.intor.tools import get_gcut
 from dqc.utils.datastruct import DensityFitInfo
 from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, DensityFitInfo
 from dqc.utils.types import get_complex_dtype
-from dqc.utils.pbc import unweighted_coul_ft
+from dqc.utils.pbc import unweighted_coul_ft, get_gcut
 
 class DFPBC(BaseDF):
     def __init__(self, dfinfo: DensityFitInfo, wrapper: intor.LibcintWrapper,

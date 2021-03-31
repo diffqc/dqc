@@ -7,11 +7,12 @@ import torch
 import numpy as np
 from dqc.hamilton.intor.lcintwrap import LibcintWrapper
 from dqc.hamilton.intor.utils import np2ctypes, int2ctypes, CGTO, CPBC, \
-                                     c_null_ptr, estimate_ovlp_rcut
+                                     c_null_ptr
 from dqc.hamilton.intor.pbcintor import PBCIntOption, _check_and_set_pbc, \
                                         _get_default_options, _get_default_kpts, \
                                         _concat_atm_bas_env
 from dqc.utils.types import get_complex_dtype
+from dqc.utils.pbc import estimate_ovlp_rcut
 from dqc.hamilton.intor.lattice import Lattice
 from dqc.hamilton.intor.molintor import _get_intgl_components_shape
 
