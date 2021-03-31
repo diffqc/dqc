@@ -19,6 +19,14 @@ class BaseHamilton(xt.EditableModule):
         """
         pass
 
+    @abstractproperty
+    def df(self) -> Optional[BaseDF]:
+        """
+        Returns the density fitting object (if any) attached to this Hamiltonian
+        object. If None, returns None
+        """
+        pass
+
     @abstractmethod
     def build(self) -> BaseHamilton:
         """
