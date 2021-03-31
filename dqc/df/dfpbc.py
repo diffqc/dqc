@@ -51,9 +51,11 @@ class DFPBC(BaseDF):
             raise NotImplementedError("Density fitting that is not %s is not implemented" % df.method)
 
         # get the k-points needed for the integrations
+        nkpts = self._kpts.shape[0]
         kpts_ij = _combine_kpts_to_kpts_ij(self._kpts)  # (nkpts_ij, 2, ndim)
         kpts_reduce = _reduce_kpts_ij(kpts_ij)  # (nkpts_ij, ndim)
         nkpts_ij = kpts_ij.shape[0]
+        kpts_j = kpts_ij[..., 1, :]  # (nkpts_ij, ndim)
 
         ######################## short-range integrals ########################
         ############# 3-centre 2-electron integral #############
@@ -90,7 +92,7 @@ class DFPBC(BaseDF):
         auxb_ft_c = auxb_ft_c.view(-1, ngv, nkpts_ij)  # (nxao, ngv, nkpts_ij)
         auxb_ft = auxb_ft_c - comp_ft  # (nxao, ngv, nkpts_ij)
         # ft of the overlap integral of the basis (nkpts_ij, nao, nao, ngv)
-        aoao_ft = self._get_pbc_overlap_with_kpts_ij(gvgrids, kpts_reduce, kpts_ij[..., 1, :])
+        aoao_ft = self._get_pbc_overlap_with_kpts_ij(gvgrids, kpts_reduce, kpts_j)
         # ft of the coulomb kernel
         coul_ft = unweighted_coul_ft(gvk)  # (ngv * nkpts_ij,)
         coul_ft = coul_ft.to(comp_ft.dtype).view(ngv, nkpts_ij) * gvweights.unsqueeze(-1)  # (ngv, nkpts_ij)
@@ -103,23 +105,23 @@ class DFPBC(BaseDF):
         # 3: (nkpts_ij, nxao, nxao)
         j2c_long += torch.einsum(pattern, coul_ft, comp_ft.conj(), comp_ft)
 
-        # TODO: complete this
+        # calculate the j3c long-range
         patternj3 = "gi,xgi,iyzg->iyzx"
         # (nkpts_ij, nao, nao, nxao)
         j3c_long = torch.einsum(patternj3, coul_ft, comp_ft.conj(), aoao_ft)
+
+        # get the average potential
         auxbar_f = self._auxbar(kpts_reduce, fuse_aux_wrapper)  # (nkpts_ij, nxao + nxcao)
         auxbar = auxbar_f[:, :nxao] - auxbar_f[:, nxao:]  # (nkpts_ij, nxao)
-        # j3c_bar = auxbar[:, None, None, :] * self._olp_mat[..., None]  # (nkpts_ij, nao, nao, nxao)
+        auxbar = auxbar.reshape(nkpts, nkpts, auxbar.shape[-1])  # (nkpts, nkpts, nxao)
+        olp_mat = intor.pbc_overlap(self._wrapper, kpts=self._kpts,
+                                    options=self._lattsum_opt)  # (nkpts, nao, nao)
+        j3c_bar = auxbar[:, :, None, None, :] * olp_mat[..., None]  # (nkpts, nkpts, nao, nao, nxao)
+        j3c_bar = j3c_bar.reshape(-1, *j3c_bar.shape[2:])  # (nkpts_ij, nao, nao, nxao)
 
         ######################## combining integrals ########################
         j2c = j2c_short + j2c_long  # (nkpts_ij, nxao, nxao)
-        j3c = j3c_short + j3c_long  # + j3c_bar  # (nkpts_ij, nao, nao, nxao)
-        # print("j3c_short:")
-        # print(j3c_short)
-        # print("j3c_long:")
-        # print(j3c_long)
-        # print("j3c_bar:")
-        # print(j3c_bar)
+        j3c = j3c_short + j3c_long - j3c_bar  # (nkpts_ij, nao, nao, nxao)
         el_mat = torch.matmul(j3c, torch.inverse(j2c.unsqueeze(1)))  # (nkpts_ij, nao, nao, nxao)
 
         self._j2c = j2c
@@ -226,7 +228,7 @@ class DFPBC(BaseDF):
         half_sph_norm = 0.5 / np.sqrt(np.pi)
         bar = -1.0 / alphas  # (ngauss_tot,)
         norms = half_sph_norm / gaussian_int(2, alphas)  # (ngauss_tot,)
-        vbar = coeffs * (angmoms == 0) / norms / bar  # (ngauss_tot,)
+        vbar = coeffs * (angmoms == 0) / norms * bar  # (ngauss_tot,)
 
         # scatter the vbar to the appropriate shell
         nshells_tot = len(ao_to_shell)
@@ -236,7 +238,7 @@ class DFPBC(BaseDF):
         # gather vbar to ao
         vbar_ao = torch.gather(vbar_shell, dim=0, index=ao_to_shell)  # (nao_tot,)
         vbar_ao = vbar_ao[ao_idx0:ao_idx1]  # (nao,)
-        vbar_ao = vbar_ao * np.pi / self._lattice.volume()
+        vbar_ao = vbar_ao * (np.pi / self._lattice.volume())
 
         # gather the results to the indices where k-points are 0
         nkpts = kpts.shape[0]
@@ -266,7 +268,7 @@ def _reduce_kpts_ij(kpts_ij: torch.Tensor) -> torch.Tensor:
     # kpts_reduce: (nkpts_reduce, ndim)
 
     # TODO: optimize this by using unique!
-    kpts_reduce = kpts_ij[..., 0, :] - kpts_ij[..., 1, :]  # (nkpts_ij, ndim)
+    kpts_reduce = -kpts_ij[..., 0, :] + kpts_ij[..., 1, :]  # (nkpts_ij, ndim)
     # inverse_idxs = torch.arange(kpts_reduce.shape[0], device=kpts_ij.device)
     # return kpts_reduce, inverse_idxs
     return kpts_reduce

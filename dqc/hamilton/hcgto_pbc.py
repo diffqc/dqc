@@ -70,8 +70,10 @@ class HamiltonCGTO_PBC(BaseHamilton):
                 "Periodic boundary condition without density fitting is not implemented")
         assert isinstance(self._df, BaseDF)
         # (nkpts, nao, nao)
-        self._olp_mat = intor.pbc_overlap(self._basiswrapper, kpts=self._kpts)
-        self._kin_mat = intor.pbc_kinetic(self._basiswrapper, kpts=self._kpts)
+        self._olp_mat = intor.pbc_overlap(self._basiswrapper, kpts=self._kpts,
+                                          options=self._lattsum_opt)
+        self._kin_mat = intor.pbc_kinetic(self._basiswrapper, kpts=self._kpts,
+                                          options=self._lattsum_opt)
         self._nucl_mat = self._calc_nucl_attr()
         self._kinnucl_mat = self._kin_mat + self._nucl_mat
         self._df.build()
