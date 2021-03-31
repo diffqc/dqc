@@ -1,8 +1,6 @@
 import os
 import ctypes
-import torch
 import numpy as np
-import scipy.special
 
 # contains functions and constants that are used specifically for
 # dqc.hamilton.intor files (no dependance on other files in dqc.hamilton.intor

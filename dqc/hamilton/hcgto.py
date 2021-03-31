@@ -18,7 +18,7 @@ class HamiltonCGTO(BaseHamilton):
         self.dtype = self.libcint_wrapper.dtype
         self.device = self.libcint_wrapper.device
         if df is None:
-            self._df: Optiofnal[DFMol] = None
+            self._df: Optional[DFMol] = None
         else:
             self._df = DFMol(df, wrapper=self.libcint_wrapper)
 

@@ -5,7 +5,6 @@ import xitorch as xt
 import dqc.hamilton.intor as intor
 from dqc.utils.misc import gaussian_int
 from dqc.df.base_df import BaseDF
-from dqc.utils.datastruct import DensityFitInfo
 from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, DensityFitInfo
 from dqc.utils.types import get_complex_dtype
 from dqc.utils.pbc import unweighted_coul_ft, get_gcut
@@ -20,6 +19,8 @@ class DFPBC(BaseDF):
         self._lattsum_opt = lattsum_opt
         self.dtype = wrapper.dtype
         self.device = wrapper.device
+        assert wrapper.lattice is not None
+        self._lattice = wrapper.lattice
         self._is_built = False
 
     def build(self) -> BaseDF:
@@ -34,13 +35,13 @@ class DFPBC(BaseDF):
         fuse_aux_bases = df_auxbases + aux_comp_bases
         fuse_aux_wrapper = intor.LibcintWrapper(fuse_aux_bases,
                                                 spherical=self._wrapper.spherical,
-                                                lattice=self._wrapper.lattice)
+                                                lattice=self._lattice)
         aux_comp_wrapper = intor.LibcintWrapper(aux_comp_bases,
                                                 spherical=self._wrapper.spherical,
-                                                lattice=self._wrapper.lattice)
+                                                lattice=self._lattice)
         aux_wrapper = intor.LibcintWrapper(df_auxbases,
                                            spherical=self._wrapper.spherical,
-                                           lattice=self._wrapper.lattice)
+                                           lattice=self._lattice)
         nxcao = aux_comp_wrapper.nao()  # number of aux compensating basis wrapper
         nxao = fuse_aux_wrapper.nao() - nxcao  # number of aux basis wrapper
         assert nxcao == nxao
@@ -68,13 +69,13 @@ class DFPBC(BaseDF):
                                        options=self._lattsum_opt)
         # j2c_short: (nkpts_unique, nxao, nxao)
         j2c_short = j2c_short_f[..., :nxao, :nxao] + j2c_short_f[..., nxao:, nxao:] \
-                    - j2c_short_f[..., :nxao, nxao:] - j2c_short_f[..., nxao:, :nxao]
+            - j2c_short_f[..., :nxao, nxao:] - j2c_short_f[..., nxao:, :nxao]
 
         ######################## long-range integrals ########################
         # only use the compensating wrapper as the gcut
         gcut = get_gcut(self._lattsum_opt.precision, [aux_comp_wrapper])
         # gvgrids: (ngv, ndim), gvweights: (ngv,)
-        gvgrids, gvweights = self._wrapper.lattice.get_gvgrids(gcut)
+        gvgrids, gvweights = self._lattice.get_gvgrids(gcut)
         ngv = gvgrids.shape[0]
         gvk = gvgrids.unsqueeze(-2) + kpts_reduce  # (ngv, nkpts_ij, ndim)
         gvk = gvk.view(-1, gvk.shape[-1])  # (ngv * nkpts_ij, ndim)
@@ -112,7 +113,7 @@ class DFPBC(BaseDF):
 
         ######################## combining integrals ########################
         j2c = j2c_short + j2c_long  # (nkpts_ij, nxao, nxao)
-        j3c = j3c_short + j3c_long #+ j3c_bar  # (nkpts_ij, nao, nao, nxao)
+        j3c = j3c_short + j3c_long  # + j3c_bar  # (nkpts_ij, nao, nao, nxao)
         # print("j3c_short:")
         # print(j3c_short)
         # print("j3c_long:")
@@ -199,7 +200,7 @@ class DFPBC(BaseDF):
         res = torch.empty((nkpts_ij, nao, nao, ngv), dtype=dctype, device=self.device)
         for i in range(nkpts_ij):
             kpt_ij = kpts_reduce[i]  # (ndim,)
-            kpt_j = kpts_j[i:i+1]  # (1, ndim)
+            kpt_j = kpts_j[i:i + 1]  # (1, ndim)
             gvk = gvgrids + kpt_ij  # (ngv, ndim)
             aoao_ft_i = intor.pbcft_overlap(
                 self._wrapper, Gvgrid=gvk, kpts=kpt_j,
@@ -235,7 +236,7 @@ class DFPBC(BaseDF):
         # gather vbar to ao
         vbar_ao = torch.gather(vbar_shell, dim=0, index=ao_to_shell)  # (nao_tot,)
         vbar_ao = vbar_ao[ao_idx0:ao_idx1]  # (nao,)
-        vbar_ao = vbar_ao * np.pi / self._wrapper.lattice.volume()
+        vbar_ao = vbar_ao * np.pi / self._lattice.volume()
 
         # gather the results to the indices where k-points are 0
         nkpts = kpts.shape[0]

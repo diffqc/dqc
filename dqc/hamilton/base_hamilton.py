@@ -5,6 +5,7 @@ from abc import abstractmethod, abstractproperty
 from typing import List, Optional, Union, overload
 from dqc.grid.base_grid import BaseGrid
 from dqc.xc.base_xc import BaseXC
+from dqc.df.base_df import BaseDF
 from dqc.utils.datastruct import SpinParam
 
 class BaseHamilton(xt.EditableModule):

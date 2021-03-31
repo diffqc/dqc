@@ -1,4 +1,4 @@
-from typing import List, Optional, Union, overload, Tuple, Dict
+from typing import List, Optional, Union, overload, Dict
 import torch
 import numpy as np
 import xitorch as xt
@@ -7,8 +7,6 @@ from dqc.hamilton.base_hamilton import BaseHamilton
 from dqc.df.base_df import BaseDF
 from dqc.df.dfpbc import DFPBC
 from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, SpinParam, DensityFitInfo
-from dqc.utils.misc import gaussian_int
-from dqc.utils.types import get_complex_dtype
 from dqc.utils.pbc import unweighted_coul_ft, get_gcut
 from dqc.grid.base_grid import BaseGrid
 from dqc.xc.base_xc import BaseXC
