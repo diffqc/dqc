@@ -4,10 +4,13 @@ import numpy as np
 import xitorch as xt
 import dqc.hamilton.intor as intor
 from dqc.hamilton.base_hamilton import BaseHamilton
-from dqc.hamilton.intor.utils import estimate_g_cutoff
+from dqc.hamilton.intor.tools import get_gcut
+from dqc.df.base_df import BaseDF
+from dqc.df.dfpbc import DFPBC
 from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, SpinParam, DensityFitInfo
 from dqc.utils.misc import gaussian_int
 from dqc.utils.types import get_complex_dtype
+from dqc.utils.pbc import unweighted_coul_ft
 from dqc.grid.base_grid import BaseGrid
 from dqc.xc.base_xc import BaseXC
 from dqc.hamilton.intor.lattice import Lattice
@@ -29,7 +32,6 @@ class HamiltonCGTO_PBC(BaseHamilton):
         self._atombases = atombases
         self._spherical = spherical
         self._lattice = latt
-        self._df = df
         # alpha for the compensating charge
         # TODO: calculate eta properly or put it in lattsum_opt
         self._eta = 0.2
@@ -49,22 +51,33 @@ class HamiltonCGTO_PBC(BaseHamilton):
         self._kpts = kpts if kpts is not None else \
             torch.zeros((1, 3), dtype=self.dtype, device=self.device)
 
+        if df is None:
+            self._df: Optional[BaseDF] = None
+        else:
+            self._df = DFPBC(dfinfo=df, wrapper=self._basiswrapper, kpts=self._kpts,
+                             eta=self._eta, lattsum_opt=self._lattsum_opt)
+
         self._is_built = False
 
     @property
     def nao(self) -> int:
         return self._basiswrapper.nao()
 
+    @property
+    def df(self) -> Optional[BaseDF]:
+        return self._df
+
     def build(self) -> BaseHamilton:
         if self._df is None:
             raise NotImplementedError(
                 "Periodic boundary condition without density fitting is not implemented")
+        assert isinstance(self._df, BaseDF)
         # (nkpts, nao, nao)
         self._olp_mat = intor.pbc_overlap(self._basiswrapper, kpts=self._kpts)
         self._kin_mat = intor.pbc_kinetic(self._basiswrapper, kpts=self._kpts)
         self._nucl_mat = self._calc_nucl_attr()
         self._kinnucl_mat = self._kin_mat + self._nucl_mat
-        # self._elrep_mat, self._elrep_mat_3c = self._calc_elrep_df(self._df)
+        self._df.build()
         self._is_built = True
         return self
 
@@ -189,7 +202,9 @@ class HamiltonCGTO_PBC(BaseHamilton):
         ############# 2nd part of nuclear attraction: long range #############
         # get the 2nd part from the Fourier Transform
         # get the G-points, choosing min because the two FTs are multiplied
-        gcut = self._get_gcut(cnucl_wrapper, self._basiswrapper, reduce="min")
+        gcut = get_gcut(self._lattsum_opt.precision,
+                        wrappers=[cnucl_wrapper, self._basiswrapper],
+                        reduce="min")
         # gvgrids: (ngv, ndim), gvweights: (ngv,)
         gvgrids, gvweights = self._lattice.get_gvgrids(gcut)
 
@@ -201,7 +216,7 @@ class HamiltonCGTO_PBC(BaseHamilton):
             self._basiswrapper, Gvgrid=-gvgrids, kpts=self._kpts,
             options=self._lattsum_opt)  # (nkpts, nao, nao, ngv)
         # coulomb kernel Fourier Transform
-        coul_ft = self._unweighted_coul_ft(gvgrids) * gvweights  # (ngv,)
+        coul_ft = unweighted_coul_ft(gvgrids) * gvweights  # (ngv,)
         coul_ft = coul_ft.to(cbas_ft.dtype)  # cast to complex
 
         # optimized by opt_einsum
@@ -217,98 +232,6 @@ class HamiltonCGTO_PBC(BaseHamilton):
         nuc = (nuc + nuc.conj().transpose(-2, -1)) * 0.5
         return nuc
 
-    def _calc_elrep_df(self, df: DensityFitInfo) -> Tuple[torch.Tensor, torch.Tensor]:
-        # calculate the matrices required to calculate the electron repulsion operator
-        # i.e. the 3-centre 2-electron integrals (short + long range) and j3c @ (j2c^-1)
-        method = df.method.lower()
-        df_auxbases = _renormalize_auxbases(df.auxbases)
-        aux_comp_bases = self._create_compensating_bases(df_auxbases, eta=self._eta)
-        fuse_aux_bases = df_auxbases + aux_comp_bases
-        fuse_aux_wrapper = intor.LibcintWrapper(fuse_aux_bases, spherical=self._spherical,
-                                                lattice=self._lattice)
-        aux_comp_wrapper = intor.LibcintWrapper(aux_comp_bases, spherical=self._spherical,
-                                                lattice=self._lattice)
-        aux_wrapper = intor.LibcintWrapper(df_auxbases, spherical=self._spherical,
-                                           lattice=self._lattice)
-        nxcao = aux_comp_wrapper.nao()  # number of aux compensating basis wrapper
-        nxao = fuse_aux_wrapper.nao() - nxcao  # number of aux basis wrapper
-        assert nxcao == nxao
-
-        # only gaussian density fitting is implemented at the moment
-        if method != "gdf":
-            raise NotImplementedError("Density fitting that is not %s is not implemented" % df.method)
-
-        # get the k-points needed for the integrations
-        kpts_ij = _combine_kpts_to_kpts_ij(self._kpts)  # (nkpts_ij, 2, ndim)
-        kpts_reduce = _reduce_kpts_ij(kpts_ij)  # (nkpts_ij, ndim)
-        nkpts_ij = kpts_ij.shape[0]
-
-        ######################## short-range integrals ########################
-        ############# 3-centre 2-electron integral #############
-        _basisw, _fusew = intor.LibcintWrapper.concatenate(self._basiswrapper, fuse_aux_wrapper)
-        # (nkpts_ij, nao, nao, nxao+nxcao)
-        j3c_short_f = intor.pbc_coul3c(_basisw, auxwrapper=_fusew, kpts_ij=kpts_ij)
-        j3c_short = j3c_short_f[..., :nxao] - j3c_short_f[..., nxao:]  # (nkpts_ij, nao, nao, nxao)
-
-        ############# 2-centre 2-electron integrals #############
-        # (nkpts_unique, nxao+nxcao, nxao+nxcao)
-        j2c_short_f = intor.pbc_coul2c(fuse_aux_wrapper, kpts=kpts_reduce)
-        # j2c_short: (nkpts_unique, nxao, nxao)
-        j2c_short = j2c_short_f[..., :nxao, :nxao] + j2c_short_f[..., nxao:, nxao:] \
-                    - j2c_short_f[..., :nxao, nxao:] - j2c_short_f[..., nxao:, :nxao]
-
-        ######################## long-range integrals ########################
-        # only use the compensating wrapper as the gcut
-        gcut = self._get_gcut(aux_comp_wrapper)
-        # gvgrids: (ngv, ndim), gvweights: (ngv,)
-        gvgrids, gvweights = self._lattice.get_gvgrids(gcut)
-        ngv = gvgrids.shape[0]
-        gvk = gvgrids.unsqueeze(-2) + kpts_reduce  # (ngv, nkpts_ij, ndim)
-        gvk = gvk.view(-1, gvk.shape[-1])  # (ngv * nkpts_ij, ndim)
-
-        # get the fourier transform variables
-        # TODO: iterate over ngv axis
-        # ft of the compensating basis
-        comp_ft = intor.eval_gto_ft(aux_comp_wrapper, gvk)  # (nxcao, ngv * nkpts_ij)
-        comp_ft = comp_ft.view(-1, ngv, nkpts_ij)  # (nxcao, ngv, nkpts_ij)
-        # ft of the auxiliary basis
-        auxb_ft_c = intor.eval_gto_ft(aux_wrapper, gvk)  # (nxao, ngv * nkpts_ij)
-        auxb_ft_c = auxb_ft_c.view(-1, ngv, nkpts_ij)  # (nxao, ngv, nkpts_ij)
-        auxb_ft = auxb_ft_c - comp_ft  # (nxao, ngv, nkpts_ij)
-        # ft of the overlap integral of the basis (nkpts_ij, nao, nao, ngv)
-        aoao_ft = self._get_pbc_overlap_with_kpts_ij(gvgrids, kpts_reduce, kpts_ij[..., 1, :])
-        # ft of the coulomb kernel
-        coul_ft = self._unweighted_coul_ft(gvk)  # (ngv * nkpts_ij,)
-        coul_ft = coul_ft.to(comp_ft.dtype).view(ngv, nkpts_ij) * gvweights.unsqueeze(-1)  # (ngv, nkpts_ij)
-
-        # 1: (nkpts_ij, nxao, nxao)
-        pattern = "gi,xgi,ygi->ixy"
-        j2c_long = torch.einsum(pattern, coul_ft, comp_ft.conj(), auxb_ft)
-        # 2: (nkpts_ij, nxao, nxao)
-        j2c_long += torch.einsum(pattern, coul_ft, auxb_ft.conj(), comp_ft)
-        # 3: (nkpts_ij, nxao, nxao)
-        j2c_long += torch.einsum(pattern, coul_ft, comp_ft.conj(), comp_ft)
-
-        # TODO: complete this
-        patternj3 = "gi,xgi,iyzg->iyzx"
-        # (nkpts_ij, nao, nao, nxao)
-        j3c_long = torch.einsum(patternj3, coul_ft, comp_ft.conj(), aoao_ft)
-        auxbar_f = self._auxbar(kpts_reduce, fuse_aux_wrapper)  # (nkpts_ij, nxao + nxcao)
-        auxbar = auxbar_f[:, :nxao] - auxbar_f[:, nxao:]  # (nkpts_ij, nxao)
-        # j3c_bar = auxbar[:, None, None, :] * self._olp_mat[..., None]  # (nkpts_ij, nao, nao, nxao)
-
-        ######################## combining integrals ########################
-        j2c = j2c_short + j2c_long  # (nkpts_ij, nxao, nxao)
-        j3c = j3c_short + j3c_long #+ j3c_bar  # (nkpts_ij, nao, nao, nxao)
-        # print("j3c_short:")
-        # print(j3c_short)
-        # print("j3c_long:")
-        # print(j3c_long)
-        # print("j3c_bar:")
-        # print(j3c_bar)
-        el_mat = torch.matmul(j3c, torch.inverse(j2c.unsqueeze(1)))  # (nkpts_ij, nao, nao, nxao)
-        return el_mat, j3c
-
     def _create_fake_nucl_bases(self, alpha: float, chargemult: int) -> List[AtomCGTOBasis]:
         # create a list of basis (of s-type) at every nuclei positions
         res: List[AtomCGTOBasis] = []
@@ -322,179 +245,3 @@ class HamiltonCGTO_PBC(BaseHamilton):
             basis = CGTOBasis(angmom=0, alphas=alphas, coeffs=coeffs, normalized=True)
             res.append(AtomCGTOBasis(atomz=0, bases=[basis], pos=atb.pos))
         return res
-
-    def _create_compensating_bases(self, atombases: List[AtomCGTOBasis], eta: float) -> List[AtomCGTOBasis]:
-        # create the list of atom bases containing the compensating basis with
-        # given `eta` as the exponentials
-        # see make_modchg_basis in
-        # https://github.com/pyscf/pyscf/blob/c9aa2be600d75a97410c3203abf35046af8ca615/pyscf/pbc/df/df.py#L116
-
-        # pre-calculate the norms up to angmom 6
-        half_sph_norm = 0.5 / np.sqrt(np.pi)
-        norms = [half_sph_norm / gaussian_int(2 * angmom + 2, eta) for angmom in range(7)]
-        norms_t = [torch.tensor([nrm], dtype=self.dtype, device=self.device) for nrm in norms]
-
-        res: List[AtomCGTOBasis] = []
-        alphas = torch.tensor([eta], dtype=self.dtype, device=self.device)
-        for atb in atombases:
-            # TODO: use reduced bases to optimize the integration time
-            # angmoms = set(bas.angmom for bas in atb.bases)
-            # bases = [
-            #     CGTOBasis(angmom=angmom, alphas=alphas, coeffs=norms[angmom], normalized=True) \
-            #     for angmom in angmoms
-            # ]
-            bases: List[CGTOBasis] = []
-            for bas in atb.bases:
-                # calculate the integral of the basis
-                int1 = gaussian_int(bas.angmom * 2 + 2, bas.alphas)
-                s = torch.sum(bas.coeffs * int1) / half_sph_norm
-
-                # set the coefficients of the compensating basis to have
-                # the same integral
-                coeffs = s * norms_t[bas.angmom]
-                b2 = CGTOBasis(angmom=bas.angmom, alphas=alphas,
-                               coeffs=coeffs,
-                               normalized=True)
-                bases.append(b2)
-            res.append(AtomCGTOBasis(atomz=0, bases=bases, pos=atb.pos))
-        return res
-
-    def _unweighted_coul_ft(self, gvgrids: torch.Tensor) -> torch.Tensor:
-        # Returns the unweighted fourier transform of the coulomb kernel: 4*pi/|gv|^2
-        # If |gv| == 0, then it is 0.
-        # gvgrids: (ngv, ndim)
-        # returns: (ngv,)
-        gnorm2 = torch.einsum("xd,xd->x", gvgrids, gvgrids)
-        gnorm2[gnorm2 < 1e-12] = float("inf")
-        coulft = 4 * np.pi / gnorm2
-        return coulft
-
-    def _get_gcut(self, *wrappers: intor.LibcintWrapper, reduce="min") -> float:
-        # get the G-point cut-off from the given wrappers where the FT
-        # eval/integration is going to be performed
-        gcuts: List[float] = []
-        for wrapper in wrappers:
-            # TODO: using params here can be confusing because wrapper.params
-            # returns all parameters (even if it is a subset)
-            coeffs, alphas, _ = wrapper.params
-            gcut_wrap = estimate_g_cutoff(self._lattsum_opt.precision, coeffs, alphas)
-            gcuts.append(gcut_wrap)
-        if len(gcuts) == 1:
-            return gcuts[0]
-        if reduce == "min":
-            return min(*gcuts)
-        elif reduce == "max":
-            return max(*gcuts)
-        else:
-            raise ValueError("Unknown reduce: %s" % reduce)
-
-    def _get_pbc_overlap_with_kpts_ij(self, gvgrids: torch.Tensor,
-                                      kpts_reduce: torch.Tensor,
-                                      kpts_j: torch.Tensor) -> torch.Tensor:
-        # compute the pbcft overlap integral for the basis by filling in
-        # the k-points one by one.
-        # this is to compute eq. (16) on Sun et al., https://doi.org/10.1063/1.4998644
-
-        # gvgrids: (ngv, ndim)
-        # kpts_reduce: (nkpts_ij, ndim)
-        # kpts_j: (nkpts_ij, ndim)
-        # returns: (nkpts_ij, nao, nao, ngv)
-        nkpts_ij = kpts_reduce.shape[0]
-        nao = self._basiswrapper.nao()
-        ngv = gvgrids.shape[0]
-        dctype = get_complex_dtype(self.dtype)
-        res = torch.empty((nkpts_ij, nao, nao, ngv), dtype=dctype, device=self.device)
-        for i in range(nkpts_ij):
-            kpt_ij = kpts_reduce[i]  # (ndim,)
-            kpt_j = kpts_j[i:i+1]  # (1, ndim)
-            gvk = gvgrids + kpt_ij  # (ngv, ndim)
-            aoao_ft_i = intor.pbcft_overlap(
-                self._basiswrapper, Gvgrid=gvk, kpts=kpt_j,
-                options=self._lattsum_opt)  # (1, nao, nao, ngv)
-            res[i] = aoao_ft_i[0]
-        return res
-
-    def _auxbar(self, kpts: torch.Tensor, fuse_wrapper: intor.LibcintWrapper) -> torch.Tensor:
-        # computing the single basis integral in equation (14) in
-        # Sun et al., https://doi.org/10.1063/1.4998644
-        # kpts: (nkpts, ndim)
-        # returns (nkpts, nao(fuse_wrapper))
-
-        # retrieve the parameters needed from the wrapper
-        ao_to_shell = torch.as_tensor(fuse_wrapper.full_ao_to_shell)  # (nao_tot,)
-        shell_to_ao = torch.as_tensor(fuse_wrapper.full_shell_to_aoloc)  # (nshells_tot,)
-        ao_idx0, ao_idx1 = fuse_wrapper.ao_idxs()
-        coeffs, alphas, _ = fuse_wrapper.params  # coeffs, alphas: (ngauss_tot,)
-        angmoms = torch.as_tensor(fuse_wrapper.full_angmoms)  # (ngauss_tot,)
-        gauss_to_shell = torch.as_tensor(fuse_wrapper.full_gauss_to_shell, dtype=torch.int64)  # (ngauss_tot,)
-
-        # calculate the vbar for each gauss
-        half_sph_norm = 0.5 / np.sqrt(np.pi)
-        bar = -1.0 / alphas  # (ngauss_tot,)
-        norms = half_sph_norm / gaussian_int(2, alphas)  # (ngauss_tot,)
-        vbar = coeffs * (angmoms == 0) / norms / bar  # (ngauss_tot,)
-
-        # scatter the vbar to the appropriate shell
-        nshells_tot = len(ao_to_shell)
-        vbar_shell = torch.zeros((nshells_tot,), dtype=self.dtype, device=self.device)
-        vbar_shell.scatter_add_(dim=0, index=gauss_to_shell, src=vbar)  # (nshells_tot,)
-
-        # gather vbar to ao
-        vbar_ao = torch.gather(vbar_shell, dim=0, index=ao_to_shell)  # (nao_tot,)
-        vbar_ao = vbar_ao[ao_idx0:ao_idx1]  # (nao,)
-        vbar_ao = vbar_ao * np.pi / self._lattice.volume()
-
-        # gather the results to the indices where k-points are 0
-        nkpts = kpts.shape[0]
-        kpts_zero = kpts.norm(dim=-1) < 1e-9  # (nkpts,)
-        res = torch.zeros((nkpts, vbar_ao.shape[0]), dtype=self.dtype, device=self.device)
-        res[kpts_zero, :] = vbar_ao
-
-        return res
-
-def _combine_kpts_to_kpts_ij(kpts: torch.Tensor) -> torch.Tensor:
-    # combine the k-points into pair of k-points
-    # kpts: (nkpts, ndim)
-    # return: (nkpts_ij, 2, ndim) where nkpts_ij = nkpts ** 2
-    nkpts, ndim = kpts.shape
-    kpts_ij = torch.zeros((nkpts, nkpts, 2, ndim), dtype=kpts.dtype, device=kpts.device)
-    kpts_ij[:, :, 0, :] = kpts.unsqueeze(1)
-    kpts_ij[:, :, 1, :] = kpts.unsqueeze(0)
-    kpts_ij = kpts_ij.view(-1, 2, ndim)
-    return kpts_ij
-
-def _reduce_kpts_ij(kpts_ij: torch.Tensor) -> torch.Tensor:
-    # get the value of kpts_reduce = kpts_i - kpts_j.
-    # however, as it might contain repeated k-points, only returns the unique
-    # value of kpts_reduce and the inverse index that can be used to reconstruct
-    # the original kpts_reduce
-    # kpts_ij: (nkpts_ij, 2, ndim)
-    # kpts_reduce: (nkpts_reduce, ndim)
-
-    # TODO: optimize this by using unique!
-    kpts_reduce = kpts_ij[..., 0, :] - kpts_ij[..., 1, :]  # (nkpts_ij, ndim)
-    # inverse_idxs = torch.arange(kpts_reduce.shape[0], device=kpts_ij.device)
-    # return kpts_reduce, inverse_idxs
-    return kpts_reduce
-
-def _renormalize_auxbases(auxbases: List[AtomCGTOBasis]) -> List[AtomCGTOBasis]:
-    # density basis renormalization, following pyscf here:
-    # https://github.com/pyscf/pyscf/blob/7be5e015b2b40181755c71d888449db936604660/pyscf/pbc/df/df.py#L95
-    # this renormalization makes the integral of auxbases (not auxbases * auxbases)
-    # to be 1
-
-    res: List[AtomCGTOBasis] = []
-    # libcint multiply np.sqrt(4*pi) to the basis
-    half_sph_norm = 0.5 / np.sqrt(np.pi)
-    for atb in auxbases:  # atb is AtomCGTOBasis
-        bases: List[CGTOBasis] = []
-        for bas in atb.bases:  # bas is CGTOBasis
-            assert bas.normalized
-            int1 = gaussian_int(bas.angmom * 2 + 2, bas.alphas)
-            s = torch.sum(bas.coeffs * int1)
-            coeffs = bas.coeffs * (half_sph_norm / s)
-            b2 = CGTOBasis(angmom=bas.angmom, coeffs=coeffs, alphas=bas.alphas, normalized=True)
-            bases.append(b2)
-        atb2 = AtomCGTOBasis(atomz=atb.atomz, bases=bases, pos=atb.pos)
-        res.append(atb2)
-    return res
