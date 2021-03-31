@@ -6,6 +6,9 @@ from dqc.df.base_df import BaseDF
 from dqc.utils.datastruct import DensityFitInfo
 
 class DFMol(BaseDF):
+    """
+    DFMol represents the class of density fitting for an isolated molecule.
+    """
     def __init__(self, dfinfo: DensityFitInfo, wrapper: intor.LibcintWrapper):
         self.dfinfo = dfinfo
         self.wrapper = wrapper

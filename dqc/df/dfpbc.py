@@ -10,6 +10,10 @@ from dqc.utils.types import get_complex_dtype
 from dqc.utils.pbc import unweighted_coul_ft, get_gcut
 
 class DFPBC(BaseDF):
+    """
+    DFPBC represents a class for gaussian density fitting of systems with
+    periodic boundary condition.
+    """
     def __init__(self, dfinfo: DensityFitInfo, wrapper: intor.LibcintWrapper,
                  kpts: torch.Tensor, eta: float, lattsum_opt: intor.PBCIntOption):
         self._dfinfo = dfinfo
