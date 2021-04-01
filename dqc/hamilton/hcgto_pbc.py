@@ -23,6 +23,7 @@ class HamiltonCGTO_PBC(BaseHamilton):
     def __init__(self, atombases: List[AtomCGTOBasis],
                  latt: Lattice,
                  kpts: Optional[torch.Tensor] = None,
+                 wkpts: Optional[torch.Tensor] = None,  # weights of k-points to get the density
                  spherical: bool = True,
                  df: Optional[DensityFitInfo] = None,
                  lattsum_opt: Optional[Union[intor.PBCIntOption, Dict]] = None) -> None:
@@ -45,14 +46,25 @@ class HamiltonCGTO_PBC(BaseHamilton):
             atombases, spherical=spherical, lattice=latt)
         self.dtype = self._basiswrapper.dtype
         self.device = self._basiswrapper.device
+
+        # set the default k-points and their weights
         self._kpts = kpts if kpts is not None else \
             torch.zeros((1, 3), dtype=self.dtype, device=self.device)
+        nkpts = self._kpts.shape[0]
+        # default weights are just 1/nkpts
+        self._wkpts = wkpts if wkpts is not None else \
+            torch.ones((nkpts,), dtype=self.dtype, device=self.device) / nkpts
+
+        assert self._wkpts.shape[0] == self._kpts.shape[0]
+        assert self._wkpts.ndim == 1
+        assert self._kpts.ndim == 2
 
         if df is None:
             self._df: Optional[BaseDF] = None
         else:
             self._df = DFPBC(dfinfo=df, wrapper=self._basiswrapper, kpts=self._kpts,
-                             eta=self._eta, lattsum_opt=self._lattsum_opt)
+                             wkpts=self._wkpts, eta=self._eta,
+                             lattsum_opt=self._lattsum_opt)
 
         self._is_built = False
 
@@ -108,9 +120,9 @@ class HamiltonCGTO_PBC(BaseHamilton):
         # convert the atomic orbital to the density matrix
         # in CGTO, it is U.W.U^T
 
-        # orb: (*BO, nao, norb)
-        # orb_weight: (*BW, norb)
-        # return: (*BOW, nao, nao)
+        # orb: (nkpts, nao, norb)
+        # orb_weight: (nkpts, norb)
+        # return: (nkpts, nao, nao)
         pass
 
     def aodm2dens(self, dm: torch.Tensor, xyz: torch.Tensor) -> torch.Tensor:

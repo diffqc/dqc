@@ -705,5 +705,5 @@ def test_pbc_cgto_elrep_df(pbc_h1):
     dm = dm + dm.conj().transpose(-2, -1)
 
     elrep_dqc = h_dqc.get_elrep(dm).fullmatrix()
-    elrep_scf = df_scf.get_jk(dm)[0] * 2
+    elrep_scf = df_scf.get_jk(dm)[0]
     assert torch.allclose(elrep_dqc, torch.as_tensor(elrep_scf, dtype=elrep_dqc.dtype), rtol=1e-5, atol=2e-5)

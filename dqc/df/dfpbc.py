@@ -15,11 +15,13 @@ class DFPBC(BaseDF):
     periodic boundary condition.
     """
     def __init__(self, dfinfo: DensityFitInfo, wrapper: intor.LibcintWrapper,
-                 kpts: torch.Tensor, eta: float, lattsum_opt: intor.PBCIntOption):
+                 kpts: torch.Tensor, wkpts: torch.Tensor, eta: float,
+                 lattsum_opt: intor.PBCIntOption):
         self._dfinfo = dfinfo
         self._wrapper = wrapper
         self._eta = eta
         self._kpts = kpts
+        self._wkpts = wkpts  # weights of each k-points
         self._lattsum_opt = lattsum_opt
         self.dtype = wrapper.dtype
         self.device = wrapper.device
@@ -142,7 +144,7 @@ class DFPBC(BaseDF):
         nkpts = dm.shape[-3]
         el_mat = self._el_mat.view(nkpts, nkpts, *self._el_mat.shape[1:])  # (nkpts, nkpts, nao, nao, nxao)
         j3c = self._j3c.view(nkpts, nkpts, *self._j3c.shape[1:])  # (nkpts, nkpts, nao, nao, nxao)
-        fitcoeffs = torch.einsum("llabx,lab->x", el_mat, dm)  # (nxao,)
+        fitcoeffs = torch.einsum("llabx,lab,l->x", el_mat, dm, self._wkpts.to(dm.dtype))  # (nxao,)
         elrep_mat = torch.einsum("x,llabx->lab", fitcoeffs, j3c.conj())  # (nkpts, nao, nao)
 
         # check hermitianness
