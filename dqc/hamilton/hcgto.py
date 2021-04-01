@@ -74,10 +74,11 @@ class HamiltonCGTO(BaseHamilton):
         # return: (*BD, nao, nao)
         if self._df is None:
             mat = torch.einsum("...ij,ijkl->...kl", dm, self.el_mat)
+            mat = (mat + mat.transpose(-2, -1)) * 0.5  # reduce numerical instability
+            return xt.LinearOperator.m(mat, is_hermitian=True)
         else:
-            mat = self._df.get_elrep(dm)
-        mat = (mat + mat.transpose(-2, -1)) * 0.5  # reduce numerical instability
-        return xt.LinearOperator.m(mat, is_hermitian=True)
+            elrep = self._df.get_elrep(dm)
+            return elrep
 
     def ao_orb2dm(self, orb: torch.Tensor, orb_weight: torch.Tensor) -> torch.Tensor:
         # convert the atomic orbital to the density matrix

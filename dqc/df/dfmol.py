@@ -47,7 +47,8 @@ class DFMol(BaseDF):
 
         df_coeffs = torch.einsum("...ij,ijk->...k", dm, self._el_mat)  # (*BD, nxao)
         mat = torch.einsum("...k,ijk->...ij", df_coeffs, self._j3c)  # (*BD, nao, nao)
-        return mat
+        mat = (mat + mat.transpose(-2, -1)) * 0.5
+        return xt.LinearOperator.m(mat, is_hermitian=True)
 
     @property
     def j2c(self) -> torch.Tensor:
