@@ -21,6 +21,15 @@ class BaseHamilton(xt.EditableModule):
         pass
 
     @abstractproperty
+    def kpts(self) -> torch.Tensor:
+        """
+        Returns the list of k-points in the Hamiltonian, raise TypeError if
+        the Hamiltonian does not have k-points.
+        Shape: (nkpts, ndim)
+        """
+        pass
+
+    @abstractproperty
     def df(self) -> Optional[BaseDF]:
         """
         Returns the density fitting object (if any) attached to this Hamiltonian

@@ -61,6 +61,10 @@ class HamiltonCGTO_PBC(BaseHamilton):
         return self._basiswrapper.nao()
 
     @property
+    def kpts(self) -> torch.Tensor:
+        return self._kpts
+
+    @property
     def df(self) -> Optional[BaseDF]:
         return self._df
 
@@ -95,10 +99,10 @@ class HamiltonCGTO_PBC(BaseHamilton):
         return xt.LinearOperator.m(self._olp_mat, is_hermitian=True)
 
     def get_elrep(self, dm: torch.Tensor) -> xt.LinearOperator:
-        # dm: (*BD, nao, nao)
-        # elrep_mat: (nao, nao, nao, nao)
-        # return: (*BD, nao, nao)
-        pass
+        # dm: (nkpts_ij, nao, nao)
+        # return: (nkpts, nao, nao)
+        assert self._df is not None
+        return self._df.get_elrep(dm)
 
     def ao_orb2dm(self, orb: torch.Tensor, orb_weight: torch.Tensor) -> torch.Tensor:
         # convert the atomic orbital to the density matrix

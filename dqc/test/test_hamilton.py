@@ -11,6 +11,7 @@ import pyscf
 import pyscf.pbc
 
 dtype = torch.float64
+cdtype = torch.complex128
 
 @pytest.fixture
 def system1():
@@ -169,6 +170,8 @@ def test_pbc_cgto_nuclattr(pbc_h1):
     assert torch.allclose(nuc_dqc, nuc_scf)
 
 def test_pbc_cgto_elrep_df_j2(pbc_h1):
+    # test to check if the 2-centre 2-electron integral matrix from dqc agrees with pyscf
+
     h_dqc, df_scf = pbc_h1
     j2c_dqc = h_dqc.df.j2c  # (4, nao, nao)
 
@@ -553,6 +556,8 @@ def test_pbc_cgto_elrep_df_j2(pbc_h1):
     assert torch.allclose(j2c_dqc[0], j2c_dqc[3])
 
 def test_pbc_cgto_elrep_df_j3(pbc_h1):
+    # test to check if the 3-centre 2-electron integral matrix from dqc agrees with pyscf
+
     h_dqc, df_scf = pbc_h1
     j3c_dqc = h_dqc.df.j3c  # (nkpts_ij, nao, nao, nxao)
 
@@ -688,3 +693,17 @@ def test_pbc_cgto_elrep_df_j3(pbc_h1):
     assert torch.allclose(j3c1_dqc, j3c1, rtol=1e-5, atol=2e-5)
     assert torch.allclose(j3c2_dqc, j3c2, rtol=1e-5, atol=2e-5)
     assert torch.allclose(j3c_dqc[1], j3c_dqc[2].transpose(0, 1).conj(), rtol=1e-5, atol=2e-5)
+
+def test_pbc_cgto_elrep_df(pbc_h1):
+    # test to check if the electron repulsion matrix from dqc agrees with pyscf
+    h_dqc, df_scf = pbc_h1
+    nkpts = h_dqc.kpts.shape[0]
+    nao = h_dqc.nao
+
+    # generate random hermitian density matrix
+    dm = torch.rand((nkpts, nao, nao), dtype=cdtype)
+    dm = dm + dm.conj().transpose(-2, -1)
+
+    elrep_dqc = h_dqc.get_elrep(dm).fullmatrix()
+    elrep_scf = df_scf.get_jk(dm)[0] * 2
+    assert torch.allclose(elrep_dqc, torch.as_tensor(elrep_scf, dtype=elrep_dqc.dtype), rtol=1e-5, atol=2e-5)

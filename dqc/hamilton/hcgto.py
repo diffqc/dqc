@@ -35,6 +35,10 @@ class HamiltonCGTO(BaseHamilton):
         return self.libcint_wrapper.nao()
 
     @property
+    def kpts(self) -> torch.Tensor:
+        raise TypeError("Isolated molecule Hamiltonian does not have kpts property")
+
+    @property
     def df(self) -> Optional[BaseDF]:
         return self._df
 

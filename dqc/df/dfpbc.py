@@ -126,7 +126,7 @@ class DFPBC(BaseDF):
         ######################## combining integrals ########################
         j2c = j2c_short + j2c_long  # (nkpts_ij, nxao, nxao)
         j3c = j3c_short + j3c_long - j3c_bar  # (nkpts_ij, nao, nao, nxao)
-        el_mat = torch.matmul(j3c, torch.inverse(j2c.unsqueeze(1)))  # (nkpts_ij, nao, nao, nxao)
+        el_mat = torch.einsum("kxy,kaby->kabx", torch.inverse(j2c), j3c)  # (nkpts_ij, nao, nao, nxao)
 
         self._j2c = j2c
         self._j3c = j3c
@@ -135,7 +135,19 @@ class DFPBC(BaseDF):
         return self
 
     def get_elrep(self, dm: torch.Tensor) -> xt.LinearOperator:
-        pass
+        # return the electron repulsion operator given the density matrix
+        # dm: (nkpts, nao, nao)
+        # self._el_mat: (nkpts_ij, nao, nao, nxao)
+        # self._j3c: (nkpts_ij, nao, nao, nxao)
+        nkpts = dm.shape[-3]
+        el_mat = self._el_mat.view(nkpts, nkpts, *self._el_mat.shape[1:])  # (nkpts, nkpts, nao, nao, nxao)
+        j3c = self._j3c.view(nkpts, nkpts, *self._j3c.shape[1:])  # (nkpts, nkpts, nao, nao, nxao)
+        fitcoeffs = torch.einsum("llabx,lab->x", el_mat, dm)  # (nxao,)
+        elrep_mat = torch.einsum("x,llabx->lab", fitcoeffs, j3c.conj())  # (nkpts, nao, nao)
+
+        # check hermitianness
+        # assert torch.allclose(elrep_mat, elrep_mat.conj().transpose(-2, -1))
+        return xt.LinearOperator.m(elrep_mat, is_hermitian=True)
 
     @property
     def j2c(self) -> torch.Tensor:
