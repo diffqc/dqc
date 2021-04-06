@@ -51,8 +51,6 @@ def pbc_evl(shortname: str, wrapper: LibcintWrapper, rgrid: torch.Tensor,
     ao = evl(shortname, wrapper, rgrid_shift.reshape(-1, NDIM))  # (*ncomp, nao, nls * ngrid)
     ao = ao.reshape(*ao.shape[:-1], ls.shape[0], -1)  # (*ncomp, nao, nls, ngrid)
     out = torch.einsum("kl,...alg->...kag", exp_ikl, ao.to(exp_ikl.dtype))  # (*ncomp, nkpts, nao, ngrid)
-    print("ao dqc:")
-    print(out)
     return out
 
 # shortcuts

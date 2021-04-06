@@ -111,7 +111,7 @@ class HamiltonCGTO_PBC(BaseHamilton):
         return xt.LinearOperator.m(self._olp_mat, is_hermitian=True)
 
     def get_elrep(self, dm: torch.Tensor) -> xt.LinearOperator:
-        # dm: (nkpts_ij, nao, nao)
+        # dm: (nkpts, nao, nao)
         # return: (nkpts, nao, nao)
         assert self._df is not None
         return self._df.get_elrep(dm)
@@ -128,7 +128,7 @@ class HamiltonCGTO_PBC(BaseHamilton):
 
     def aodm2dens(self, dm: torch.Tensor, xyz: torch.Tensor) -> torch.Tensor:
         # xyz: (*BR, ndim)
-        # dm: (*BD, nao, nao)
+        # dm: (*BD, nkpts, nao, nao)
         # returns: (*BRD)
         pass
 

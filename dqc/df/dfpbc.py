@@ -141,6 +141,7 @@ class DFPBC(BaseDF):
         # dm: (nkpts, nao, nao)
         # self._el_mat: (nkpts_ij, nao, nao, nxao)
         # self._j3c: (nkpts_ij, nao, nao, nxao)
+        # return: (nkpts, nao, nao)
         nkpts = dm.shape[-3]
         el_mat = self._el_mat.view(nkpts, nkpts, *self._el_mat.shape[1:])  # (nkpts, nkpts, nao, nao, nxao)
         j3c = self._j3c.view(nkpts, nkpts, *self._j3c.shape[1:])  # (nkpts, nkpts, nao, nao, nxao)
