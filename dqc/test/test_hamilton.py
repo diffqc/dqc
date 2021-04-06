@@ -9,6 +9,7 @@ from dqc.utils.datastruct import DensityFitInfo, AtomCGTOBasis
 
 import pyscf
 import pyscf.pbc
+from pyscf.pbc.dft import numint as pbc_numint
 
 dtype = torch.float64
 cdtype = torch.complex128
@@ -707,3 +708,42 @@ def test_pbc_cgto_elrep_df(pbc_h1):
     elrep_dqc = h_dqc.get_elrep(dm).fullmatrix()
     elrep_scf = df_scf.get_jk(dm)[0]
     assert torch.allclose(elrep_dqc, torch.as_tensor(elrep_scf, dtype=elrep_dqc.dtype), rtol=1e-5, atol=2e-5)
+
+def test_pbc_cgto_eval_dm(pbc_h1):
+    torch.manual_seed(123)
+    h_dqc, df_scf = pbc_h1
+    nkpts = h_dqc.kpts.shape[0]
+    nao = h_dqc.nao
+
+    # generate random hermitian density matrix
+    dm = torch.rand((nkpts, nao, nao), dtype=cdtype)
+    dm = dm + dm.conj().transpose(-2, -1)
+
+    npts = 100
+    xcoords = torch.linspace(-3, 3, npts)[:,None].to(dtype)
+    ycoords = torch.zeros(npts)[:,None].to(dtype)
+    zcoords = torch.zeros(npts)[:,None].to(dtype)
+    xyz = torch.cat((xcoords, ycoords, zcoords), dim=-1)
+    # xyz = torch.rand((10, 3), dtype=dtype)
+    dens = h_dqc.aodm2dens(dm, xyz)
+
+    assert dens.dtype == dtype
+    kpts_np = h_dqc.kpts.numpy()
+    knumint = pbc_numint.KNumInt(kpts=kpts_np)
+    cell = df_scf.cell
+    ao = knumint.eval_ao(cell, xyz.numpy(), kpts=kpts_np)
+    dens_scf = knumint.eval_rho(cell, ao, dm.numpy())
+    dens_scf = torch.as_tensor(dens_scf, dtype=dens.dtype)
+
+    # print("dens pyscf:")
+    # print(dens_scf)
+    # print("dens dqc:")
+    # print(dens)
+    # print(dens / dens_scf)
+    #
+    # import matplotlib.pyplot as plt
+    # plt.plot(xcoords.view(-1), dens)
+    # plt.plot(xcoords.view(-1), dens_scf)
+    # plt.show()
+
+    assert torch.allclose(dens, dens_scf)

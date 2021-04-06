@@ -123,14 +123,31 @@ class HamiltonCGTO_PBC(BaseHamilton):
         # orb_weight: (norb)
         # return: (nkpts, nao, nao)
         dtype = orb.dtype
-        res = torch.einsum("kao,o,kbo->kab", orb.conj(), orb_weight.to(dtype), orb)
+        res = torch.einsum("kao,o,kbo->kab", orb, orb_weight.to(dtype), orb.conj())
         return res
 
     def aodm2dens(self, dm: torch.Tensor, xyz: torch.Tensor) -> torch.Tensor:
         # xyz: (*BR, ndim)
         # dm: (*BD, nkpts, nao, nao)
         # returns: (*BRD)
-        pass
+
+        nao = dm.shape[-1]
+        nkpts = self._kpts.shape[0]
+        xyzshape = xyz.shape  # (*BR, ndim)
+
+        # basis: (nkpts, nao, *BR)
+        xyz1 = xyz.reshape(-1, xyzshape[-1])  # (BR=ngrid, ndim)
+        # ao1: (nkpts, nao, ngrid)
+        ao1 = intor.pbc_eval_gto(self._basiswrapper, xyz1, kpts=self._kpts, options=self._lattsum_opt)
+        ao1 = torch.movedim(ao1, -1, 0).reshape(*xyzshape[:-1], nkpts, nao)  # (*BR, nkpts, nao)
+
+        # dens = torch.einsum("...ka,...kb,...kab,k->...", ao1, ao1.conj(), dm, self._wkpts)
+        densk = torch.matmul(dm, ao1.conj().unsqueeze(-1))  # (*BRD, nkpts, nao, 1)
+        densk = torch.matmul(ao1.unsqueeze(-2), densk).squeeze(-1).squeeze(-1)  # (*BRD, nkpts)
+        assert densk.imag.abs().max() < 1e-9, "The density should be real at this point"
+
+        dens = torch.einsum("...k,k->...", densk.real, self._wkpts)  # (*BRD)
+        return dens
 
     ############### grid-related ###############
     def setup_grid(self, grid: BaseGrid, xc: Optional[BaseXC] = None) -> None:
