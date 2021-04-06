@@ -4,6 +4,7 @@ import numpy as np
 import xitorch as xt
 import dqc.hamilton.intor as intor
 from dqc.hamilton.base_hamilton import BaseHamilton
+from dqc.hamilton.hcgto import HamiltonCGTO
 from dqc.df.base_df import BaseDF
 from dqc.df.dfpbc import DFPBC
 from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, SpinParam, DensityFitInfo
@@ -12,7 +13,7 @@ from dqc.grid.base_grid import BaseGrid
 from dqc.xc.base_xc import BaseXC
 from dqc.hamilton.intor.lattice import Lattice
 
-class HamiltonCGTO_PBC(BaseHamilton):
+class HamiltonCGTO_PBC(HamiltonCGTO):
     """
     Hamiltonian with contracted Gaussian type orbitals in a periodic boundary
     condition systems.
@@ -152,15 +153,56 @@ class HamiltonCGTO_PBC(BaseHamilton):
     ############### grid-related ###############
     def setup_grid(self, grid: BaseGrid, xc: Optional[BaseXC] = None) -> None:
         # save the family and save the xc
-        pass
+        self.xc = xc
+        if xc is None:
+            self.xcfamily = 1
+        else:
+            self.xcfamily = xc.family
+
+        # save the grid
+        self.grid = grid
+        self.rgrid = grid.get_rgrid()
+        assert grid.coord_type == "cart"
+
+        # setup the basis as a spatial function
+        self.is_ao_set = True
+        self.basis = intor.pbc_eval_gto(  # (nkpts, nao, ngrid)
+            self._basiswrapper, self.rgrid, kpts=self._kpts, options=self._lattsum_opt)
+        basis_dvolume = self.basis * self.grid.get_dvolume()  # (nkpts, nao, ngrid)
+        self.basis_dvolume_conj = basis_dvolume.conj()
+
+        if self.xcfamily == 1:  # LDA
+            return
+
+        # setup the gradient of the basis
+        self.is_grad_ao_set = True
+        self.grad_basis = intor.pbc_eval_gradgto(  # (ndim, nkpts, nao, ngrid)
+            self._basiswrapper, self.rgrid, kpts=self._kpts, options=self._lattsum_opt)
+        if self.xcfamily == 2:  # GGA
+            return
+
+        # setup the laplacian of the basis
+        self.is_lapl_ao_set = True
+        self.lapl_basis = intor.pbc_eval_laplgto(  # (nkpts, nao, ngrid)
+            self._basiswrapper, self.rgrid, kpts=self._kpts, options=self._lattsum_opt)
 
     def get_vext(self, vext: torch.Tensor) -> xt.LinearOperator:
         # vext: (*BR, ngrid)
-        pass
+        # return: (*BR, nkpts, nao, nao)
+        if not self.is_ao_set:
+            raise RuntimeError("Please call `setup_grid(grid, xc)` to call this function")
+        mat = torch.einsum("...r,kbr,kcr->...kbc", vext, self.basis_dvolume_conj, self.basis)  # (*BR, nao, nao)
+        mat = (mat + mat.transpose(-2, -1).conj()) * 0.5  # ensure the hermitianness and reduce numerical instability
+        return xt.LinearOperator.m(mat, is_hermitian=True)
 
     def get_grad_vext(self, grad_vext: torch.Tensor) -> xt.LinearOperator:
         # grad_vext: (*BR, ngrid, ndim)
-        pass
+        # return: (*BR, nkpts, nao, nao)
+        if not self.is_grad_ao_set:
+            raise RuntimeError("Please call `setup_grid(grid, xc)` to call this function")
+        mat = torch.einsum("...rd,kbr,dkcr->...kbc", grad_vext, self.basis_dvolume_conj, self.grad_basis)
+        mat = mat + mat.transpose(-2, -1).conj()  # +cc, so no * 0.5 in this case
+        return xt.LinearOperator.m(mat, is_hermitian=True)
 
     def get_lapl_vext(self, lapl_vext: torch.Tensor) -> xt.LinearOperator:
         # get the linear operator for the laplacian part of the potential
@@ -180,14 +222,37 @@ class HamiltonCGTO_PBC(BaseHamilton):
 
     def get_vxc(self, dm):
         # dm: (*BD, nao, nao)
-        pass
+        return super(HamiltonCGTO, self).get_vxc(dm)
 
     def get_exc(self, dm: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
-        pass
 
     def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
-        if False:
-            pass
+        # getparamnames to list the name of parameters affecting the method
+        if methodname == "get_kinnucl":
+            return [prefix + "_kinnucl_mat"]
+        elif methodname == "get_nuclattr":
+            return [prefix + "_nucl_mat"]
+        elif methodname == "get_overlap":
+            return [prefix + "_olp_mat"]
+        elif methodname == "get_elrep":
+            assert self._df is not None
+            return self._df.getparamnames("get_elrep", prefix=prefix + "_df.")
+        elif methodname == "ao_orb2dm":
+            return []
+        elif methodname == "get_vext":
+            return [prefix + "basis_dvolume_conj", prefix + "basis"]
+        elif methodname == "get_grad_vext":
+            return [prefix + "basis_dvolume_conj", prefix + "grad_basis"]
+        elif methodname == "get_lapl_vext":
+            return [prefix + "basis_dvolume_conj", prefix + "lapl_basis"]
+        elif methodname == "get_vxc":
+            return super(HamiltonCGTO, self).getparamnames("get_vxc", prefix=prefix)
+        elif methodname == "_get_dens_at_grid":
+            return [prefix + "basis"]
+        elif methodname == "_get_grad_dens_at_grid":
+            return [prefix + "basis", prefix + "grad_basis"]
+        elif methodname == "_get_lapl_dens_at_grid":
+            return [prefix + "basis", prefix + "lapl_basis"]
         else:
             raise KeyError("getparamnames has no %s method" % methodname)
 
@@ -278,3 +343,17 @@ class HamiltonCGTO_PBC(BaseHamilton):
             basis = CGTOBasis(angmom=0, alphas=alphas, coeffs=coeffs, normalized=True)
             res.append(AtomCGTOBasis(atomz=0, bases=[basis], pos=atb.pos))
         return res
+
+
+        return super(HamiltonCGTO, self).get_exc(dm)
+
+    def _get_dens_at_grid(self, dm: torch.Tensor) -> torch.Tensor:
+        # get the density at the grid
+        return torch.einsum("...kij,kir,kjr->...r", dm, self.basis, self.basis.conj())
+
+    def _get_grad_dens_at_grid(self, dm: torch.Tensor) -> torch.Tensor:
+        # get the gradient of density at the grid
+        if not self.is_grad_ao_set:
+            raise RuntimeError("Please call `setup_grid(grid, gradlevel>=1)` to calculate the density gradient")
+        gdens = torch.einsum("...kij,dkir,kjr->...rd", dm, self.grad_basis, self.basis.conj())
+        return gdens + gdens.conj()  # + complex conjugate
