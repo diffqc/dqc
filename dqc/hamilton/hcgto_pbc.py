@@ -51,7 +51,7 @@ class HamiltonCGTO_PBC(BaseHamilton):
         self._kpts = kpts if kpts is not None else \
             torch.zeros((1, 3), dtype=self.dtype, device=self.device)
         nkpts = self._kpts.shape[0]
-        # default weights are just 1/nkpts
+        # default weights are just 1/nkpts (nkpts,)
         self._wkpts = wkpts if wkpts is not None else \
             torch.ones((nkpts,), dtype=self.dtype, device=self.device) / nkpts
 
@@ -118,12 +118,13 @@ class HamiltonCGTO_PBC(BaseHamilton):
 
     def ao_orb2dm(self, orb: torch.Tensor, orb_weight: torch.Tensor) -> torch.Tensor:
         # convert the atomic orbital to the density matrix
-        # in CGTO, it is U.W.U^T
 
         # orb: (nkpts, nao, norb)
-        # orb_weight: (nkpts, norb)
+        # orb_weight: (norb)
         # return: (nkpts, nao, nao)
-        pass
+        dtype = orb.dtype
+        res = torch.einsum("kao,o,kbo->kab", orb.conj(), orb_weight.to(dtype), orb)
+        return res
 
     def aodm2dens(self, dm: torch.Tensor, xyz: torch.Tensor) -> torch.Tensor:
         # xyz: (*BR, ndim)
