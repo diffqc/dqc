@@ -5,8 +5,11 @@ import torch
 import numpy as np
 from dqc.hamilton.intor.lcintwrap import LibcintWrapper
 from dqc.hamilton.intor.utils import np2ctypes, int2ctypes, NDIM, CGTO
+from dqc.hamilton.intor.pbcintor import _get_default_kpts, _get_default_options, PBCIntOption
+from dqc.utils.pbc import estimate_ovlp_rcut
 
-__all__ = ["evl", "eval_gto", "eval_gradgto", "eval_laplgto"]
+__all__ = ["evl", "eval_gto", "eval_gradgto", "eval_laplgto",
+           "pbc_evl", "pbc_eval_gto", "pbc_eval_gradgto", "pbc_eval_laplgto"]
 
 BLKSIZE = 128  # same as lib/gto/grid_ao_drv.c
 
@@ -22,6 +25,35 @@ def evl(shortname: str, wrapper: LibcintWrapper, rgrid: torch.Tensor) -> torch.T
 
         # nontensors or int tensors
         ao_to_atom, wrapper, shortname)
+
+def pbc_evl(shortname: str, wrapper: LibcintWrapper, rgrid: torch.Tensor,
+            kpts: Optional[torch.Tensor] = None,
+            options: Optional[PBCIntOption] = None) -> torch.Tensor:
+    # evaluate the basis in periodic boundary condition, i.e. evaluate
+    # sum_L exp(i*k*L) * phi(r - L)
+    # rgrid: (ngrid, ndim)
+    # kpts: (nkpts, ndim)
+    # ls: (nls, ndim)
+    # returns: (*ncomp, nkpts, nao, ngrid)
+
+    # get the default arguments
+    kpts1 = _get_default_kpts(kpts, dtype=wrapper.dtype, device=wrapper.device)
+    options1 = _get_default_options(options)
+
+    # get the shifts
+    coeffs, alphas, _ = wrapper.params
+    rcut = estimate_ovlp_rcut(options1.precision, coeffs, alphas)
+    ls = wrapper.lattice.get_lattice_ls(rcut=rcut)  # (nls, ndim)
+
+    # evaluate the gto
+    exp_ikl = torch.exp(1j * torch.matmul(kpts1, ls.transpose(-2, -1)))  # (nkpts, nls)
+    rgrid_shift = rgrid - ls.unsqueeze(-2)  # (nls, ngrid, ndim)
+    ao = evl(shortname, wrapper, rgrid_shift.reshape(-1, NDIM))  # (*ncomp, nao, nls * ngrid)
+    ao = ao.reshape(*ao.shape[:-1], ls.shape[0], -1)  # (*ncomp, nao, nls, ngrid)
+    out = torch.einsum("kl,...alg->...kag", exp_ikl, ao.to(exp_ikl.dtype))  # (*ncomp, nkpts, nao, ngrid)
+    print("ao dqc:")
+    print(out)
+    return out
 
 # shortcuts
 def eval_gto(wrapper: LibcintWrapper, rgrid: torch.Tensor) -> torch.Tensor:
@@ -39,6 +71,29 @@ def eval_laplgto(wrapper: LibcintWrapper, rgrid: torch.Tensor) -> torch.Tensor:
     # return: (nao, ngrid)
     return evl("lapl", wrapper, rgrid)
 
+def pbc_eval_gto(wrapper: LibcintWrapper, rgrid: torch.Tensor,
+                 kpts: Optional[torch.Tensor] = None,
+                 options: Optional[PBCIntOption] = None) -> torch.Tensor:
+    # rgrid: (ngrid, ndim)
+    # kpts: (nkpts, ndim)
+    # return: (nkpts, nao, ngrid)
+    return pbc_evl("", wrapper, rgrid, kpts, options)
+
+def pbc_eval_gradgto(wrapper: LibcintWrapper, rgrid: torch.Tensor,
+                     kpts: Optional[torch.Tensor] = None,
+                     options: Optional[PBCIntOption] = None) -> torch.Tensor:
+    # rgrid: (ngrid, ndim)
+    # kpts: (nkpts, ndim)
+    # return: (nkpts, nao, ngrid)
+    return pbc_evl("ip", wrapper, rgrid, kpts, options)
+
+def pbc_eval_laplgto(wrapper: LibcintWrapper, rgrid: torch.Tensor,
+                     kpts: Optional[torch.Tensor] = None,
+                     options: Optional[PBCIntOption] = None) -> torch.Tensor:
+    # rgrid: (ngrid, ndim)
+    # kpts: (nkpts, ndim)
+    # return: (nkpts, nao, ngrid)
+    return pbc_evl("lapl", wrapper, rgrid, kpts, options)
 
 ################## pytorch function ##################
 class _EvalGTO(torch.autograd.Function):

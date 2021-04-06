@@ -862,6 +862,57 @@ def test_eval_ft_gto(angmom):
 
     assert torch.allclose(true_value, ao_ft_value)
 
+################## pbc eval ##################
+@pytest.mark.parametrize(
+    "eval_type",
+    ["", "grad"]
+)
+def test_pbc_eval_gto_vs_pyscf(eval_type):
+    # check if our eval_gto produces the same results as pyscf
+    # also check the partial eval_gto
+
+    basis = "6-311++G**"
+    d = 0.8
+
+    # setup the system for dqc
+    atomenv = get_atom_env(dtype, ngrid=100)
+    a = torch.tensor([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]], dtype=dtype) * 3
+    kpts = torch.tensor([[0.0, 0.0, 0.0], [0.1, 0.2, 0.15]], dtype=dtype)
+    rgrid = atomenv.rgrid
+    wrapper = get_wrapper(atomenv, spherical=True, lattice=Lattice(a))
+    wrapper1 = wrapper[:len(wrapper)]
+    if eval_type == "":
+        # (nkpts, nao, ngrid)
+        ao_value = intor.pbc_eval_gto(wrapper, rgrid)
+        ao_value1 = intor.pbc_eval_gto(wrapper1, rgrid)
+    elif eval_type == "grad":
+        # (ndim, nkpts, nao, ngrid)
+        ao_value = intor.pbc_eval_gradgto(wrapper, rgrid)
+        ao_value1 = intor.pbc_eval_gradgto(wrapper1, rgrid)
+
+    # (*ncomp, nao, ngrid)
+    wkpts = 1.0 / len(kpts)
+    ao_value = ao_value.sum(dim=-3) * wkpts
+    ao_value1 = ao_value1.sum(dim=-3) * wkpts
+
+    # check the partial eval_gto
+    assert torch.allclose(ao_value[..., :len(wrapper1), :], ao_value1)
+
+    # system in pyscf
+    cell = get_cell_pyscf(dtype, a.detach().numpy())
+
+    coords_np = rgrid.detach().numpy()
+    if eval_type == "":
+        ao_value_scf = cell.pbc_eval_gto("GTOval_sph", coords_np)
+    elif eval_type == "grad":
+        # (ndim, ngrid, nao)
+        ao_value_scf = cell.pbc_eval_gto("GTOval_ip_sph", coords_np)
+    ao_value_scf = torch.as_tensor(ao_value_scf).transpose(-2, -1).to(ao_value.dtype)
+    ao_value_scf = ao_value_scf * wkpts
+    print(ao_value_scf.shape, ao_value.shape)
+
+    assert torch.allclose(ao_value, ao_value_scf, atol=1e-5)
+
 #################### misc properties of LibcintWrapper ####################
 def test_wrapper_concat():
     # get the wrappers
