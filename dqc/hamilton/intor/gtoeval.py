@@ -83,7 +83,7 @@ def pbc_eval_gradgto(wrapper: LibcintWrapper, rgrid: torch.Tensor,
                      options: Optional[PBCIntOption] = None) -> torch.Tensor:
     # rgrid: (ngrid, ndim)
     # kpts: (nkpts, ndim)
-    # return: (nkpts, nao, ngrid)
+    # return: (ndim, nkpts, nao, ngrid)
     return pbc_evl("ip", wrapper, rgrid, kpts, options)
 
 def pbc_eval_laplgto(wrapper: LibcintWrapper, rgrid: torch.Tensor,
