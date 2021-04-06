@@ -43,6 +43,7 @@ def pbc_evl(shortname: str, wrapper: LibcintWrapper, rgrid: torch.Tensor,
     # get the shifts
     coeffs, alphas, _ = wrapper.params
     rcut = estimate_ovlp_rcut(options1.precision, coeffs, alphas)
+    assert wrapper.lattice is not None
     ls = wrapper.lattice.get_lattice_ls(rcut=rcut)  # (nls, ndim)
 
     # evaluate the gto
