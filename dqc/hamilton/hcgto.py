@@ -237,17 +237,15 @@ class HamiltonCGTO(BaseHamilton):
             res_d = self._dm2densinfo(dm.d, family)
             return SpinParam(u=res_u, d=res_d)
         else:
-            dens = torch.einsum("...ij,ir,jr->...r", dm, self.basis, self.basis)
+            dens = self._get_dens_at_grid(dm)
 
             # calculate the density gradient
             gdens = None
             if family >= 2:  # requires gradient
-                if not self.is_grad_ao_set:
-                    raise RuntimeError("Please call `setup_grid(grid, gradlevel>=1)` to calculate the density gradient")
                 # (*BD, ngrid, ndim)
                 # dm is multiplied by 2 because n(r) = sum (D_ij * phi_i * phi_j), thus
                 # d.n(r) = sum (D_ij * d.phi_i * phi_j + D_ij * phi_i * d.phi_j)
-                gdens = torch.einsum("...ij,dir,jr->...rd", 2 * dm, self.grad_basis, self.basis)
+                gdens = self._get_grad_dens_at_grid(dm)
 
             # TODO: implement the density laplacian
 
@@ -256,9 +254,23 @@ class HamiltonCGTO(BaseHamilton):
             res = ValGrad(value=dens, grad=gdens)
             return res
 
+    def _get_dens_at_grid(self, dm: torch.Tensor) -> torch.Tensor:
+        # get the density at the grid
+        return torch.einsum("...ij,ir,jr->...r", dm, self.basis, self.basis)
+
+    def _get_grad_dens_at_grid(self, dm: torch.Tensor) -> torch.Tensor:
+        # get the gradient of density at the grid
+        if not self.is_grad_ao_set:
+            raise RuntimeError("Please call `setup_grid(grid, gradlevel>=1)` to calculate the density gradient")
+        # dm is multiplied by 2 because n(r) = sum (D_ij * phi_i * phi_j), thus
+        # d.n(r) = sum (D_ij * d.phi_i * phi_j + D_ij * phi_i * d.phi_j)
+        return torch.einsum("...ij,dir,jr->...rd", 2 * dm, self.grad_basis, self.basis)
+
     def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
         if methodname == "get_kinnucl":
             return [prefix + "kinnucl_mat"]
+        elif methodname == "get_nuclattr":
+            return [prefix + "nucl_mat"]
         elif methodname == "get_overlap":
             return [prefix + "olp_mat"]
         elif methodname == "get_elrep":
@@ -285,12 +297,18 @@ class HamiltonCGTO(BaseHamilton):
                 params += self.getparamnames("get_lapl_vext", prefix=prefix)
             return params
         elif methodname == "_dm2densinfo":
-            params = [prefix + "basis"]
+            params = self.getparamnames("_get_dens_at_grid", prefix=prefix)
             if self.xcfamily >= 2:
-                params += [prefix + "grad_basis"]
+                params += self.getparamnames("_get_grad_dens_at_grid", prefix=prefix)
             if self.xcfamily >= 3:
-                params += [prefix + "lapl_basis"]
+                params += self.getparamnames("_get_lapl_dens_at_grid", prefix=prefix)
             return params
+        elif methodname == "_get_dens_at_grid":
+            return [prefix + "basis"]
+        elif methodname == "_get_grad_dens_at_grid":
+            return [prefix + "basis", prefix + "grad_basis"]
+        elif methodname == "_get_lapl_dens_at_grid":
+            return [prefix + "basis", prefix + "lapl_basis"]
         else:
             raise KeyError("getparamnames has no %s method" % methodname)
         # TODO: complete this
