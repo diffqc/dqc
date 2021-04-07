@@ -1,10 +1,14 @@
 from typing import Optional, Tuple, Union, List
 import torch
+from dqc.hamilton.base_hamilton import BaseHamilton
+from dqc.hamilton.hcgto_pbc import HamiltonCGTO_PBC
 from dqc.system.base_system import BaseSystem
 from dqc.grid.base_grid import BaseGrid
+from dqc.grid.factory import get_grid
 from dqc.system.mol import _parse_moldesc, _parse_basis, _get_nelecs_spin, \
                            _get_orb_weights, AtomZsType, AtomPosType
-from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, ZType
+from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, ZType, BasisInpType, \
+                                 SpinParam
 from dqc.hamilton.intor.lattice import Lattice
 
 class MolPBC(BaseSystem):
@@ -87,3 +91,76 @@ class MolPBC(BaseSystem):
         self._orb_weights_u = _orb_weights_u
         self._orb_weights_d = _orb_weights_d
         self._lattice = Lattice(alattice)
+
+    def densityfit(self, method: Optional[str] = None,
+                   auxbasis: Optional[BasisInpType] = None) -> BaseSystem:
+        """
+        Indicate that the system's Hamiltonian uses density fit for its integral.
+
+        Arguments
+        ---------
+        method: Optional[str]
+            Density fitting method. Available methods in this class are:
+
+            * "compensating": Density fit with compensating charge to perform
+                the lattice sum. Ref https://doi.org/10.1063/1.4998644 (default)
+
+        auxbasis: Optional[BasisInpType]
+            Auxiliary basis for the density fit. If not specified, then it uses
+            "cc-pvtz-jkfit".
+        """
+        if method is None:
+            method = "compensating"
+        if auxbasis is None:
+            # TODO: choose the auxbasis properly
+            auxbasis = "cc-pvtz-jkfit"
+
+        # get the auxiliary basis
+        assert auxbasis is not None
+        auxbasis_lst = _parse_basis(self._atomzs_int, auxbasis)
+        atomauxbases = [AtomCGTOBasis(atomz=atz, bases=bas, pos=atpos)
+                        for (atz, bas, atpos) in zip(self._atomzs, auxbasis_lst, self._atompos)]
+
+        # change the hamiltonian to have density fit
+        df = DensityFitInfo(method=method, auxbases=atomauxbases)
+        self._hamilton = HamiltonCGTO_PBC(self._atombases, df=df)
+        return self
+
+    def get_hamiltonian(self) -> BaseHamilton:
+        return self._hamilton
+
+    def get_orbweight(self, polarized: bool = False) -> Union[torch.Tensor, SpinParam[torch.Tensor]]:
+        if not polarized:
+            return self._orb_weights
+        else:
+            return SpinParam(u=self._orb_weights_u, d=self._orb_weights_d)
+
+    def get_nuclei_energy(self) -> torch.Tensor:
+        # self._atomzs: (natoms,)
+        # self._atompos: (natoms, ndim)
+        pass
+
+    def setup_grid(self) -> None:
+        self._grid = get_grid(self._grid_inp, self._atomzs, self._atompos,
+                              lattice=self._lattice,
+                              dtype=self._dtype, device=self._device)
+
+    def get_grid(self) -> BaseGrid:
+        if self._grid is None:
+            raise RuntimeError("Please run mol.setup_grid() first before calling get_grid()")
+        return self._grid
+
+    def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
+        pass
+
+    @property
+    def spin(self) -> ZType:
+        return self._spin
+
+    @property
+    def charge(self) -> ZType:
+        return self._charge
+
+    @property
+    def numel(self) -> ZType:
+        return self._numel

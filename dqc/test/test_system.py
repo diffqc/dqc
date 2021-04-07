@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import pytest
 from dqc.system.mol import Mol
+from dqc.system.molpbc import MolPBC
 from dqc.hamilton.intor.lattice import Lattice
 
 # these tests to make sure the systems parse the inputs correctly
@@ -12,6 +13,7 @@ moldescs = [
     (["H", "Be"], [[1.0, 0.0, 0.0], [2.0, 0.0, 0.0]]),
     ([1, 4], torch.tensor([[1.0, 0.0, 0.0], [2.0, 0.0, 0.0]], dtype=dtype)),
 ]
+alattice = torch.eye(3, dtype=dtype) * 4
 
 @pytest.mark.parametrize("moldesc", moldescs)
 def test_mol_orbweights(moldesc):
@@ -46,6 +48,42 @@ def test_mol_orbweights(moldesc):
 def test_mol_grid(moldesc):
     # default: level 4
     m = Mol(moldesc, basis="6-311++G**", dtype=dtype)
+    m.setup_grid()
+    rgrid = m.get_grid().get_rgrid()
+
+    # only check the dimension and the type because the number of grid points
+    # can be changed
+    assert rgrid.shape[1] == 3
+    assert m.get_grid().coord_type == "cart"
+
+@pytest.mark.parametrize("moldesc", moldescs)
+def test_mol_pbc_orbweights(moldesc):
+    m = MolPBC(moldesc, basis="6-311++G**", alattice=alattice, dtype=dtype)
+    orb_weight1 = torch.tensor([2.0, 2.0, 1.0], dtype=dtype)
+    assert torch.allclose(m.get_orbweight(), orb_weight1)
+
+    m3 = MolPBC(moldesc, basis="6-311++G**", alattice=alattice, dtype=dtype, spin=3)
+    orb_weight3 = torch.tensor([2.0, 1.0, 1.0, 1.0], dtype=dtype)
+    assert torch.allclose(m3.get_orbweight(), orb_weight3)
+
+    # try if it raises an error if spin is invalid
+    fail = False
+    try:
+        m4 = MolPBC(moldesc, basis="6-311++G**", alattice=alattice, dtype=dtype, spin=4)
+    except AssertionError:
+        fail = True
+    assert fail
+
+    fail = False
+    try:
+        m4 = MolPBC(moldesc, basis="6-311++G**", alattice=alattice, dtype=dtype, spin=-1)
+    except AssertionError:
+        fail = True
+    assert fail
+
+@pytest.mark.parametrize("moldesc", moldescs)
+def test_mol_pbc_grid(moldesc):
+    m = MolPBC(moldesc, basis="6-311++G**", alattice=alattice, dtype=dtype)
     m.setup_grid()
     rgrid = m.get_grid().get_rgrid()
 
