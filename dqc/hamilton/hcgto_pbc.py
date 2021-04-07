@@ -225,6 +225,7 @@ class HamiltonCGTO_PBC(HamiltonCGTO):
         return super(HamiltonCGTO, self).get_vxc(dm)
 
     def get_exc(self, dm: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
+        return super(HamiltonCGTO, self).get_exc(dm)
 
     def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
         # getparamnames to list the name of parameters affecting the method
