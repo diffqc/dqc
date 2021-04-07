@@ -345,9 +345,6 @@ class HamiltonCGTO_PBC(HamiltonCGTO):
             res.append(AtomCGTOBasis(atomz=0, bases=[basis], pos=atb.pos))
         return res
 
-
-        return super(HamiltonCGTO, self).get_exc(dm)
-
     def _get_dens_at_grid(self, dm: torch.Tensor) -> torch.Tensor:
         # get the density at the grid
         return torch.einsum("...kij,kir,kjr->...r", dm, self.basis, self.basis.conj())
