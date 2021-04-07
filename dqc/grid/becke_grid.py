@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from dqc.grid.base_grid import BaseGrid
 from dqc.grid.lebedev_grid import LebedevGrid
 
@@ -21,10 +21,10 @@ class BeckeGrid(BaseGrid):
         self._device = atomgrid[0].device
 
         # construct the grid points positions, weights, and the index of grid corresponding to each atom
-        self._rgrid, dvol_atoms, cs_ngrid = _construct_rgrid_and_index(atomgrid, atompos)
+        rgrids, self._rgrid, dvol_atoms = _construct_rgrids(atomgrid, atompos)
 
         # calculate the integration weights
-        weights_atoms = _get_atom_weights(self._rgrid, atompos, cs_ngrid)  # (ngrid,)
+        weights_atoms = _get_atom_weights(rgrids, atompos)  # (ngrid,)
         self._dvolume = dvol_atoms * weights_atoms
 
     @property
@@ -53,10 +53,10 @@ class BeckeGrid(BaseGrid):
         else:
             raise KeyError("Invalid methodname: %s" % methodname)
 
-def _construct_rgrid_and_index(atomgrid: List[LebedevGrid], atompos: torch.Tensor) \
-        -> Tuple[torch.Tensor, np.ndarray]:
-    # construct the grid positions in a 2D tensor, the weights per isolated atom, and
-    # also the index position for each atom in the returned grid
+
+def _construct_rgrids(atomgrid: List[LebedevGrid], atompos: torch.Tensor) \
+        -> Tuple[List[torch.Tensor], torch.Tensor, torch.Tensor]:
+    # construct the grid positions in a 2D tensor, the weights per isolated atom
 
     allpos_lst = [
         # rgrid: (ngrid[i], ndim), pos: (ndim,)
@@ -64,33 +64,25 @@ def _construct_rgrid_and_index(atomgrid: List[LebedevGrid], atompos: torch.Tenso
         for (gr, pos) in zip(atomgrid, atompos)]
     rgrid = torch.cat(allpos_lst, dim=0)  # (ngrid, ndim)
 
-    # get the index of grid corresponding to each atom
-    cs_ngrid = np.cumsum([0] + [gr.get_rgrid().shape[-2] for gr in atomgrid])
-
     # calculate the dvol for an isolated atom
     dvol_atoms = torch.cat([gr.get_dvolume() for gr in atomgrid], dim=0)
 
-    return rgrid, dvol_atoms, cs_ngrid
+    return allpos_lst, rgrid, dvol_atoms
 
-def _get_atom_weights(xyz: torch.Tensor, atompos: torch.Tensor,
-                      atom_grids_idxs: np.ndarray,
+def _get_atom_weights(rgrids: List[torch.Tensor], atompos: torch.Tensor,
                       atomradius: Optional[torch.Tensor] = None) -> torch.Tensor:
-    # returns the relative integration weights for each atoms
-
-    # rgrid: (ngrid, ndim)
+    # rgrids: list of (natgrid, ndim) with length natoms consisting of absolute position of the grids
     # atompos: (natoms, ndim)
     # atomradius: (natoms,) or None
-    # atom_grids_idxs: (natoms + 1,)
     # returns: (ngrid,)
+    assert len(rgrids) == atompos.shape[0]
 
     natoms = atompos.shape[0]
-    rgatoms = torch.norm(xyz - atompos.unsqueeze(1), dim=-1)  # (natoms, ngrid)
     rdatoms = atompos - atompos.unsqueeze(1)  # (natoms, natoms, ndim)
     # add the diagonal to stabilize the gradient calculation
     rdatoms = rdatoms + torch.eye(rdatoms.shape[0], dtype=rdatoms.dtype,
                                   device=rdatoms.device).unsqueeze(-1)
     ratoms = torch.norm(rdatoms, dim=-1)  # (natoms, natoms)
-    mu_ij = (rgatoms - rgatoms.unsqueeze(1)) / ratoms.unsqueeze(-1)  # (natoms, natoms, ngrid)
 
     # calculate the distortion due to heterogeneity
     # (Appendix in Becke's https://doi.org/10.1063/1.454033)
@@ -98,29 +90,29 @@ def _get_atom_weights(xyz: torch.Tensor, atompos: torch.Tensor,
         chiij = atomradius / atomradius.unsqueeze(1)  # (natoms, natoms)
         uij = (atomradius - atomradius.unsqueeze(1)) / \
               (atomradius + atomradius.unsqueeze(1))
-        aij = torch.clamp(uij / (uij * uij - 1), min=-0.45, max=0.45)
-        mu_ij = mu_ij + aij * (1 - mu_ij * mu_ij)
+        aij = torch.clamp(uij / (uij * uij - 1), min=-0.45, max=0.45)  # (natoms, natoms)
+        aij = aij.unsqueeze(-1)  # (natoms, natoms, 1)
 
-    f = mu_ij
-    for _ in range(3):
-        f = 0.5 * f * (3 - f * f)
-    # small epsilon to avoid nan in the gradient
-    s = 0.5 * (1. + 1e-12 - f)  # (natoms, natoms, ngrid)
-    s = s + 0.5 * torch.eye(natoms).unsqueeze(-1)
-    p = s.prod(dim=0)  # (natoms, ngrid)
-    p = p / p.sum(dim=0, keepdim=True)  # (natoms, ngrid)
+    w_list: List[torch.Tensor] = []
+    for ia, xyz in enumerate(rgrids):
+        # xyz: (natgrid, ndim)
+        rgatoms = torch.norm(xyz - atompos.unsqueeze(1), dim=-1)  # (natoms, natgrid)
+        mu_ij = (rgatoms - rgatoms.unsqueeze(1)) / ratoms.unsqueeze(-1)  # (natoms, natoms, natgrid)
 
-    # check if the atomic grids all have the same number of points
-    ngrids = atom_grids_idxs[1:] - atom_grids_idxs[:-1]
-    same_sizes = np.all(ngrids == ngrids[0])
+        if atomradius is not None:
+            mu_ij = mu_ij + aij * (1 - mu_ij * mu_ij)
 
-    # construct the grids
-    if same_sizes:
-        watoms0 = p.view(natoms, natoms, -1)  # (natoms, natoms, ngrid)
-        watoms = watoms0.diagonal(dim1=0, dim2=1).transpose(-2, -1).reshape(-1)  # (natoms * ngrid)
-    else:
-        watoms_list = []
-        for i in range(natoms):
-            watoms_list.append(p[i, atom_grids_idxs[i]:atom_grids_idxs[i + 1]])  # (ngrid)
-        watoms = torch.cat(watoms_list, dim=0)  # (ngrid,)
-    return watoms
+        f = mu_ij
+        for _ in range(3):
+            f = 0.5 * f * (3 - f * f)
+
+        # small epsilon to avoid nan in the gradient
+        s = 0.5 * (1. + 1e-12 - f)  # (natoms, natoms, natgrid)
+        s = s + 0.5 * torch.eye(natoms).unsqueeze(-1)
+        p = s.prod(dim=0)  # (natoms, natgrid)
+        p = p / p.sum(dim=0, keepdim=True)  # (natoms, natgrid)
+
+        w_list.append(p[ia])
+
+    w = torch.cat(w_list, dim=-1)  # (ngrid)
+    return w
