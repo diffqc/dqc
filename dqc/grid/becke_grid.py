@@ -20,18 +20,10 @@ class BeckeGrid(BaseGrid):
         self._dtype = atomgrid[0].dtype
         self._device = atomgrid[0].device
 
-        # construct the grid points positions
-        allpos_lst = [
-            # rgrid: (ngrid[i], ndim), pos: (ndim,)
-            (gr.get_rgrid() + pos) \
-            for (gr, pos) in zip(atomgrid, atompos)]
-        self._rgrid = torch.cat(allpos_lst, dim=0)  # (ngrid, ndim)
-
-        # get the index of grid corresponding to each atom
-        cs_ngrid = np.cumsum([0] + [gr.get_rgrid().shape[-2] for gr in atomgrid])
+        # construct the grid points positions, weights, and the index of grid corresponding to each atom
+        self._rgrid, dvol_atoms, cs_ngrid = _construct_rgrid_and_index(atomgrid, atompos)
 
         # calculate the integration weights
-        dvol_atoms = torch.cat([gr.get_dvolume() for gr in atomgrid], dim=0)
         weights_atoms = _get_atom_weights(self._rgrid, atompos, cs_ngrid)  # (ngrid,)
         self._dvolume = dvol_atoms * weights_atoms
 
@@ -60,6 +52,25 @@ class BeckeGrid(BaseGrid):
             return [prefix + "_dvolume"]
         else:
             raise KeyError("Invalid methodname: %s" % methodname)
+
+def _construct_rgrid_and_index(atomgrid: List[LebedevGrid], atompos: torch.Tensor) \
+        -> Tuple[torch.Tensor, np.ndarray]:
+    # construct the grid positions in a 2D tensor, the weights per isolated atom, and
+    # also the index position for each atom in the returned grid
+
+    allpos_lst = [
+        # rgrid: (ngrid[i], ndim), pos: (ndim,)
+        (gr.get_rgrid() + pos) \
+        for (gr, pos) in zip(atomgrid, atompos)]
+    rgrid = torch.cat(allpos_lst, dim=0)  # (ngrid, ndim)
+
+    # get the index of grid corresponding to each atom
+    cs_ngrid = np.cumsum([0] + [gr.get_rgrid().shape[-2] for gr in atomgrid])
+
+    # calculate the dvol for an isolated atom
+    dvol_atoms = torch.cat([gr.get_dvolume() for gr in atomgrid], dim=0)
+
+    return rgrid, dvol_atoms, cs_ngrid
 
 def _get_atom_weights(xyz: torch.Tensor, atompos: torch.Tensor,
                       atom_grids_idxs: np.ndarray,
