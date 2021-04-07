@@ -1,10 +1,11 @@
-from typing import Union, List
+from typing import Union, List, Optional
 import torch
 from dqc.grid.base_grid import BaseGrid
 from dqc.grid.radial_grid import RadialGrid
 from dqc.grid.lebedev_grid import LebedevGrid
-from dqc.grid.becke_grid import BeckeGrid
+from dqc.grid.becke_grid import BeckeGrid, PBCBeckeGrid
 from dqc.grid.predefined_grid import SG2, SG3
+from dqc.hamilton.intor.lattice import Lattice
 
 __all__ = ["get_grid", "get_atomic_grid"]
 
@@ -17,6 +18,8 @@ _dtype = torch.double
 _device = torch.device("cpu")
 
 def get_grid(grid_inp: Union[int, str], atomzs: Union[List[int], torch.Tensor], atompos: torch.Tensor,
+             *,
+             lattice: Optional[Lattice] = None,
              dtype: torch.dtype = _dtype, device: torch.device = _device) -> BaseGrid:
     """
     Returns the grid object given the grid input description.
@@ -35,7 +38,10 @@ def get_grid(grid_inp: Union[int, str], atomzs: Union[List[int], torch.Tensor], 
     if isinstance(grid_inp, int) or isinstance(grid_inp, str):
         sphgrids = [get_atomic_grid(grid_inp, atomz, dtype=dtype, device=device)
                     for atomz in atomzs_list]
-        return BeckeGrid(sphgrids, atompos)
+        if lattice is None:
+            return BeckeGrid(sphgrids, atompos)
+        else:
+            return PBCBeckeGrid(sphgrids, atompos, lattice=lattice)
     else:
         raise TypeError("Unknown type of grid_inp: %s" % type(grid_inp))
 

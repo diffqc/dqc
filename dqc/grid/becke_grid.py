@@ -3,6 +3,7 @@ import numpy as np
 from typing import List, Optional, Tuple
 from dqc.grid.base_grid import BaseGrid
 from dqc.grid.lebedev_grid import LebedevGrid
+from dqc.hamilton.intor.lattice import Lattice
 
 class BeckeGrid(BaseGrid):
     """
@@ -53,6 +54,102 @@ class BeckeGrid(BaseGrid):
         else:
             raise KeyError("Invalid methodname: %s" % methodname)
 
+class PBCBeckeGrid(BaseGrid):
+    """
+    Use Becke's scheme to construct the 3D grid in a periodic cell. It is similar
+    to non-pbc BeckeGrid, but in this case, only grid points inside the lattice
+    are considered, and atoms corresponds to each grid points are involved in
+    calculating the weights.
+    """
+    def __init__(self, atomgrid: List[LebedevGrid], atompos: torch.Tensor, lattice: Lattice):
+        # atomgrid: list with length (natoms)
+        # atompos: (natoms, ndim)
+
+        assert atompos.shape[0] == len(atomgrid), \
+            "The lengths of atomgrid and atompos must be the same"
+        assert len(atomgrid) > 0
+        self._dtype = atomgrid[0].dtype
+        self._device = atomgrid[0].device
+
+        # get the normalized coordinates
+        a = lattice.lattice_vectors()  # (nlvec=ndim, ndim)
+        b = lattice.recip_vectors() / (2 * np.pi)  # (ndim, ndim) just the inverse of lattice vector.T
+
+        new_atompos_lst: List[torch.Tensor] = []
+        new_rgrids: List[torch.Tensor] = []
+        new_dvols: List[torch.Tensor] = []
+        for ia, atomgr in enumerate(atomgrid):
+            atpos = atompos[ia]
+            rgrid = atomgr.get_rgrid() + atpos  # (natgrid, ndim)
+            dvols = atomgr.get_dvolume()  # (natgrid)
+
+            # ugrid is the normalized coordinate
+            ugrid = torch.einsum("cd,gd->gc", b, rgrid)  # (natgrid, ndim)
+
+            # get the shift required to make the grid point inside the lattice
+            ns = -ugrid.floor().to(torch.int)  # (natgrid, ndim) # ratoms + ns @ a will be the new atompos
+
+            # ns_unique: (nunique, ndim), ns_unique_idx: (natgrid,), ns_count: (nunique)
+            ns_unique, ns_unique_idx, ns_count = torch.unique(
+                ns, dim=0, return_inverse=True, return_counts=True)
+
+            # ignoring the shifts with only less than 8 points (following pyscf)
+            significant_uniq_idx = ns_count >= 8  # (nunique)
+            significant_idx = significant_uniq_idx[ns_unique_idx]  # (natgrid,)
+            ns_unique = ns_unique[significant_uniq_idx, :]  # (nunique2, ndim)
+            ls_unique = torch.matmul(ns_unique.to(a.dtype), a)  # (nunique2, ndim)
+
+            # flag the unaccepted points with -1
+            flag = -1
+            ns_unique_idx[~significant_idx] = flag  # (natgrid)
+
+            # get the coordinate inside the lattice
+            ls = torch.matmul(ns.to(a.dtype), a)
+            rg = rgrid + ls  # (natgrid, ndim)
+
+            # get the new atom pos
+            new_atpos = atompos[ia] + ls_unique  # (nunique2, ndim)
+            new_atompos_lst.append(new_atpos)
+
+            # separate the grid points that corresponds to the different atoms
+            for idx in torch.unique(ns_unique_idx):
+                if idx == flag:
+                    continue
+                at_idx = ns_unique_idx == idx
+                new_rgrids.append(rg[at_idx, :])  # list of (natgrid2, ndim)
+                new_dvols.append(dvols[at_idx])  # list of (natgrid2,)
+
+        self._rgrid = torch.cat(new_rgrids, dim=0)  # (ngrid, ndim)
+        dvol_atoms = torch.cat(new_dvols, dim=0)  # (ngrid)
+        new_atompos = torch.cat(new_atompos_lst, dim=0)  # (nnewatoms, ndim)
+        watoms = _get_atom_weights(new_rgrids, new_atompos)  # (ngrid,)
+        self._dvolume = dvol_atoms * watoms
+
+    @property
+    def dtype(self) -> torch.dtype:
+        return self._dtype
+
+    @property
+    def device(self) -> torch.device:
+        return self._device
+
+    @property
+    def coord_type(self) -> str:
+        return "cart"
+
+    def get_dvolume(self) -> torch.Tensor:
+        return self._dvolume
+
+    def get_rgrid(self) -> torch.Tensor:
+        return self._rgrid
+
+    def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
+        if methodname == "get_rgrid":
+            return [prefix + "_rgrid"]
+        elif methodname == "get_dvolume":
+            return [prefix + "_dvolume"]
+        else:
+            raise KeyError("Invalid methodname: %s" % methodname)
 
 def _construct_rgrids(atomgrid: List[LebedevGrid], atompos: torch.Tensor) \
         -> Tuple[List[torch.Tensor], torch.Tensor, torch.Tensor]:
