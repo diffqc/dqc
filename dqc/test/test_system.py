@@ -75,6 +75,24 @@ def test_mol_nuclei_energy():
     torch.autograd.gradcheck(get_ene_ii, (atomz, atompos))
     torch.autograd.gradgradcheck(get_ene_ii, (atomz, atompos))
 
+def test_mol_pbc_nuclei_energy():
+    # test the calculation of ion-ion interaction energy (+ gradients w.r.t. pos)
+    # in periodic boundary condition
+
+    def get_ene_ii(atomz, atompos, alattice):
+        m = MolPBC((atomz, atompos), alattice=alattice, basis="6-311++G**", dtype=dtype, spin=1)
+        return m.get_nuclei_energy()
+
+    # check the true energy
+    atomz = torch.tensor([1], dtype=torch.int32)
+    alattice = torch.eye(3, dtype=dtype).requires_grad_()
+    atompos = torch.tensor([[0.0, 0.0, 0.0]], dtype=dtype)#.requires_grad_()
+    ene_ii = get_ene_ii(atomz, atompos, alattice)
+
+    # check the gradients
+    torch.autograd.gradcheck(get_ene_ii, (atomz, atompos, alattice))
+    torch.autograd.gradgradcheck(get_ene_ii, (atomz, atompos, alattice))
+
 @pytest.mark.parametrize("moldesc", moldescs)
 def test_mol_pbc_orbweights(moldesc):
     m = MolPBC(moldesc, basis="6-311++G**", alattice=alattice, dtype=dtype)

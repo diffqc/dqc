@@ -1,5 +1,8 @@
-from typing import Optional, Tuple, Union, List
+from typing import Optional, Tuple, Union, List, Dict
+import warnings
 import torch
+import numpy as np
+import scipy.special
 from dqc.hamilton.base_hamilton import BaseHamilton
 from dqc.hamilton.hcgto_pbc import HamiltonCGTO_PBC
 from dqc.system.base_system import BaseSystem
@@ -9,7 +12,9 @@ from dqc.system.mol import _parse_moldesc, _parse_basis, _get_nelecs_spin, \
                            _get_orb_weights, AtomZsType, AtomPosType
 from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, ZType, BasisInpType, \
                                  SpinParam, DensityFitInfo
+from dqc.utils.safeops import safe_cdist
 from dqc.hamilton.intor.lattice import Lattice
+from dqc.hamilton.intor.pbcintor import PBCIntOption
 
 class MolPBC(BaseSystem):
     """
@@ -57,6 +62,7 @@ class MolPBC(BaseSystem):
                  grid: Union[int, str] = "sg3",
                  spin: Optional[ZType] = None,
                  *,
+                 lattsum_opt: Optional[Union[PBCIntOption, Dict]] = None,
                  dtype: torch.dtype = torch.float64,
                  device: torch.device = torch.device('cpu'),
                  ):
@@ -91,6 +97,7 @@ class MolPBC(BaseSystem):
         self._orb_weights_u = _orb_weights_u
         self._orb_weights_d = _orb_weights_d
         self._lattice = Lattice(alattice)
+        self._lattsum_opt = PBCIntOption.get_default(lattsum_opt)
 
     def densityfit(self, method: Optional[str] = None,
                    auxbasis: Optional[BasisInpType] = None) -> BaseSystem:
@@ -123,7 +130,8 @@ class MolPBC(BaseSystem):
 
         # change the hamiltonian to have density fit
         df = DensityFitInfo(method=method, auxbases=atomauxbases)
-        self._hamilton = HamiltonCGTO_PBC(self._atombases, df=df, latt=self._lattice)
+        self._hamilton = HamiltonCGTO_PBC(self._atombases, df=df, latt=self._lattice,
+                                          lattsum_opt=self._lattsum_opt)
         return self
 
     def get_hamiltonian(self) -> BaseHamilton:
@@ -138,7 +146,56 @@ class MolPBC(BaseSystem):
     def get_nuclei_energy(self) -> torch.Tensor:
         # self._atomzs: (natoms,)
         # self._atompos: (natoms, ndim)
-        pass
+
+        # r12: (natoms, natoms)
+        r12_inf = safe_cdist(self._atompos, self._atompos, add_diag_eps=True, diag_inf=True)
+        r12 = safe_cdist(self._atompos, self._atompos, add_diag_eps=True)
+        z12 = self._atomzs.unsqueeze(-2) * self._atomzs.unsqueeze(-1)  # (natoms, natoms)
+
+        precision = self._lattsum_opt.precision
+        eta = self._lattice.estimate_ewald_eta(precision) * 2
+        vol = self._lattice.volume()
+        rcut = scipy.special.erfcinv(float(vol.detach()) * eta * eta / (2 * np.pi) * precision) / eta
+        gcut = scipy.special.erfcinv(precision * np.sqrt(np.pi) / 2 / eta) * 2 * eta
+
+        # get the shift vector in real space and in reciprocal space
+        ls = self._lattice.get_lattice_ls(rcut=rcut, exclude_zeros=True)  # (nls, ndim)
+        # gv: (ngv, ndim), gvweights: (ngv,)
+        gv, gvweights = self._lattice.get_gvgrids(gcut=gcut, exclude_zeros=True)
+        gv_norm2 = torch.einsum("gd,gd->g", gv, gv)  # (ngv)
+
+        # get the shift in position
+        atpos_shift = self._atompos - ls.unsqueeze(-2)  # (nls, natoms, ndim)
+        r12_ls = safe_cdist(atpos_shift, self._atompos)  # (nls, natoms, natoms)
+
+        # calculate the short range
+        short_range_comp1 = torch.erfc(eta * r12_ls) / r12_ls  # (nls, natoms, natoms)
+        short_range_comp2 = torch.erfc(eta * r12) / r12_inf  # (natoms, natoms)
+        short_range1 = torch.sum(z12 * short_range_comp1)  # scalar
+        short_range2 = torch.sum(z12 * short_range_comp2)  # scalar
+        short_range = short_range1 + short_range2
+
+        # calculate the long range sum
+        coul_g = 4 * np.pi / gv_norm2 * gvweights  # (ngv,)
+        # this part below is quicker, but raises warning from pytorch
+        si = torch.exp(1j * torch.matmul(self._atompos, gv.transpose(-2, -1)))  # (natoms, ngv)
+        zsi = torch.einsum("a,ag->g", self._atomzs.to(si.dtype), si)  # (ngv,)
+        zexpg2 = zsi * torch.exp(-gv_norm2 / (4 * eta * eta))
+        long_range = torch.einsum("a,a,a->", zsi.conj(), zexpg2, coul_g.to(zsi.dtype)).real  # (scalar)
+
+        # # alternative way to compute the long-range part
+        # r12_pair = self._atompos.unsqueeze(-2) - self._atompos  # (natoms, natoms, ndim)
+        # long_range_exp = torch.exp(-gv_norm2 / (4 * eta * eta)) * coul_g  # (ngv,)
+        # long_range_cos = torch.cos(torch.einsum("gd,abd->gab", gv, -r12_pair))  # (ngv, natoms, natoms)
+        # long_range = torch.sum(long_range_exp[:, None, None] * long_range_cos * z12)  # scalar
+
+        # background interaction
+        vbar1 = -torch.sum(self._atomzs ** 2) * (2 * eta / np.sqrt(np.pi))
+        vbar2 = -torch.sum(self._atomzs) ** 2 * np.pi / (eta * eta * vol)
+        vbar = vbar1 + vbar2  # (scalar)
+
+        eii = short_range + long_range + vbar
+        return eii * 0.5
 
     def setup_grid(self) -> None:
         self._grid = get_grid(self._grid_inp, self._atomzs, self._atompos,
