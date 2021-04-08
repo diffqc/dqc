@@ -9,7 +9,7 @@ from dqc.grid.factory import get_grid
 from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, SpinParam, ZType, \
                                  is_z_float, BasisInpType, DensityFitInfo
 from dqc.utils.periodictable import get_atomz
-from dqc.utils.safeops import eps as util_eps, occnumber
+from dqc.utils.safeops import eps as util_eps, occnumber, safe_cdist
 from dqc.api.loadbasis import loadbasis
 
 AtomZsType  = Union[List[str], List[ZType], torch.Tensor]
@@ -166,16 +166,10 @@ class Mol(BaseSystem):
     def get_nuclei_energy(self) -> torch.Tensor:
         # atomzs: (natoms,)
         # atompos: (natoms, ndim)
-        r12_pair = self._atompos.unsqueeze(-3) - self._atompos.unsqueeze(-2)  # (natoms, natoms, ndim)
-        # add the diagonal with a small eps to safeguard from nan
-        r12_pair = r12_pair + \
-            torch.eye(r12_pair.shape[-2], dtype=self._dtype, device=self._device).unsqueeze(-1) * util_eps
-        r12 = r12_pair.norm(dim=-1)  # (natoms, natoms)
+
+        # r12: (natoms, natom)
+        r12 = safe_cdist(self._atompos, self._atompos, add_diag_eps=True, diag_inf=True)
         z12 = self._atomzs.unsqueeze(-2) * self._atomzs.unsqueeze(-1)  # (natoms, natoms)
-        infdiag = torch.eye(r12.shape[0], dtype=r12.dtype, device=r12.device)
-        idiag = infdiag.diagonal()
-        idiag[:] = float("inf")
-        r12 = r12 + infdiag
         q_by_r = z12 / r12
         return q_by_r.sum() * 0.5
 

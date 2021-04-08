@@ -75,3 +75,36 @@ class _OccNumber(torch.autograd.Function):
     def backward(ctx, grad_res: torch.Tensor):  # type: ignore
         grad_a = grad_res[ctx.ceil_a - 1]
         return (grad_a,) + (None,) * 5
+
+########################## other tensor ops ##########################
+def safe_cdist(a: torch.Tensor, b: torch.Tensor, add_diag_eps: bool = False,
+               diag_inf: bool = False):
+    # returns the L2 pairwise distance of a and b
+    # a: (*BA, na, ndim)
+    # b: (*BB, nb, ndim)
+    # returns: (*BAB, na, nb)
+    square_mat = a.shape[-2] == b.shape[-2]
+
+    dtype = a.dtype
+    device = a.device
+    ab = a.unsqueeze(-2) - b.unsqueeze(-3)  # (*BAB, na, nb, ndim)
+
+    # add the diagonal with a small eps to safeguard from nan
+    if add_diag_eps:
+        if not square_mat:
+            raise ValueError("Enabling add_diag_eps for non-square result matrix is invalid")
+        ab = ab + torch.eye(ab.shape[-2], dtype=dtype, device=device).unsqueeze(-1) * eps
+
+    ab = ab.norm(dim=-1)  # (*BAB, na, nb)
+
+    # replace the diagonal with infinite (usually used for coulomb matrix)
+    if diag_inf:
+        if not square_mat:
+            raise ValueError("Enabling diag_inf for non-square result matrix is invalid")
+
+        infdiag = torch.eye(ab.shape[-1], dtype=dtype, device=device)
+        idiag = infdiag.diagonal()
+        idiag[:] = float("inf")
+        ab = ab + infdiag
+
+    return ab
