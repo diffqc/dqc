@@ -56,6 +56,25 @@ def test_mol_grid(moldesc):
     assert rgrid.shape[1] == 3
     assert m.get_grid().coord_type == "cart"
 
+def test_mol_nuclei_energy():
+    # test the calculation of ion-ion interaction energy (+ gradients w.r.t. pos)
+    # mol has fractional feature, so we use that
+
+    def get_ene_ii(atomz, atompos):
+        m = Mol((atomz, atompos), basis="6-311++G**", dtype=dtype, spin=1)
+        return m.get_nuclei_energy()
+
+    # check the true energy
+    atomz = torch.tensor([1.0, 4.0], dtype=dtype).requires_grad_()
+    atompos = torch.tensor([[1.0, 0.0, 0.0], [2.5, 0.0, 0.0]], dtype=dtype).requires_grad_()
+    ene_ii = get_ene_ii(atomz, atompos)
+    true_val = ene_ii * 0 + 4.0 / 1.5
+    assert torch.allclose(ene_ii, true_val)
+
+    # check the gradients
+    torch.autograd.gradcheck(get_ene_ii, (atomz, atompos))
+    torch.autograd.gradgradcheck(get_ene_ii, (atomz, atompos))
+
 @pytest.mark.parametrize("moldesc", moldescs)
 def test_mol_pbc_orbweights(moldesc):
     m = MolPBC(moldesc, basis="6-311++G**", alattice=alattice, dtype=dtype)
