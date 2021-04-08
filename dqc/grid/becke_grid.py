@@ -93,8 +93,8 @@ class PBCBeckeGrid(BaseGrid):
             ns_unique, ns_unique_idx, ns_count = torch.unique(
                 ns, dim=0, return_inverse=True, return_counts=True)
 
-            # ignoring the shifts with only less than 8 points (following pyscf)
-            significant_uniq_idx = ns_count >= 8  # (nunique)
+            # ignoring the shifts with only not more than 8 points (following pyscf)
+            significant_uniq_idx = ns_count > 8  # (nunique)
             significant_idx = significant_uniq_idx[ns_unique_idx]  # (natgrid,)
             ns_unique = ns_unique[significant_uniq_idx, :]  # (nunique2, ndim)
             ls_unique = torch.matmul(ns_unique.to(a.dtype), a)  # (nunique2, ndim)
@@ -173,6 +173,8 @@ def _get_atom_weights(rgrids: List[torch.Tensor], atompos: torch.Tensor,
     # atomradius: (natoms,) or None
     # returns: (ngrid,)
     assert len(rgrids) == atompos.shape[0]
+    dtype = atompos.dtype
+    device = atompos.device
 
     natoms = atompos.shape[0]
     rdatoms = atompos - atompos.unsqueeze(1)  # (natoms, natoms, ndim)
