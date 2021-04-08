@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import Optional, List, Tuple
 import ctypes
 import operator
@@ -26,6 +27,15 @@ class PBCIntOption:
     """
     precision: float = 1e-8  # precision of the integral to limit the lattice sum
     kpt_diff_tol: float = 1e-6  # the difference between k-points to be regarded as the same
+
+    @staticmethod
+    def get_default(lattsum_opt: Optional[Union[PBCIntOption, Dict]] = None) -> PBCIntOption:
+        if lattsum_opt is None:
+            return PBCIntOption()
+        elif isinstance(lattsum_opt, dict):
+            return PBCIntOption(**lattsum_opt)
+        else:
+            return lattsum_opt
 
 def pbc_int1e(shortname: str, wrapper: LibcintWrapper,
               other: Optional[LibcintWrapper] = None,

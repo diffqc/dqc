@@ -36,12 +36,7 @@ class HamiltonCGTO_PBC(HamiltonCGTO):
         self._eta = 0.2
         self._eta = 0.46213127322256375  # temporary to follow pyscf.df
         # lattice sum integral options
-        if lattsum_opt is None:
-            self._lattsum_opt = intor.PBCIntOption()
-        elif isinstance(lattsum_opt, dict):
-            self._lattsum_opt = intor.PBCIntOption(**lattsum_opt)
-        else:
-            self._lattsum_opt = lattsum_opt
+        self._lattsum_opt = intor.PBCIntOption.get_default(lattsum_opt)
 
         self._basiswrapper = intor.LibcintWrapper(
             atombases, spherical=spherical, lattice=latt)
