@@ -8,7 +8,7 @@ from dqc.grid.factory import get_grid
 from dqc.system.mol import _parse_moldesc, _parse_basis, _get_nelecs_spin, \
                            _get_orb_weights, AtomZsType, AtomPosType
 from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, ZType, BasisInpType, \
-                                 SpinParam
+                                 SpinParam, DensityFitInfo
 from dqc.hamilton.intor.lattice import Lattice
 
 class MolPBC(BaseSystem):
@@ -123,7 +123,7 @@ class MolPBC(BaseSystem):
 
         # change the hamiltonian to have density fit
         df = DensityFitInfo(method=method, auxbases=atomauxbases)
-        self._hamilton = HamiltonCGTO_PBC(self._atombases, df=df)
+        self._hamilton = HamiltonCGTO_PBC(self._atombases, df=df, latt=self._lattice)
         return self
 
     def get_hamiltonian(self) -> BaseHamilton:

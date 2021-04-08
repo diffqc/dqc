@@ -4,7 +4,8 @@ from dataclasses import dataclass
 from typing import Optional, Union, List, TypeVar, Generic
 from dqc.utils.misc import gaussian_int
 
-__all__ = ["CGTOBasis", "AtomCGTOBasis", "ValGrad"]
+__all__ = ["CGTOBasis", "AtomCGTOBasis", "ValGrad", "ZType", "is_z_float",
+           "BasisInpType", "DensityFitInfo", "SpinParam"]
 
 T = TypeVar('T')
 
