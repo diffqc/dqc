@@ -79,6 +79,7 @@ class MolPBC(BaseSystem):
         allbases = _parse_basis(atomzs, basis)  # list of list of CGTOBasis
         atombases = [AtomCGTOBasis(atomz=atz, bases=bas, pos=atpos)
                      for (atz, bas, atpos) in zip(atomzs, allbases, atompos)]
+        self._atombases = atombases
         self._atompos = atompos  # (natoms, ndim)
         self._atomzs = atomzs  # (natoms,) int-type
         nelecs_tot: torch.Tensor = torch.sum(atomzs)
@@ -109,7 +110,7 @@ class MolPBC(BaseSystem):
         method: Optional[str]
             Density fitting method. Available methods in this class are:
 
-            * "compensating": Density fit with compensating charge to perform
+            * "gdf": Density fit with gdf compensating charge to perform
                 the lattice sum. Ref https://doi.org/10.1063/1.4998644 (default)
 
         auxbasis: Optional[BasisInpType]
@@ -117,14 +118,14 @@ class MolPBC(BaseSystem):
             "cc-pvtz-jkfit".
         """
         if method is None:
-            method = "compensating"
+            method = "gdf"
         if auxbasis is None:
             # TODO: choose the auxbasis properly
             auxbasis = "cc-pvtz-jkfit"
 
         # get the auxiliary basis
         assert auxbasis is not None
-        auxbasis_lst = _parse_basis(self._atomzs_int, auxbasis)
+        auxbasis_lst = _parse_basis(self._atomzs, auxbasis)
         atomauxbases = [AtomCGTOBasis(atomz=atz, bases=bas, pos=atpos)
                         for (atz, bas, atpos) in zip(self._atomzs, auxbasis_lst, self._atompos)]
 

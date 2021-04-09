@@ -217,10 +217,10 @@ class HamiltonCGTO_PBC(HamiltonCGTO):
 
     def get_vxc(self, dm):
         # dm: (*BD, nao, nao)
-        return super(HamiltonCGTO, self).get_vxc(dm)
+        return super().get_vxc(dm)
 
     def get_exc(self, dm: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
-        return super(HamiltonCGTO, self).get_exc(dm)
+        return super().get_exc(dm)
 
     def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
         # getparamnames to list the name of parameters affecting the method
@@ -242,7 +242,7 @@ class HamiltonCGTO_PBC(HamiltonCGTO):
         elif methodname == "get_lapl_vext":
             return [prefix + "basis_dvolume_conj", prefix + "lapl_basis"]
         elif methodname == "get_vxc":
-            return super(HamiltonCGTO, self).getparamnames("get_vxc", prefix=prefix)
+            return super().getparamnames("get_vxc", prefix=prefix)
         elif methodname == "_get_dens_at_grid":
             return [prefix + "basis"]
         elif methodname == "_get_grad_dens_at_grid":
@@ -250,7 +250,7 @@ class HamiltonCGTO_PBC(HamiltonCGTO):
         elif methodname == "_get_lapl_dens_at_grid":
             return [prefix + "basis", prefix + "lapl_basis"]
         else:
-            raise KeyError("getparamnames has no %s method" % methodname)
+            return super().getparamnames(methodname, prefix=prefix)
 
     ################ private methods ################
     def _calc_nucl_attr(self) -> torch.Tensor:

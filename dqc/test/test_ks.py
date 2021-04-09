@@ -4,6 +4,7 @@ import torch
 import pytest
 from dqc.qccalc.ks import KS
 from dqc.system.mol import Mol
+from dqc.system.molpbc import MolPBC
 from dqc.xc.base_xc import BaseXC
 from dqc.utils.safeops import safepow, safenorm
 from dqc.utils.datastruct import ValGrad
@@ -391,40 +392,51 @@ def test_rks_frac_energy_grad():
     torch.autograd.gradcheck(get_energy, (atomzs,))
     torch.autograd.gradgradcheck(get_energy, (atomzs,))
 
+############## PBC test ##############
+pbc_atomz_spin_latt = [
+    ([3], 1, np.array([[1., 1., -1.], [-1., 1., 1.], [1., -1., 1.]]) * 0.5 * 6.6329387300636),  # Li BCC
+]
+pbc_energies_df = {
+    # from pyscf (with def2-svp-jkfit auxbasis)
+    "lda_x": [
+        -0.979143262,
+    ],
+    "gga_x_pbe": [
+        -1.068217310366847,
+    ]
+}
+
+@pytest.mark.parametrize(
+    "xc,atomzs,spin,alattice,energy_true,grid",
+    [("lda_x", *a, energy, "sg2") for (a, energy) in zip(pbc_atomz_spin_latt, energies["lda_x"])] + \
+    [("gga_x_pbe", *a, energy, "sg2") for (a, energy) in zip(pbc_atomz_spin_latt, energies["gga_x_pbe"])]
+)
+def atest_pbc_rks_energy(xc, atomzs, spin, alattice, energy_true, grid):
+    # test to see if the energy calculated by DQC agrees with PySCF
+    # for this test only we test for different types of grids to see if any error is raised
+    alattice = torch.as_tensor(alattice, dtype=dtype)
+    poss = torch.tensor([[0.0, 0.0, 0.0]], dtype=dtype)
+    mol = MolPBC((atomzs, poss), basis="3-21G", spin=spin, alattice=alattice, dtype=dtype, grid=grid)
+    mol.densityfit(method="gdf", auxbasis="def2-sv(p)-jkfit")
+    qc = KS(mol, xc=xc, restricted=False).run()
+    ene = qc.energy()
+    assert torch.allclose(ene, ene * 0 + energy_true)
+
 if __name__ == "__main__":
     import time
     xc = "lda_x"
-    basis = "3-21G"  # "6-311++G**"
-    poss = torch.tensor([[0.0, 0.0, 2.0], [0.0, 0.0, -2.0]], dtype=dtype).requires_grad_()
-    moldesc = ([6, 8], poss)
-    mol = Mol(moldesc, basis=basis, dtype=dtype, grid=3)
-    # mol = Mol("Li -2.5 0 0; Li 2.5 0 0", basis="6-311++G**", dtype=dtype)
-    # mol = Mol("H -0.5 0 0; H 0.5 0 0", basis=basis, dtype=dtype)
-    profiler = 0
-    with torch.autograd.profiler.profile(enabled=profiler, with_stack=True, record_shapes=True) as prof, \
-            torch.autograd.detect_anomaly():
-        t0 = time.time()
-        qc = KS(mol, xc=xc, restricted=True).run()
-        ene = qc.energy()
-        t1 = time.time()
-        print(ene)
-        print("Forward time : %fs" % (t1 - t0))
+    basis = "3-21G"
+    atomzs = [3]
+    spin = 1
+    alattice = np.array([[1., 1., -1.], [-1., 1., 1.], [1., -1., 1.]]) * 0.5 * 6.6329387300636
+    grid = "sg2"
 
-        dedposs, = torch.autograd.grad(ene, poss, create_graph=True)
-        t2 = time.time()
-        print(dedposs)
-        print("Backward time: %fs" % (t2 - t1))
-        z = dedposs[-1, -1]
-
-        d2edposs2 = torch.autograd.grad(z, poss)
-        print(d2edposs2)
-        t3 = time.time()
-        print("2nd backward time: %fs" % (t3 - t1))
-
-    if profiler:
-        # prof.export_chrome_trace("trace")
-        print(prof
-              .key_averages(group_by_input_shape=True)
-              .table(sort_by="self_cpu_time_total", row_limit=200)
-              # .table(sort_by="cpu_memory_usage", row_limit=200)
-              )
+    # test to see if the energy calculated by DQC agrees with PySCF
+    # for this test only we test for different types of grids to see if any error is raised
+    alattice = torch.as_tensor(alattice, dtype=dtype)
+    poss = torch.tensor([[0.0, 0.0, 0.0]], dtype=dtype)
+    mol = MolPBC((atomzs, poss), basis="3-21G", spin=spin, alattice=alattice, dtype=dtype, grid=grid)
+    mol.densityfit(method="gdf", auxbasis="def2-sv(p)-jkfit")
+    qc = KS(mol, xc=xc, restricted=False).run()
+    ene = qc.energy()
+    assert torch.allclose(ene, ene * 0 + energy_true)

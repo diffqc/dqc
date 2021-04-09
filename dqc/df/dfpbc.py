@@ -54,7 +54,7 @@ class DFPBC(BaseDF):
 
         # only gaussian density fitting is implemented at the moment
         if method != "gdf":
-            raise NotImplementedError("Density fitting that is not %s is not implemented" % df.method)
+            raise NotImplementedError("Density fitting %s is not implemented (only gdf)" % df.method)
 
         # get the k-points needed for the integrations
         nkpts = self._kpts.shape[0]
@@ -150,6 +150,8 @@ class DFPBC(BaseDF):
 
         # check hermitianness
         # assert torch.allclose(elrep_mat, elrep_mat.conj().transpose(-2, -1))
+        elrep_mat = (elrep_mat + elrep_mat.conj().transpose(-2, -1)) * 0.5
+
         return xt.LinearOperator.m(elrep_mat, is_hermitian=True)
 
     @property
