@@ -9,7 +9,7 @@ from dqc.grid.factory import get_grid
 from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, SpinParam, ZType, \
                                  is_z_float, BasisInpType, DensityFitInfo
 from dqc.utils.periodictable import get_atomz
-from dqc.utils.safeops import eps as util_eps, occnumber, safe_cdist
+from dqc.utils.safeops import occnumber, safe_cdist
 from dqc.api.loadbasis import loadbasis
 
 AtomZsType  = Union[List[str], List[ZType], torch.Tensor]
