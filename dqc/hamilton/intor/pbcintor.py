@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Union, Dict
 import ctypes
 import operator
 import warnings
