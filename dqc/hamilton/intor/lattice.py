@@ -64,25 +64,8 @@ class Lattice(object):
             Tensor with size `(nb, ndim)` containing the coordinates of the
             neighboring cells.
         """
-        # largely inspired by pyscf:
-        # https://github.com/pyscf/pyscf/blob/e6c569932d5bab5e49994ae3dd365998fc5202b5/pyscf/pbc/tools/pbc.py#L473
-
         a = self.lattice_vectors()
-        b = self.recip_vectors() / (2 * np.pi)  # (nv, ndim)
-        heights_inv = torch.max(torch.norm(b, dim=-1)).detach().numpy()  # scalar
-        nimgs = int(rcut * heights_inv + 1.1)
-
-        assert isinstance(nimgs, int)
-        n1_0 = torch.arange(-nimgs, nimgs + 1, dtype=torch.int32, device=self.device)  # (nimgs2,)
-        ls = n1_0[:, None] * a[0, :]  # (nimgs2, ndim)
-        ls = ls + n1_0[:, None, None] * a[1, :]  # (nimgs2, nimgs2, ndim)
-        ls = ls + n1_0[:, None, None, None] * a[2, :]  # (nimgs2, nimgs2, nimgs2, ndim)
-        ls = ls.view(-1, ls.shape[-1])  # (nb, ndim)
-
-        if exclude_zeros:
-            ls = ls[torch.any(ls != 0, dim=-1), :]
-
-        return ls
+        return self._generate_lattice_vectors(a, rcut, exclude_zeros=exclude_zeros)
 
     def get_gvgrids(self, gcut: float, exclude_zeros: bool = False) -> Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -104,42 +87,45 @@ class Lattice(object):
         weights: torch.Tensor
             Tensor with size `(ng)` representing the weights of the G-points.
         """
-        a = self.lattice_vectors()
-        heights = torch.max(torch.norm(a, dim=-1)).detach().numpy() / (2 * np.pi)  # scalar
-        ng1 = int(gcut * heights + 1.1)
-
-        # generate the frequency data points
-        ng1 = 2 * ng1 + 1
-        rx = torch.as_tensor(np.fft.fftfreq(ng1, 1.0 / ng1), dtype=self.dtype, device=self.device)  # (ng1,)
-
-        # TODO: check if it is b[i, :] or b[:, i]
-        b = self.recip_vectors()  # (ndim, ndim)
-        gvgrids = rx[:, None] * b[0, :]  # (ng1, ndim)
-        gvgrids = gvgrids + rx[:, None, None] * b[1, :]  # (ng1, ng1, ndim)
-        gvgrids = gvgrids + rx[:, None, None, None] * b[2, :]  # (ng1, ng1, ng1, ndim)
-        gvgrids = gvgrids.view(-1, gvgrids.shape[-1])  # (ng, ndim)
+        b = self.recip_vectors()
+        gvgrids = self._generate_lattice_vectors(b, gcut, exclude_zeros=exclude_zeros)
 
         # 1 / cell.vol == det(b) / (2 pi)^3
         weights = torch.zeros(gvgrids.shape[0], dtype=self.dtype, device=self.device)
         weights = weights + torch.abs(torch.det(b)) / (2 * np.pi) ** 3
-
-        if exclude_zeros:
-            idx = torch.any(gvgrids != 0, dim=-1)
-            gvgrids = gvgrids[idx, :]
-            weights = weights[idx]
-
         return gvgrids, weights
 
     def estimate_ewald_eta(self, precision: float) -> float:
         # estimate the ewald's sum eta for nuclei interaction energy
-        # this is from Martin's electronic structure appendix F after F.4
-        # eta = Gv_min
-        sqrt_pi = np.sqrt(np.pi)
+        # the precision is assumed to be relative precision
+        # this formula is obtained by estimating the sum as an integral
+
         vol = float(self.volume().detach())
-        eta0 = (2 * np.pi / vol ** (2. / 3) / 2) ** .5
-        eta = eta0
-        for _ in range(1):
-            eta2 = erfcinv(vol * eta * eta * precision / (2 * np.pi)) \
-                   / erfcinv(precision * sqrt_pi / 2 / eta)
-            eta = eta0 * np.sqrt(eta2)
+        eta0 = np.sqrt(np.pi) / vol ** (1. / 3)
+        eta = eta0 * erfcinv(0.5 * precision) / erfcinv(precision)
         return round(eta * 10) / 10  # round to 1 d.p.
+
+    def _generate_lattice_vectors(self, a: torch.Tensor, rcut: float, exclude_zeros: bool) -> torch.Tensor:
+        # generate the lattice vectors of multiply of a within the radius rcut
+        # largely inspired by pyscf:
+        # https://github.com/pyscf/pyscf/blob/e6c569932d5bab5e49994ae3dd365998fc5202b5/pyscf/pbc/tools/pbc.py#L473
+
+        b = torch.inverse(a.transpose(-2, -1))
+        heights_inv = torch.norm(b, dim=-1).detach().numpy()  # (ndim)
+        nimgs = (rcut * heights_inv + 1.1).astype(np.int32)  # (ndim)
+
+        n1_0 = torch.arange(-nimgs[0], nimgs[0] + 1, dtype=torch.int32, device=self.device)  # (nimgs2,)
+        n1_1 = torch.arange(-nimgs[1], nimgs[1] + 1, dtype=torch.int32, device=self.device)  # (nimgs2,)
+        n1_2 = torch.arange(-nimgs[2], nimgs[2] + 1, dtype=torch.int32, device=self.device)  # (nimgs2,)
+        ls = n1_2[:, None] * a[0, :]  # (nimgs2, ndim)
+        ls = ls + n1_1[:, None, None] * a[1, :]  # (nimgs2, nimgs2, ndim)
+        ls = ls + n1_0[:, None, None, None] * a[2, :]  # (nimgs2, nimgs2, nimgs2, ndim)
+        ls = ls.view(-1, ls.shape[-1])  # (nb, ndim)
+
+        # drop ls that has norm > rcut * 1.05
+        ls = ls[ls.norm(dim=-1) <= rcut * 1.05, :]  # (nb2, ndim)
+
+        if exclude_zeros:
+            ls = ls[torch.any(ls != 0, dim=-1), :]
+
+        return ls
