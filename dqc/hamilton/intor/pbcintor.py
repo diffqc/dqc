@@ -245,7 +245,7 @@ class _PBCInt2cFunction(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_out: torch.Tensor) -> Tuple[Optional[torch.Tensor], ...]:  # type: ignore
-        pass
+        raise NotImplementedError("gradients of PBC 2-centre integrals are not implemented")
 
 class _PBCInt3cFunction(torch.autograd.Function):
     # wrapper class for the periodic boundary condition 3-centre integrals
@@ -271,7 +271,7 @@ class _PBCInt3cFunction(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_out: torch.Tensor) -> Tuple[Optional[torch.Tensor], ...]:  # type: ignore
-        pass
+        raise NotImplementedError("gradients of PBC 3-centre integrals are not implemented")
 
 ################# integrator object (direct interface to lib*) #################
 class PBCIntor(object):

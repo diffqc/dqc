@@ -112,7 +112,7 @@ class _PBCInt2cFTFunction(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_out: torch.Tensor) -> Tuple[Optional[torch.Tensor], ...]:  # type: ignore
-        pass
+        raise NotImplementedError("gradients of PBC 2-centre FT integrals are not implemented")
 
 ################# integrator object (direct interface to lib*) #################
 class PBCFTIntor(object):

@@ -68,7 +68,7 @@ class _EvalGTO_FT(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_res: torch.Tensor) -> Tuple[Optional[torch.Tensor], ...]:  # type: ignore
-        pass
+        raise NotImplementedError("gradients of GTO FT evals are not implemented")
 
 def gto_ft_evaluator(wrapper: LibcintWrapper, Gvgrid: torch.Tensor) -> torch.Tensor:
     # evaluate Fourier Transform of the basis which is defined as
