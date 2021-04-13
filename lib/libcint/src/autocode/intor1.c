@@ -158,6 +158,55 @@ return CINT1e_spinor_drv(out, dims, &envs, cache, &c2s_sf_1e, 0);
 } // int1e_kin_spinor
 ALL_CINT1E(int1e_kin)
 ALL_CINT1E_FORTRAN_(int1e_kin)
+/* <i|R0 |j> */
+void CINTgout1e_int1e_r0(double *gout, double *g, FINT *idx, CINTEnvVars *envs, FINT gout_empty) {
+FINT nf = envs->nf;
+FINT ix, iy, iz, n;
+double *g0 = g;
+double *g1 = g0 + envs->g_size * 3;
+double s[3];
+G1E_R0J(g1, g0, envs->i_l+0, envs->j_l+0, 0);
+for (n = 0; n < nf; n++) {
+ix = idx[0+n*3];
+iy = idx[1+n*3];
+iz = idx[2+n*3];
+s[0] = + g1[ix+0]*g0[iy+0]*g0[iz+0];
+s[1] = + g0[ix+0]*g1[iy+0]*g0[iz+0];
+s[2] = + g0[ix+0]*g0[iy+0]*g1[iz+0];
+gout[n*3+0] += + s[0];
+gout[n*3+1] += + s[1];
+gout[n*3+2] += + s[2];
+}}
+void int1e_r0_optimizer(CINTOpt **opt, FINT *atm, FINT natm, FINT *bas, FINT nbas, double *env) {
+FINT ng[] = {0, 1, 0, 0, 1, 1, 1, 3};
+CINTall_1e_optimizer(opt, ng, atm, natm, bas, nbas, env);
+}
+FINT int1e_r0_cart(double *out, FINT *dims, FINT *shls,
+FINT *atm, FINT natm, FINT *bas, FINT nbas, double *env, CINTOpt *opt, double *cache) {
+FINT ng[] = {0, 1, 0, 0, 1, 1, 1, 3};
+CINTEnvVars envs;
+CINTinit_int1e_EnvVars(&envs, ng, shls, atm, natm, bas, nbas, env);
+envs.f_gout = &CINTgout1e_int1e_r0;
+return CINT1e_drv(out, dims, &envs, cache, &c2s_cart_1e, 0);
+} // int1e_r0_cart
+FINT int1e_r0_sph(double *out, FINT *dims, FINT *shls,
+FINT *atm, FINT natm, FINT *bas, FINT nbas, double *env, CINTOpt *opt, double *cache) {
+FINT ng[] = {0, 1, 0, 0, 1, 1, 1, 3};
+CINTEnvVars envs;
+CINTinit_int1e_EnvVars(&envs, ng, shls, atm, natm, bas, nbas, env);
+envs.f_gout = &CINTgout1e_int1e_r0;
+return CINT1e_drv(out, dims, &envs, cache, &c2s_sph_1e, 0);
+} // int1e_r0_sph
+FINT int1e_r0_spinor(double complex *out, FINT *dims, FINT *shls,
+FINT *atm, FINT natm, FINT *bas, FINT nbas, double *env, CINTOpt *opt, double *cache) {
+FINT ng[] = {0, 1, 0, 0, 1, 1, 1, 3};
+CINTEnvVars envs;
+CINTinit_int1e_EnvVars(&envs, ng, shls, atm, natm, bas, nbas, env);
+envs.f_gout = &CINTgout1e_int1e_r0;
+return CINT1e_spinor_drv(out, dims, &envs, cache, &c2s_sf_1e, 0);
+} // int1e_r0_spinor
+ALL_CINT1E(int1e_r0)
+ALL_CINT1E_FORTRAN_(int1e_r0)
 /* <RI DOT RI i|OVLP |j> */
 void CINTgout1e_int1e_rrovlp(double *gout, double *g, FINT *idx, CINTEnvVars *envs, FINT gout_empty) {
 FINT nf = envs->nf;
@@ -501,6 +550,95 @@ return CINT1e_spinor_drv(out, dims, &envs, cache, &c2s_sf_1e, 0);
 } // int1e_rrkin_spinor
 ALL_CINT1E(int1e_rrkin)
 ALL_CINT1E_FORTRAN_(int1e_rrkin)
+/* <RI DOT RI i|R0 |j> */
+void CINTgout1e_int1e_rrr0(double *gout, double *g, FINT *idx, CINTEnvVars *envs, FINT gout_empty) {
+FINT nf = envs->nf;
+FINT ix, iy, iz, n;
+double *g0 = g;
+double *g1 = g0 + envs->g_size * 3;
+double *g2 = g1 + envs->g_size * 3;
+double *g3 = g2 + envs->g_size * 3;
+double *g4 = g3 + envs->g_size * 3;
+double *g5 = g4 + envs->g_size * 3;
+double *g6 = g5 + envs->g_size * 3;
+double *g7 = g6 + envs->g_size * 3;
+double dri[3];
+dri[0] = envs->ri[0] - envs->ri[0];
+dri[1] = envs->ri[1] - envs->ri[1];
+dri[2] = envs->ri[2] - envs->ri[2];
+double s[27];
+G1E_R0J(g1, g0, envs->i_l+2, envs->j_l+0, 0);
+G1E_RCI(g2, g0, envs->i_l+1, envs->j_l, 0);
+G1E_RCI(g3, g1, envs->i_l+1, envs->j_l, 0);
+G1E_RCI(g4, g0, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g5, g1, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g6, g2, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g7, g3, envs->i_l+0, envs->j_l, 0);
+for (n = 0; n < nf; n++) {
+ix = idx[0+n*3];
+iy = idx[1+n*3];
+iz = idx[2+n*3];
+s[0] = + g7[ix+0]*g0[iy+0]*g0[iz+0];
+s[1] = + g6[ix+0]*g1[iy+0]*g0[iz+0];
+s[2] = + g6[ix+0]*g0[iy+0]*g1[iz+0];
+s[3] = + g5[ix+0]*g2[iy+0]*g0[iz+0];
+s[4] = + g4[ix+0]*g3[iy+0]*g0[iz+0];
+s[5] = + g4[ix+0]*g2[iy+0]*g1[iz+0];
+s[6] = + g5[ix+0]*g0[iy+0]*g2[iz+0];
+s[7] = + g4[ix+0]*g1[iy+0]*g2[iz+0];
+s[8] = + g4[ix+0]*g0[iy+0]*g3[iz+0];
+s[9] = + g3[ix+0]*g4[iy+0]*g0[iz+0];
+s[10] = + g2[ix+0]*g5[iy+0]*g0[iz+0];
+s[11] = + g2[ix+0]*g4[iy+0]*g1[iz+0];
+s[12] = + g1[ix+0]*g6[iy+0]*g0[iz+0];
+s[13] = + g0[ix+0]*g7[iy+0]*g0[iz+0];
+s[14] = + g0[ix+0]*g6[iy+0]*g1[iz+0];
+s[15] = + g1[ix+0]*g4[iy+0]*g2[iz+0];
+s[16] = + g0[ix+0]*g5[iy+0]*g2[iz+0];
+s[17] = + g0[ix+0]*g4[iy+0]*g3[iz+0];
+s[18] = + g3[ix+0]*g0[iy+0]*g4[iz+0];
+s[19] = + g2[ix+0]*g1[iy+0]*g4[iz+0];
+s[20] = + g2[ix+0]*g0[iy+0]*g5[iz+0];
+s[21] = + g1[ix+0]*g2[iy+0]*g4[iz+0];
+s[22] = + g0[ix+0]*g3[iy+0]*g4[iz+0];
+s[23] = + g0[ix+0]*g2[iy+0]*g5[iz+0];
+s[24] = + g1[ix+0]*g0[iy+0]*g6[iz+0];
+s[25] = + g0[ix+0]*g1[iy+0]*g6[iz+0];
+s[26] = + g0[ix+0]*g0[iy+0]*g7[iz+0];
+gout[n*3+0] += + s[0] + s[12] + s[24];
+gout[n*3+1] += + s[1] + s[13] + s[25];
+gout[n*3+2] += + s[2] + s[14] + s[26];
+}}
+void int1e_rrr0_optimizer(CINTOpt **opt, FINT *atm, FINT natm, FINT *bas, FINT nbas, double *env) {
+FINT ng[] = {2, 1, 0, 0, 3, 1, 1, 3};
+CINTall_1e_optimizer(opt, ng, atm, natm, bas, nbas, env);
+}
+FINT int1e_rrr0_cart(double *out, FINT *dims, FINT *shls,
+FINT *atm, FINT natm, FINT *bas, FINT nbas, double *env, CINTOpt *opt, double *cache) {
+FINT ng[] = {2, 1, 0, 0, 3, 1, 1, 3};
+CINTEnvVars envs;
+CINTinit_int1e_EnvVars(&envs, ng, shls, atm, natm, bas, nbas, env);
+envs.f_gout = &CINTgout1e_int1e_rrr0;
+return CINT1e_drv(out, dims, &envs, cache, &c2s_cart_1e, 0);
+} // int1e_rrr0_cart
+FINT int1e_rrr0_sph(double *out, FINT *dims, FINT *shls,
+FINT *atm, FINT natm, FINT *bas, FINT nbas, double *env, CINTOpt *opt, double *cache) {
+FINT ng[] = {2, 1, 0, 0, 3, 1, 1, 3};
+CINTEnvVars envs;
+CINTinit_int1e_EnvVars(&envs, ng, shls, atm, natm, bas, nbas, env);
+envs.f_gout = &CINTgout1e_int1e_rrr0;
+return CINT1e_drv(out, dims, &envs, cache, &c2s_sph_1e, 0);
+} // int1e_rrr0_sph
+FINT int1e_rrr0_spinor(double complex *out, FINT *dims, FINT *shls,
+FINT *atm, FINT natm, FINT *bas, FINT nbas, double *env, CINTOpt *opt, double *cache) {
+FINT ng[] = {2, 1, 0, 0, 3, 1, 1, 3};
+CINTEnvVars envs;
+CINTinit_int1e_EnvVars(&envs, ng, shls, atm, natm, bas, nbas, env);
+envs.f_gout = &CINTgout1e_int1e_rrr0;
+return CINT1e_spinor_drv(out, dims, &envs, cache, &c2s_sf_1e, 0);
+} // int1e_rrr0_spinor
+ALL_CINT1E(int1e_rrr0)
+ALL_CINT1E_FORTRAN_(int1e_rrr0)
 /* <RI DOT RI RI DOT RI i|OVLP |j> */
 void CINTgout1e_int1e_rrrrovlp(double *gout, double *g, FINT *idx, CINTEnvVars *envs, FINT gout_empty) {
 FINT nf = envs->nf;
@@ -1876,6 +2014,359 @@ return CINT1e_spinor_drv(out, dims, &envs, cache, &c2s_sf_1e, 0);
 } // int1e_rrrrkin_spinor
 ALL_CINT1E(int1e_rrrrkin)
 ALL_CINT1E_FORTRAN_(int1e_rrrrkin)
+/* <RI DOT RI RI DOT RI i|R0 |j> */
+void CINTgout1e_int1e_rrrrr0(double *gout, double *g, FINT *idx, CINTEnvVars *envs, FINT gout_empty) {
+FINT nf = envs->nf;
+FINT ix, iy, iz, n;
+double *g0 = g;
+double *g1 = g0 + envs->g_size * 3;
+double *g2 = g1 + envs->g_size * 3;
+double *g3 = g2 + envs->g_size * 3;
+double *g4 = g3 + envs->g_size * 3;
+double *g5 = g4 + envs->g_size * 3;
+double *g6 = g5 + envs->g_size * 3;
+double *g7 = g6 + envs->g_size * 3;
+double *g8 = g7 + envs->g_size * 3;
+double *g9 = g8 + envs->g_size * 3;
+double *g10 = g9 + envs->g_size * 3;
+double *g11 = g10 + envs->g_size * 3;
+double *g12 = g11 + envs->g_size * 3;
+double *g13 = g12 + envs->g_size * 3;
+double *g14 = g13 + envs->g_size * 3;
+double *g15 = g14 + envs->g_size * 3;
+double *g16 = g15 + envs->g_size * 3;
+double *g17 = g16 + envs->g_size * 3;
+double *g18 = g17 + envs->g_size * 3;
+double *g19 = g18 + envs->g_size * 3;
+double *g20 = g19 + envs->g_size * 3;
+double *g21 = g20 + envs->g_size * 3;
+double *g22 = g21 + envs->g_size * 3;
+double *g23 = g22 + envs->g_size * 3;
+double *g24 = g23 + envs->g_size * 3;
+double *g25 = g24 + envs->g_size * 3;
+double *g26 = g25 + envs->g_size * 3;
+double *g27 = g26 + envs->g_size * 3;
+double *g28 = g27 + envs->g_size * 3;
+double *g29 = g28 + envs->g_size * 3;
+double *g30 = g29 + envs->g_size * 3;
+double *g31 = g30 + envs->g_size * 3;
+double dri[3];
+dri[0] = envs->ri[0] - envs->ri[0];
+dri[1] = envs->ri[1] - envs->ri[1];
+dri[2] = envs->ri[2] - envs->ri[2];
+double s[243];
+G1E_R0J(g1, g0, envs->i_l+4, envs->j_l+0, 0);
+G1E_RCI(g2, g0, envs->i_l+3, envs->j_l, 0);
+G1E_RCI(g3, g1, envs->i_l+3, envs->j_l, 0);
+G1E_RCI(g4, g0, envs->i_l+2, envs->j_l, 0);
+G1E_RCI(g5, g1, envs->i_l+2, envs->j_l, 0);
+G1E_RCI(g6, g2, envs->i_l+2, envs->j_l, 0);
+G1E_RCI(g7, g3, envs->i_l+2, envs->j_l, 0);
+G1E_RCI(g8, g0, envs->i_l+1, envs->j_l, 0);
+G1E_RCI(g9, g1, envs->i_l+1, envs->j_l, 0);
+G1E_RCI(g10, g2, envs->i_l+1, envs->j_l, 0);
+G1E_RCI(g11, g3, envs->i_l+1, envs->j_l, 0);
+G1E_RCI(g12, g4, envs->i_l+1, envs->j_l, 0);
+G1E_RCI(g13, g5, envs->i_l+1, envs->j_l, 0);
+G1E_RCI(g14, g6, envs->i_l+1, envs->j_l, 0);
+G1E_RCI(g15, g7, envs->i_l+1, envs->j_l, 0);
+G1E_RCI(g16, g0, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g17, g1, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g18, g2, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g19, g3, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g20, g4, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g21, g5, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g22, g6, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g23, g7, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g24, g8, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g25, g9, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g26, g10, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g27, g11, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g28, g12, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g29, g13, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g30, g14, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g31, g15, envs->i_l+0, envs->j_l, 0);
+for (n = 0; n < nf; n++) {
+ix = idx[0+n*3];
+iy = idx[1+n*3];
+iz = idx[2+n*3];
+s[0] = + g31[ix+0]*g0[iy+0]*g0[iz+0];
+s[1] = + g30[ix+0]*g1[iy+0]*g0[iz+0];
+s[2] = + g30[ix+0]*g0[iy+0]*g1[iz+0];
+s[3] = + g29[ix+0]*g2[iy+0]*g0[iz+0];
+s[4] = + g28[ix+0]*g3[iy+0]*g0[iz+0];
+s[5] = + g28[ix+0]*g2[iy+0]*g1[iz+0];
+s[6] = + g29[ix+0]*g0[iy+0]*g2[iz+0];
+s[7] = + g28[ix+0]*g1[iy+0]*g2[iz+0];
+s[8] = + g28[ix+0]*g0[iy+0]*g3[iz+0];
+s[9] = + g27[ix+0]*g4[iy+0]*g0[iz+0];
+s[10] = + g26[ix+0]*g5[iy+0]*g0[iz+0];
+s[11] = + g26[ix+0]*g4[iy+0]*g1[iz+0];
+s[12] = + g25[ix+0]*g6[iy+0]*g0[iz+0];
+s[13] = + g24[ix+0]*g7[iy+0]*g0[iz+0];
+s[14] = + g24[ix+0]*g6[iy+0]*g1[iz+0];
+s[15] = + g25[ix+0]*g4[iy+0]*g2[iz+0];
+s[16] = + g24[ix+0]*g5[iy+0]*g2[iz+0];
+s[17] = + g24[ix+0]*g4[iy+0]*g3[iz+0];
+s[18] = + g27[ix+0]*g0[iy+0]*g4[iz+0];
+s[19] = + g26[ix+0]*g1[iy+0]*g4[iz+0];
+s[20] = + g26[ix+0]*g0[iy+0]*g5[iz+0];
+s[21] = + g25[ix+0]*g2[iy+0]*g4[iz+0];
+s[22] = + g24[ix+0]*g3[iy+0]*g4[iz+0];
+s[23] = + g24[ix+0]*g2[iy+0]*g5[iz+0];
+s[24] = + g25[ix+0]*g0[iy+0]*g6[iz+0];
+s[25] = + g24[ix+0]*g1[iy+0]*g6[iz+0];
+s[26] = + g24[ix+0]*g0[iy+0]*g7[iz+0];
+s[27] = + g23[ix+0]*g8[iy+0]*g0[iz+0];
+s[28] = + g22[ix+0]*g9[iy+0]*g0[iz+0];
+s[29] = + g22[ix+0]*g8[iy+0]*g1[iz+0];
+s[30] = + g21[ix+0]*g10[iy+0]*g0[iz+0];
+s[31] = + g20[ix+0]*g11[iy+0]*g0[iz+0];
+s[32] = + g20[ix+0]*g10[iy+0]*g1[iz+0];
+s[33] = + g21[ix+0]*g8[iy+0]*g2[iz+0];
+s[34] = + g20[ix+0]*g9[iy+0]*g2[iz+0];
+s[35] = + g20[ix+0]*g8[iy+0]*g3[iz+0];
+s[36] = + g19[ix+0]*g12[iy+0]*g0[iz+0];
+s[37] = + g18[ix+0]*g13[iy+0]*g0[iz+0];
+s[38] = + g18[ix+0]*g12[iy+0]*g1[iz+0];
+s[39] = + g17[ix+0]*g14[iy+0]*g0[iz+0];
+s[40] = + g16[ix+0]*g15[iy+0]*g0[iz+0];
+s[41] = + g16[ix+0]*g14[iy+0]*g1[iz+0];
+s[42] = + g17[ix+0]*g12[iy+0]*g2[iz+0];
+s[43] = + g16[ix+0]*g13[iy+0]*g2[iz+0];
+s[44] = + g16[ix+0]*g12[iy+0]*g3[iz+0];
+s[45] = + g19[ix+0]*g8[iy+0]*g4[iz+0];
+s[46] = + g18[ix+0]*g9[iy+0]*g4[iz+0];
+s[47] = + g18[ix+0]*g8[iy+0]*g5[iz+0];
+s[48] = + g17[ix+0]*g10[iy+0]*g4[iz+0];
+s[49] = + g16[ix+0]*g11[iy+0]*g4[iz+0];
+s[50] = + g16[ix+0]*g10[iy+0]*g5[iz+0];
+s[51] = + g17[ix+0]*g8[iy+0]*g6[iz+0];
+s[52] = + g16[ix+0]*g9[iy+0]*g6[iz+0];
+s[53] = + g16[ix+0]*g8[iy+0]*g7[iz+0];
+s[54] = + g23[ix+0]*g0[iy+0]*g8[iz+0];
+s[55] = + g22[ix+0]*g1[iy+0]*g8[iz+0];
+s[56] = + g22[ix+0]*g0[iy+0]*g9[iz+0];
+s[57] = + g21[ix+0]*g2[iy+0]*g8[iz+0];
+s[58] = + g20[ix+0]*g3[iy+0]*g8[iz+0];
+s[59] = + g20[ix+0]*g2[iy+0]*g9[iz+0];
+s[60] = + g21[ix+0]*g0[iy+0]*g10[iz+0];
+s[61] = + g20[ix+0]*g1[iy+0]*g10[iz+0];
+s[62] = + g20[ix+0]*g0[iy+0]*g11[iz+0];
+s[63] = + g19[ix+0]*g4[iy+0]*g8[iz+0];
+s[64] = + g18[ix+0]*g5[iy+0]*g8[iz+0];
+s[65] = + g18[ix+0]*g4[iy+0]*g9[iz+0];
+s[66] = + g17[ix+0]*g6[iy+0]*g8[iz+0];
+s[67] = + g16[ix+0]*g7[iy+0]*g8[iz+0];
+s[68] = + g16[ix+0]*g6[iy+0]*g9[iz+0];
+s[69] = + g17[ix+0]*g4[iy+0]*g10[iz+0];
+s[70] = + g16[ix+0]*g5[iy+0]*g10[iz+0];
+s[71] = + g16[ix+0]*g4[iy+0]*g11[iz+0];
+s[72] = + g19[ix+0]*g0[iy+0]*g12[iz+0];
+s[73] = + g18[ix+0]*g1[iy+0]*g12[iz+0];
+s[74] = + g18[ix+0]*g0[iy+0]*g13[iz+0];
+s[75] = + g17[ix+0]*g2[iy+0]*g12[iz+0];
+s[76] = + g16[ix+0]*g3[iy+0]*g12[iz+0];
+s[77] = + g16[ix+0]*g2[iy+0]*g13[iz+0];
+s[78] = + g17[ix+0]*g0[iy+0]*g14[iz+0];
+s[79] = + g16[ix+0]*g1[iy+0]*g14[iz+0];
+s[80] = + g16[ix+0]*g0[iy+0]*g15[iz+0];
+s[81] = + g15[ix+0]*g16[iy+0]*g0[iz+0];
+s[82] = + g14[ix+0]*g17[iy+0]*g0[iz+0];
+s[83] = + g14[ix+0]*g16[iy+0]*g1[iz+0];
+s[84] = + g13[ix+0]*g18[iy+0]*g0[iz+0];
+s[85] = + g12[ix+0]*g19[iy+0]*g0[iz+0];
+s[86] = + g12[ix+0]*g18[iy+0]*g1[iz+0];
+s[87] = + g13[ix+0]*g16[iy+0]*g2[iz+0];
+s[88] = + g12[ix+0]*g17[iy+0]*g2[iz+0];
+s[89] = + g12[ix+0]*g16[iy+0]*g3[iz+0];
+s[90] = + g11[ix+0]*g20[iy+0]*g0[iz+0];
+s[91] = + g10[ix+0]*g21[iy+0]*g0[iz+0];
+s[92] = + g10[ix+0]*g20[iy+0]*g1[iz+0];
+s[93] = + g9[ix+0]*g22[iy+0]*g0[iz+0];
+s[94] = + g8[ix+0]*g23[iy+0]*g0[iz+0];
+s[95] = + g8[ix+0]*g22[iy+0]*g1[iz+0];
+s[96] = + g9[ix+0]*g20[iy+0]*g2[iz+0];
+s[97] = + g8[ix+0]*g21[iy+0]*g2[iz+0];
+s[98] = + g8[ix+0]*g20[iy+0]*g3[iz+0];
+s[99] = + g11[ix+0]*g16[iy+0]*g4[iz+0];
+s[100] = + g10[ix+0]*g17[iy+0]*g4[iz+0];
+s[101] = + g10[ix+0]*g16[iy+0]*g5[iz+0];
+s[102] = + g9[ix+0]*g18[iy+0]*g4[iz+0];
+s[103] = + g8[ix+0]*g19[iy+0]*g4[iz+0];
+s[104] = + g8[ix+0]*g18[iy+0]*g5[iz+0];
+s[105] = + g9[ix+0]*g16[iy+0]*g6[iz+0];
+s[106] = + g8[ix+0]*g17[iy+0]*g6[iz+0];
+s[107] = + g8[ix+0]*g16[iy+0]*g7[iz+0];
+s[108] = + g7[ix+0]*g24[iy+0]*g0[iz+0];
+s[109] = + g6[ix+0]*g25[iy+0]*g0[iz+0];
+s[110] = + g6[ix+0]*g24[iy+0]*g1[iz+0];
+s[111] = + g5[ix+0]*g26[iy+0]*g0[iz+0];
+s[112] = + g4[ix+0]*g27[iy+0]*g0[iz+0];
+s[113] = + g4[ix+0]*g26[iy+0]*g1[iz+0];
+s[114] = + g5[ix+0]*g24[iy+0]*g2[iz+0];
+s[115] = + g4[ix+0]*g25[iy+0]*g2[iz+0];
+s[116] = + g4[ix+0]*g24[iy+0]*g3[iz+0];
+s[117] = + g3[ix+0]*g28[iy+0]*g0[iz+0];
+s[118] = + g2[ix+0]*g29[iy+0]*g0[iz+0];
+s[119] = + g2[ix+0]*g28[iy+0]*g1[iz+0];
+s[120] = + g1[ix+0]*g30[iy+0]*g0[iz+0];
+s[121] = + g0[ix+0]*g31[iy+0]*g0[iz+0];
+s[122] = + g0[ix+0]*g30[iy+0]*g1[iz+0];
+s[123] = + g1[ix+0]*g28[iy+0]*g2[iz+0];
+s[124] = + g0[ix+0]*g29[iy+0]*g2[iz+0];
+s[125] = + g0[ix+0]*g28[iy+0]*g3[iz+0];
+s[126] = + g3[ix+0]*g24[iy+0]*g4[iz+0];
+s[127] = + g2[ix+0]*g25[iy+0]*g4[iz+0];
+s[128] = + g2[ix+0]*g24[iy+0]*g5[iz+0];
+s[129] = + g1[ix+0]*g26[iy+0]*g4[iz+0];
+s[130] = + g0[ix+0]*g27[iy+0]*g4[iz+0];
+s[131] = + g0[ix+0]*g26[iy+0]*g5[iz+0];
+s[132] = + g1[ix+0]*g24[iy+0]*g6[iz+0];
+s[133] = + g0[ix+0]*g25[iy+0]*g6[iz+0];
+s[134] = + g0[ix+0]*g24[iy+0]*g7[iz+0];
+s[135] = + g7[ix+0]*g16[iy+0]*g8[iz+0];
+s[136] = + g6[ix+0]*g17[iy+0]*g8[iz+0];
+s[137] = + g6[ix+0]*g16[iy+0]*g9[iz+0];
+s[138] = + g5[ix+0]*g18[iy+0]*g8[iz+0];
+s[139] = + g4[ix+0]*g19[iy+0]*g8[iz+0];
+s[140] = + g4[ix+0]*g18[iy+0]*g9[iz+0];
+s[141] = + g5[ix+0]*g16[iy+0]*g10[iz+0];
+s[142] = + g4[ix+0]*g17[iy+0]*g10[iz+0];
+s[143] = + g4[ix+0]*g16[iy+0]*g11[iz+0];
+s[144] = + g3[ix+0]*g20[iy+0]*g8[iz+0];
+s[145] = + g2[ix+0]*g21[iy+0]*g8[iz+0];
+s[146] = + g2[ix+0]*g20[iy+0]*g9[iz+0];
+s[147] = + g1[ix+0]*g22[iy+0]*g8[iz+0];
+s[148] = + g0[ix+0]*g23[iy+0]*g8[iz+0];
+s[149] = + g0[ix+0]*g22[iy+0]*g9[iz+0];
+s[150] = + g1[ix+0]*g20[iy+0]*g10[iz+0];
+s[151] = + g0[ix+0]*g21[iy+0]*g10[iz+0];
+s[152] = + g0[ix+0]*g20[iy+0]*g11[iz+0];
+s[153] = + g3[ix+0]*g16[iy+0]*g12[iz+0];
+s[154] = + g2[ix+0]*g17[iy+0]*g12[iz+0];
+s[155] = + g2[ix+0]*g16[iy+0]*g13[iz+0];
+s[156] = + g1[ix+0]*g18[iy+0]*g12[iz+0];
+s[157] = + g0[ix+0]*g19[iy+0]*g12[iz+0];
+s[158] = + g0[ix+0]*g18[iy+0]*g13[iz+0];
+s[159] = + g1[ix+0]*g16[iy+0]*g14[iz+0];
+s[160] = + g0[ix+0]*g17[iy+0]*g14[iz+0];
+s[161] = + g0[ix+0]*g16[iy+0]*g15[iz+0];
+s[162] = + g15[ix+0]*g0[iy+0]*g16[iz+0];
+s[163] = + g14[ix+0]*g1[iy+0]*g16[iz+0];
+s[164] = + g14[ix+0]*g0[iy+0]*g17[iz+0];
+s[165] = + g13[ix+0]*g2[iy+0]*g16[iz+0];
+s[166] = + g12[ix+0]*g3[iy+0]*g16[iz+0];
+s[167] = + g12[ix+0]*g2[iy+0]*g17[iz+0];
+s[168] = + g13[ix+0]*g0[iy+0]*g18[iz+0];
+s[169] = + g12[ix+0]*g1[iy+0]*g18[iz+0];
+s[170] = + g12[ix+0]*g0[iy+0]*g19[iz+0];
+s[171] = + g11[ix+0]*g4[iy+0]*g16[iz+0];
+s[172] = + g10[ix+0]*g5[iy+0]*g16[iz+0];
+s[173] = + g10[ix+0]*g4[iy+0]*g17[iz+0];
+s[174] = + g9[ix+0]*g6[iy+0]*g16[iz+0];
+s[175] = + g8[ix+0]*g7[iy+0]*g16[iz+0];
+s[176] = + g8[ix+0]*g6[iy+0]*g17[iz+0];
+s[177] = + g9[ix+0]*g4[iy+0]*g18[iz+0];
+s[178] = + g8[ix+0]*g5[iy+0]*g18[iz+0];
+s[179] = + g8[ix+0]*g4[iy+0]*g19[iz+0];
+s[180] = + g11[ix+0]*g0[iy+0]*g20[iz+0];
+s[181] = + g10[ix+0]*g1[iy+0]*g20[iz+0];
+s[182] = + g10[ix+0]*g0[iy+0]*g21[iz+0];
+s[183] = + g9[ix+0]*g2[iy+0]*g20[iz+0];
+s[184] = + g8[ix+0]*g3[iy+0]*g20[iz+0];
+s[185] = + g8[ix+0]*g2[iy+0]*g21[iz+0];
+s[186] = + g9[ix+0]*g0[iy+0]*g22[iz+0];
+s[187] = + g8[ix+0]*g1[iy+0]*g22[iz+0];
+s[188] = + g8[ix+0]*g0[iy+0]*g23[iz+0];
+s[189] = + g7[ix+0]*g8[iy+0]*g16[iz+0];
+s[190] = + g6[ix+0]*g9[iy+0]*g16[iz+0];
+s[191] = + g6[ix+0]*g8[iy+0]*g17[iz+0];
+s[192] = + g5[ix+0]*g10[iy+0]*g16[iz+0];
+s[193] = + g4[ix+0]*g11[iy+0]*g16[iz+0];
+s[194] = + g4[ix+0]*g10[iy+0]*g17[iz+0];
+s[195] = + g5[ix+0]*g8[iy+0]*g18[iz+0];
+s[196] = + g4[ix+0]*g9[iy+0]*g18[iz+0];
+s[197] = + g4[ix+0]*g8[iy+0]*g19[iz+0];
+s[198] = + g3[ix+0]*g12[iy+0]*g16[iz+0];
+s[199] = + g2[ix+0]*g13[iy+0]*g16[iz+0];
+s[200] = + g2[ix+0]*g12[iy+0]*g17[iz+0];
+s[201] = + g1[ix+0]*g14[iy+0]*g16[iz+0];
+s[202] = + g0[ix+0]*g15[iy+0]*g16[iz+0];
+s[203] = + g0[ix+0]*g14[iy+0]*g17[iz+0];
+s[204] = + g1[ix+0]*g12[iy+0]*g18[iz+0];
+s[205] = + g0[ix+0]*g13[iy+0]*g18[iz+0];
+s[206] = + g0[ix+0]*g12[iy+0]*g19[iz+0];
+s[207] = + g3[ix+0]*g8[iy+0]*g20[iz+0];
+s[208] = + g2[ix+0]*g9[iy+0]*g20[iz+0];
+s[209] = + g2[ix+0]*g8[iy+0]*g21[iz+0];
+s[210] = + g1[ix+0]*g10[iy+0]*g20[iz+0];
+s[211] = + g0[ix+0]*g11[iy+0]*g20[iz+0];
+s[212] = + g0[ix+0]*g10[iy+0]*g21[iz+0];
+s[213] = + g1[ix+0]*g8[iy+0]*g22[iz+0];
+s[214] = + g0[ix+0]*g9[iy+0]*g22[iz+0];
+s[215] = + g0[ix+0]*g8[iy+0]*g23[iz+0];
+s[216] = + g7[ix+0]*g0[iy+0]*g24[iz+0];
+s[217] = + g6[ix+0]*g1[iy+0]*g24[iz+0];
+s[218] = + g6[ix+0]*g0[iy+0]*g25[iz+0];
+s[219] = + g5[ix+0]*g2[iy+0]*g24[iz+0];
+s[220] = + g4[ix+0]*g3[iy+0]*g24[iz+0];
+s[221] = + g4[ix+0]*g2[iy+0]*g25[iz+0];
+s[222] = + g5[ix+0]*g0[iy+0]*g26[iz+0];
+s[223] = + g4[ix+0]*g1[iy+0]*g26[iz+0];
+s[224] = + g4[ix+0]*g0[iy+0]*g27[iz+0];
+s[225] = + g3[ix+0]*g4[iy+0]*g24[iz+0];
+s[226] = + g2[ix+0]*g5[iy+0]*g24[iz+0];
+s[227] = + g2[ix+0]*g4[iy+0]*g25[iz+0];
+s[228] = + g1[ix+0]*g6[iy+0]*g24[iz+0];
+s[229] = + g0[ix+0]*g7[iy+0]*g24[iz+0];
+s[230] = + g0[ix+0]*g6[iy+0]*g25[iz+0];
+s[231] = + g1[ix+0]*g4[iy+0]*g26[iz+0];
+s[232] = + g0[ix+0]*g5[iy+0]*g26[iz+0];
+s[233] = + g0[ix+0]*g4[iy+0]*g27[iz+0];
+s[234] = + g3[ix+0]*g0[iy+0]*g28[iz+0];
+s[235] = + g2[ix+0]*g1[iy+0]*g28[iz+0];
+s[236] = + g2[ix+0]*g0[iy+0]*g29[iz+0];
+s[237] = + g1[ix+0]*g2[iy+0]*g28[iz+0];
+s[238] = + g0[ix+0]*g3[iy+0]*g28[iz+0];
+s[239] = + g0[ix+0]*g2[iy+0]*g29[iz+0];
+s[240] = + g1[ix+0]*g0[iy+0]*g30[iz+0];
+s[241] = + g0[ix+0]*g1[iy+0]*g30[iz+0];
+s[242] = + g0[ix+0]*g0[iy+0]*g31[iz+0];
+gout[n*3+0] += + s[0] + 2*s[12] + 2*s[24] + s[120] + 2*s[132] + s[240];
+gout[n*3+1] += + s[1] + 2*s[13] + 2*s[25] + s[121] + 2*s[133] + s[241];
+gout[n*3+2] += + s[2] + 2*s[14] + 2*s[26] + s[122] + 2*s[134] + s[242];
+}}
+void int1e_rrrrr0_optimizer(CINTOpt **opt, FINT *atm, FINT natm, FINT *bas, FINT nbas, double *env) {
+FINT ng[] = {4, 1, 0, 0, 5, 1, 1, 3};
+CINTall_1e_optimizer(opt, ng, atm, natm, bas, nbas, env);
+}
+FINT int1e_rrrrr0_cart(double *out, FINT *dims, FINT *shls,
+FINT *atm, FINT natm, FINT *bas, FINT nbas, double *env, CINTOpt *opt, double *cache) {
+FINT ng[] = {4, 1, 0, 0, 5, 1, 1, 3};
+CINTEnvVars envs;
+CINTinit_int1e_EnvVars(&envs, ng, shls, atm, natm, bas, nbas, env);
+envs.f_gout = &CINTgout1e_int1e_rrrrr0;
+return CINT1e_drv(out, dims, &envs, cache, &c2s_cart_1e, 0);
+} // int1e_rrrrr0_cart
+FINT int1e_rrrrr0_sph(double *out, FINT *dims, FINT *shls,
+FINT *atm, FINT natm, FINT *bas, FINT nbas, double *env, CINTOpt *opt, double *cache) {
+FINT ng[] = {4, 1, 0, 0, 5, 1, 1, 3};
+CINTEnvVars envs;
+CINTinit_int1e_EnvVars(&envs, ng, shls, atm, natm, bas, nbas, env);
+envs.f_gout = &CINTgout1e_int1e_rrrrr0;
+return CINT1e_drv(out, dims, &envs, cache, &c2s_sph_1e, 0);
+} // int1e_rrrrr0_sph
+FINT int1e_rrrrr0_spinor(double complex *out, FINT *dims, FINT *shls,
+FINT *atm, FINT natm, FINT *bas, FINT nbas, double *env, CINTOpt *opt, double *cache) {
+FINT ng[] = {4, 1, 0, 0, 5, 1, 1, 3};
+CINTEnvVars envs;
+CINTinit_int1e_EnvVars(&envs, ng, shls, atm, natm, bas, nbas, env);
+envs.f_gout = &CINTgout1e_int1e_rrrrr0;
+return CINT1e_spinor_drv(out, dims, &envs, cache, &c2s_sf_1e, 0);
+} // int1e_rrrrr0_spinor
+ALL_CINT1E(int1e_rrrrr0)
+ALL_CINT1E_FORTRAN_(int1e_rrrrr0)
 /* <RI DOT RI i|OVLP |RJ DOT RJ j> */
 void CINTgout1e_int1e_rrovlprr(double *gout, double *g, FINT *idx, CINTEnvVars *envs, FINT gout_empty) {
 FINT nf = envs->nf;
@@ -3267,6 +3758,363 @@ return CINT1e_spinor_drv(out, dims, &envs, cache, &c2s_sf_1e, 0);
 } // int1e_rrkinrr_spinor
 ALL_CINT1E(int1e_rrkinrr)
 ALL_CINT1E_FORTRAN_(int1e_rrkinrr)
+/* <RI DOT RI i|R0 |RJ DOT RJ j> */
+void CINTgout1e_int1e_rrr0rr(double *gout, double *g, FINT *idx, CINTEnvVars *envs, FINT gout_empty) {
+FINT nf = envs->nf;
+FINT ix, iy, iz, n;
+double *g0 = g;
+double *g1 = g0 + envs->g_size * 3;
+double *g2 = g1 + envs->g_size * 3;
+double *g3 = g2 + envs->g_size * 3;
+double *g4 = g3 + envs->g_size * 3;
+double *g5 = g4 + envs->g_size * 3;
+double *g6 = g5 + envs->g_size * 3;
+double *g7 = g6 + envs->g_size * 3;
+double *g8 = g7 + envs->g_size * 3;
+double *g9 = g8 + envs->g_size * 3;
+double *g10 = g9 + envs->g_size * 3;
+double *g11 = g10 + envs->g_size * 3;
+double *g12 = g11 + envs->g_size * 3;
+double *g13 = g12 + envs->g_size * 3;
+double *g14 = g13 + envs->g_size * 3;
+double *g15 = g14 + envs->g_size * 3;
+double *g16 = g15 + envs->g_size * 3;
+double *g17 = g16 + envs->g_size * 3;
+double *g18 = g17 + envs->g_size * 3;
+double *g19 = g18 + envs->g_size * 3;
+double *g20 = g19 + envs->g_size * 3;
+double *g21 = g20 + envs->g_size * 3;
+double *g22 = g21 + envs->g_size * 3;
+double *g23 = g22 + envs->g_size * 3;
+double *g24 = g23 + envs->g_size * 3;
+double *g25 = g24 + envs->g_size * 3;
+double *g26 = g25 + envs->g_size * 3;
+double *g27 = g26 + envs->g_size * 3;
+double *g28 = g27 + envs->g_size * 3;
+double *g29 = g28 + envs->g_size * 3;
+double *g30 = g29 + envs->g_size * 3;
+double *g31 = g30 + envs->g_size * 3;
+double dri[3];
+dri[0] = envs->ri[0] - envs->ri[0];
+dri[1] = envs->ri[1] - envs->ri[1];
+dri[2] = envs->ri[2] - envs->ri[2];
+double drj[3];
+drj[0] = envs->rj[0] - envs->rj[0];
+drj[1] = envs->rj[1] - envs->rj[1];
+drj[2] = envs->rj[2] - envs->rj[2];
+double s[243];
+G1E_RCJ(g1, g0, envs->i_l+2, envs->j_l+0, 0);
+G1E_RCJ(g2, g0, envs->i_l+2, envs->j_l+1, 0);
+G1E_RCJ(g3, g2, envs->i_l+2, envs->j_l+0, 0);
+G1E_R0J(g4, g0, envs->i_l+2, envs->j_l+2, 0);
+G1E_RCJ(g5, g4, envs->i_l+2, envs->j_l+0, 0);
+G1E_RCJ(g6, g4, envs->i_l+2, envs->j_l+1, 0);
+G1E_RCJ(g7, g6, envs->i_l+2, envs->j_l+0, 0);
+G1E_RCI(g8, g0, envs->i_l+1, envs->j_l, 0);
+G1E_RCI(g9, g1, envs->i_l+1, envs->j_l, 0);
+G1E_RCI(g10, g2, envs->i_l+1, envs->j_l, 0);
+G1E_RCI(g11, g3, envs->i_l+1, envs->j_l, 0);
+G1E_RCI(g12, g4, envs->i_l+1, envs->j_l, 0);
+G1E_RCI(g13, g5, envs->i_l+1, envs->j_l, 0);
+G1E_RCI(g14, g6, envs->i_l+1, envs->j_l, 0);
+G1E_RCI(g15, g7, envs->i_l+1, envs->j_l, 0);
+G1E_RCI(g16, g0, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g17, g1, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g18, g2, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g19, g3, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g20, g4, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g21, g5, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g22, g6, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g23, g7, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g24, g8, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g25, g9, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g26, g10, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g27, g11, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g28, g12, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g29, g13, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g30, g14, envs->i_l+0, envs->j_l, 0);
+G1E_RCI(g31, g15, envs->i_l+0, envs->j_l, 0);
+for (n = 0; n < nf; n++) {
+ix = idx[0+n*3];
+iy = idx[1+n*3];
+iz = idx[2+n*3];
+s[0] = + g31[ix+0]*g0[iy+0]*g0[iz+0];
+s[1] = + g30[ix+0]*g1[iy+0]*g0[iz+0];
+s[2] = + g30[ix+0]*g0[iy+0]*g1[iz+0];
+s[3] = + g29[ix+0]*g2[iy+0]*g0[iz+0];
+s[4] = + g28[ix+0]*g3[iy+0]*g0[iz+0];
+s[5] = + g28[ix+0]*g2[iy+0]*g1[iz+0];
+s[6] = + g29[ix+0]*g0[iy+0]*g2[iz+0];
+s[7] = + g28[ix+0]*g1[iy+0]*g2[iz+0];
+s[8] = + g28[ix+0]*g0[iy+0]*g3[iz+0];
+s[9] = + g27[ix+0]*g4[iy+0]*g0[iz+0];
+s[10] = + g26[ix+0]*g5[iy+0]*g0[iz+0];
+s[11] = + g26[ix+0]*g4[iy+0]*g1[iz+0];
+s[12] = + g25[ix+0]*g6[iy+0]*g0[iz+0];
+s[13] = + g24[ix+0]*g7[iy+0]*g0[iz+0];
+s[14] = + g24[ix+0]*g6[iy+0]*g1[iz+0];
+s[15] = + g25[ix+0]*g4[iy+0]*g2[iz+0];
+s[16] = + g24[ix+0]*g5[iy+0]*g2[iz+0];
+s[17] = + g24[ix+0]*g4[iy+0]*g3[iz+0];
+s[18] = + g27[ix+0]*g0[iy+0]*g4[iz+0];
+s[19] = + g26[ix+0]*g1[iy+0]*g4[iz+0];
+s[20] = + g26[ix+0]*g0[iy+0]*g5[iz+0];
+s[21] = + g25[ix+0]*g2[iy+0]*g4[iz+0];
+s[22] = + g24[ix+0]*g3[iy+0]*g4[iz+0];
+s[23] = + g24[ix+0]*g2[iy+0]*g5[iz+0];
+s[24] = + g25[ix+0]*g0[iy+0]*g6[iz+0];
+s[25] = + g24[ix+0]*g1[iy+0]*g6[iz+0];
+s[26] = + g24[ix+0]*g0[iy+0]*g7[iz+0];
+s[27] = + g23[ix+0]*g8[iy+0]*g0[iz+0];
+s[28] = + g22[ix+0]*g9[iy+0]*g0[iz+0];
+s[29] = + g22[ix+0]*g8[iy+0]*g1[iz+0];
+s[30] = + g21[ix+0]*g10[iy+0]*g0[iz+0];
+s[31] = + g20[ix+0]*g11[iy+0]*g0[iz+0];
+s[32] = + g20[ix+0]*g10[iy+0]*g1[iz+0];
+s[33] = + g21[ix+0]*g8[iy+0]*g2[iz+0];
+s[34] = + g20[ix+0]*g9[iy+0]*g2[iz+0];
+s[35] = + g20[ix+0]*g8[iy+0]*g3[iz+0];
+s[36] = + g19[ix+0]*g12[iy+0]*g0[iz+0];
+s[37] = + g18[ix+0]*g13[iy+0]*g0[iz+0];
+s[38] = + g18[ix+0]*g12[iy+0]*g1[iz+0];
+s[39] = + g17[ix+0]*g14[iy+0]*g0[iz+0];
+s[40] = + g16[ix+0]*g15[iy+0]*g0[iz+0];
+s[41] = + g16[ix+0]*g14[iy+0]*g1[iz+0];
+s[42] = + g17[ix+0]*g12[iy+0]*g2[iz+0];
+s[43] = + g16[ix+0]*g13[iy+0]*g2[iz+0];
+s[44] = + g16[ix+0]*g12[iy+0]*g3[iz+0];
+s[45] = + g19[ix+0]*g8[iy+0]*g4[iz+0];
+s[46] = + g18[ix+0]*g9[iy+0]*g4[iz+0];
+s[47] = + g18[ix+0]*g8[iy+0]*g5[iz+0];
+s[48] = + g17[ix+0]*g10[iy+0]*g4[iz+0];
+s[49] = + g16[ix+0]*g11[iy+0]*g4[iz+0];
+s[50] = + g16[ix+0]*g10[iy+0]*g5[iz+0];
+s[51] = + g17[ix+0]*g8[iy+0]*g6[iz+0];
+s[52] = + g16[ix+0]*g9[iy+0]*g6[iz+0];
+s[53] = + g16[ix+0]*g8[iy+0]*g7[iz+0];
+s[54] = + g23[ix+0]*g0[iy+0]*g8[iz+0];
+s[55] = + g22[ix+0]*g1[iy+0]*g8[iz+0];
+s[56] = + g22[ix+0]*g0[iy+0]*g9[iz+0];
+s[57] = + g21[ix+0]*g2[iy+0]*g8[iz+0];
+s[58] = + g20[ix+0]*g3[iy+0]*g8[iz+0];
+s[59] = + g20[ix+0]*g2[iy+0]*g9[iz+0];
+s[60] = + g21[ix+0]*g0[iy+0]*g10[iz+0];
+s[61] = + g20[ix+0]*g1[iy+0]*g10[iz+0];
+s[62] = + g20[ix+0]*g0[iy+0]*g11[iz+0];
+s[63] = + g19[ix+0]*g4[iy+0]*g8[iz+0];
+s[64] = + g18[ix+0]*g5[iy+0]*g8[iz+0];
+s[65] = + g18[ix+0]*g4[iy+0]*g9[iz+0];
+s[66] = + g17[ix+0]*g6[iy+0]*g8[iz+0];
+s[67] = + g16[ix+0]*g7[iy+0]*g8[iz+0];
+s[68] = + g16[ix+0]*g6[iy+0]*g9[iz+0];
+s[69] = + g17[ix+0]*g4[iy+0]*g10[iz+0];
+s[70] = + g16[ix+0]*g5[iy+0]*g10[iz+0];
+s[71] = + g16[ix+0]*g4[iy+0]*g11[iz+0];
+s[72] = + g19[ix+0]*g0[iy+0]*g12[iz+0];
+s[73] = + g18[ix+0]*g1[iy+0]*g12[iz+0];
+s[74] = + g18[ix+0]*g0[iy+0]*g13[iz+0];
+s[75] = + g17[ix+0]*g2[iy+0]*g12[iz+0];
+s[76] = + g16[ix+0]*g3[iy+0]*g12[iz+0];
+s[77] = + g16[ix+0]*g2[iy+0]*g13[iz+0];
+s[78] = + g17[ix+0]*g0[iy+0]*g14[iz+0];
+s[79] = + g16[ix+0]*g1[iy+0]*g14[iz+0];
+s[80] = + g16[ix+0]*g0[iy+0]*g15[iz+0];
+s[81] = + g15[ix+0]*g16[iy+0]*g0[iz+0];
+s[82] = + g14[ix+0]*g17[iy+0]*g0[iz+0];
+s[83] = + g14[ix+0]*g16[iy+0]*g1[iz+0];
+s[84] = + g13[ix+0]*g18[iy+0]*g0[iz+0];
+s[85] = + g12[ix+0]*g19[iy+0]*g0[iz+0];
+s[86] = + g12[ix+0]*g18[iy+0]*g1[iz+0];
+s[87] = + g13[ix+0]*g16[iy+0]*g2[iz+0];
+s[88] = + g12[ix+0]*g17[iy+0]*g2[iz+0];
+s[89] = + g12[ix+0]*g16[iy+0]*g3[iz+0];
+s[90] = + g11[ix+0]*g20[iy+0]*g0[iz+0];
+s[91] = + g10[ix+0]*g21[iy+0]*g0[iz+0];
+s[92] = + g10[ix+0]*g20[iy+0]*g1[iz+0];
+s[93] = + g9[ix+0]*g22[iy+0]*g0[iz+0];
+s[94] = + g8[ix+0]*g23[iy+0]*g0[iz+0];
+s[95] = + g8[ix+0]*g22[iy+0]*g1[iz+0];
+s[96] = + g9[ix+0]*g20[iy+0]*g2[iz+0];
+s[97] = + g8[ix+0]*g21[iy+0]*g2[iz+0];
+s[98] = + g8[ix+0]*g20[iy+0]*g3[iz+0];
+s[99] = + g11[ix+0]*g16[iy+0]*g4[iz+0];
+s[100] = + g10[ix+0]*g17[iy+0]*g4[iz+0];
+s[101] = + g10[ix+0]*g16[iy+0]*g5[iz+0];
+s[102] = + g9[ix+0]*g18[iy+0]*g4[iz+0];
+s[103] = + g8[ix+0]*g19[iy+0]*g4[iz+0];
+s[104] = + g8[ix+0]*g18[iy+0]*g5[iz+0];
+s[105] = + g9[ix+0]*g16[iy+0]*g6[iz+0];
+s[106] = + g8[ix+0]*g17[iy+0]*g6[iz+0];
+s[107] = + g8[ix+0]*g16[iy+0]*g7[iz+0];
+s[108] = + g7[ix+0]*g24[iy+0]*g0[iz+0];
+s[109] = + g6[ix+0]*g25[iy+0]*g0[iz+0];
+s[110] = + g6[ix+0]*g24[iy+0]*g1[iz+0];
+s[111] = + g5[ix+0]*g26[iy+0]*g0[iz+0];
+s[112] = + g4[ix+0]*g27[iy+0]*g0[iz+0];
+s[113] = + g4[ix+0]*g26[iy+0]*g1[iz+0];
+s[114] = + g5[ix+0]*g24[iy+0]*g2[iz+0];
+s[115] = + g4[ix+0]*g25[iy+0]*g2[iz+0];
+s[116] = + g4[ix+0]*g24[iy+0]*g3[iz+0];
+s[117] = + g3[ix+0]*g28[iy+0]*g0[iz+0];
+s[118] = + g2[ix+0]*g29[iy+0]*g0[iz+0];
+s[119] = + g2[ix+0]*g28[iy+0]*g1[iz+0];
+s[120] = + g1[ix+0]*g30[iy+0]*g0[iz+0];
+s[121] = + g0[ix+0]*g31[iy+0]*g0[iz+0];
+s[122] = + g0[ix+0]*g30[iy+0]*g1[iz+0];
+s[123] = + g1[ix+0]*g28[iy+0]*g2[iz+0];
+s[124] = + g0[ix+0]*g29[iy+0]*g2[iz+0];
+s[125] = + g0[ix+0]*g28[iy+0]*g3[iz+0];
+s[126] = + g3[ix+0]*g24[iy+0]*g4[iz+0];
+s[127] = + g2[ix+0]*g25[iy+0]*g4[iz+0];
+s[128] = + g2[ix+0]*g24[iy+0]*g5[iz+0];
+s[129] = + g1[ix+0]*g26[iy+0]*g4[iz+0];
+s[130] = + g0[ix+0]*g27[iy+0]*g4[iz+0];
+s[131] = + g0[ix+0]*g26[iy+0]*g5[iz+0];
+s[132] = + g1[ix+0]*g24[iy+0]*g6[iz+0];
+s[133] = + g0[ix+0]*g25[iy+0]*g6[iz+0];
+s[134] = + g0[ix+0]*g24[iy+0]*g7[iz+0];
+s[135] = + g7[ix+0]*g16[iy+0]*g8[iz+0];
+s[136] = + g6[ix+0]*g17[iy+0]*g8[iz+0];
+s[137] = + g6[ix+0]*g16[iy+0]*g9[iz+0];
+s[138] = + g5[ix+0]*g18[iy+0]*g8[iz+0];
+s[139] = + g4[ix+0]*g19[iy+0]*g8[iz+0];
+s[140] = + g4[ix+0]*g18[iy+0]*g9[iz+0];
+s[141] = + g5[ix+0]*g16[iy+0]*g10[iz+0];
+s[142] = + g4[ix+0]*g17[iy+0]*g10[iz+0];
+s[143] = + g4[ix+0]*g16[iy+0]*g11[iz+0];
+s[144] = + g3[ix+0]*g20[iy+0]*g8[iz+0];
+s[145] = + g2[ix+0]*g21[iy+0]*g8[iz+0];
+s[146] = + g2[ix+0]*g20[iy+0]*g9[iz+0];
+s[147] = + g1[ix+0]*g22[iy+0]*g8[iz+0];
+s[148] = + g0[ix+0]*g23[iy+0]*g8[iz+0];
+s[149] = + g0[ix+0]*g22[iy+0]*g9[iz+0];
+s[150] = + g1[ix+0]*g20[iy+0]*g10[iz+0];
+s[151] = + g0[ix+0]*g21[iy+0]*g10[iz+0];
+s[152] = + g0[ix+0]*g20[iy+0]*g11[iz+0];
+s[153] = + g3[ix+0]*g16[iy+0]*g12[iz+0];
+s[154] = + g2[ix+0]*g17[iy+0]*g12[iz+0];
+s[155] = + g2[ix+0]*g16[iy+0]*g13[iz+0];
+s[156] = + g1[ix+0]*g18[iy+0]*g12[iz+0];
+s[157] = + g0[ix+0]*g19[iy+0]*g12[iz+0];
+s[158] = + g0[ix+0]*g18[iy+0]*g13[iz+0];
+s[159] = + g1[ix+0]*g16[iy+0]*g14[iz+0];
+s[160] = + g0[ix+0]*g17[iy+0]*g14[iz+0];
+s[161] = + g0[ix+0]*g16[iy+0]*g15[iz+0];
+s[162] = + g15[ix+0]*g0[iy+0]*g16[iz+0];
+s[163] = + g14[ix+0]*g1[iy+0]*g16[iz+0];
+s[164] = + g14[ix+0]*g0[iy+0]*g17[iz+0];
+s[165] = + g13[ix+0]*g2[iy+0]*g16[iz+0];
+s[166] = + g12[ix+0]*g3[iy+0]*g16[iz+0];
+s[167] = + g12[ix+0]*g2[iy+0]*g17[iz+0];
+s[168] = + g13[ix+0]*g0[iy+0]*g18[iz+0];
+s[169] = + g12[ix+0]*g1[iy+0]*g18[iz+0];
+s[170] = + g12[ix+0]*g0[iy+0]*g19[iz+0];
+s[171] = + g11[ix+0]*g4[iy+0]*g16[iz+0];
+s[172] = + g10[ix+0]*g5[iy+0]*g16[iz+0];
+s[173] = + g10[ix+0]*g4[iy+0]*g17[iz+0];
+s[174] = + g9[ix+0]*g6[iy+0]*g16[iz+0];
+s[175] = + g8[ix+0]*g7[iy+0]*g16[iz+0];
+s[176] = + g8[ix+0]*g6[iy+0]*g17[iz+0];
+s[177] = + g9[ix+0]*g4[iy+0]*g18[iz+0];
+s[178] = + g8[ix+0]*g5[iy+0]*g18[iz+0];
+s[179] = + g8[ix+0]*g4[iy+0]*g19[iz+0];
+s[180] = + g11[ix+0]*g0[iy+0]*g20[iz+0];
+s[181] = + g10[ix+0]*g1[iy+0]*g20[iz+0];
+s[182] = + g10[ix+0]*g0[iy+0]*g21[iz+0];
+s[183] = + g9[ix+0]*g2[iy+0]*g20[iz+0];
+s[184] = + g8[ix+0]*g3[iy+0]*g20[iz+0];
+s[185] = + g8[ix+0]*g2[iy+0]*g21[iz+0];
+s[186] = + g9[ix+0]*g0[iy+0]*g22[iz+0];
+s[187] = + g8[ix+0]*g1[iy+0]*g22[iz+0];
+s[188] = + g8[ix+0]*g0[iy+0]*g23[iz+0];
+s[189] = + g7[ix+0]*g8[iy+0]*g16[iz+0];
+s[190] = + g6[ix+0]*g9[iy+0]*g16[iz+0];
+s[191] = + g6[ix+0]*g8[iy+0]*g17[iz+0];
+s[192] = + g5[ix+0]*g10[iy+0]*g16[iz+0];
+s[193] = + g4[ix+0]*g11[iy+0]*g16[iz+0];
+s[194] = + g4[ix+0]*g10[iy+0]*g17[iz+0];
+s[195] = + g5[ix+0]*g8[iy+0]*g18[iz+0];
+s[196] = + g4[ix+0]*g9[iy+0]*g18[iz+0];
+s[197] = + g4[ix+0]*g8[iy+0]*g19[iz+0];
+s[198] = + g3[ix+0]*g12[iy+0]*g16[iz+0];
+s[199] = + g2[ix+0]*g13[iy+0]*g16[iz+0];
+s[200] = + g2[ix+0]*g12[iy+0]*g17[iz+0];
+s[201] = + g1[ix+0]*g14[iy+0]*g16[iz+0];
+s[202] = + g0[ix+0]*g15[iy+0]*g16[iz+0];
+s[203] = + g0[ix+0]*g14[iy+0]*g17[iz+0];
+s[204] = + g1[ix+0]*g12[iy+0]*g18[iz+0];
+s[205] = + g0[ix+0]*g13[iy+0]*g18[iz+0];
+s[206] = + g0[ix+0]*g12[iy+0]*g19[iz+0];
+s[207] = + g3[ix+0]*g8[iy+0]*g20[iz+0];
+s[208] = + g2[ix+0]*g9[iy+0]*g20[iz+0];
+s[209] = + g2[ix+0]*g8[iy+0]*g21[iz+0];
+s[210] = + g1[ix+0]*g10[iy+0]*g20[iz+0];
+s[211] = + g0[ix+0]*g11[iy+0]*g20[iz+0];
+s[212] = + g0[ix+0]*g10[iy+0]*g21[iz+0];
+s[213] = + g1[ix+0]*g8[iy+0]*g22[iz+0];
+s[214] = + g0[ix+0]*g9[iy+0]*g22[iz+0];
+s[215] = + g0[ix+0]*g8[iy+0]*g23[iz+0];
+s[216] = + g7[ix+0]*g0[iy+0]*g24[iz+0];
+s[217] = + g6[ix+0]*g1[iy+0]*g24[iz+0];
+s[218] = + g6[ix+0]*g0[iy+0]*g25[iz+0];
+s[219] = + g5[ix+0]*g2[iy+0]*g24[iz+0];
+s[220] = + g4[ix+0]*g3[iy+0]*g24[iz+0];
+s[221] = + g4[ix+0]*g2[iy+0]*g25[iz+0];
+s[222] = + g5[ix+0]*g0[iy+0]*g26[iz+0];
+s[223] = + g4[ix+0]*g1[iy+0]*g26[iz+0];
+s[224] = + g4[ix+0]*g0[iy+0]*g27[iz+0];
+s[225] = + g3[ix+0]*g4[iy+0]*g24[iz+0];
+s[226] = + g2[ix+0]*g5[iy+0]*g24[iz+0];
+s[227] = + g2[ix+0]*g4[iy+0]*g25[iz+0];
+s[228] = + g1[ix+0]*g6[iy+0]*g24[iz+0];
+s[229] = + g0[ix+0]*g7[iy+0]*g24[iz+0];
+s[230] = + g0[ix+0]*g6[iy+0]*g25[iz+0];
+s[231] = + g1[ix+0]*g4[iy+0]*g26[iz+0];
+s[232] = + g0[ix+0]*g5[iy+0]*g26[iz+0];
+s[233] = + g0[ix+0]*g4[iy+0]*g27[iz+0];
+s[234] = + g3[ix+0]*g0[iy+0]*g28[iz+0];
+s[235] = + g2[ix+0]*g1[iy+0]*g28[iz+0];
+s[236] = + g2[ix+0]*g0[iy+0]*g29[iz+0];
+s[237] = + g1[ix+0]*g2[iy+0]*g28[iz+0];
+s[238] = + g0[ix+0]*g3[iy+0]*g28[iz+0];
+s[239] = + g0[ix+0]*g2[iy+0]*g29[iz+0];
+s[240] = + g1[ix+0]*g0[iy+0]*g30[iz+0];
+s[241] = + g0[ix+0]*g1[iy+0]*g30[iz+0];
+s[242] = + g0[ix+0]*g0[iy+0]*g31[iz+0];
+gout[n*3+0] += + s[0] + s[108] + s[216] + s[4] + s[112] + s[220] + s[8] + s[116] + s[224];
+gout[n*3+1] += + s[9] + s[117] + s[225] + s[13] + s[121] + s[229] + s[17] + s[125] + s[233];
+gout[n*3+2] += + s[18] + s[126] + s[234] + s[22] + s[130] + s[238] + s[26] + s[134] + s[242];
+}}
+void int1e_rrr0rr_optimizer(CINTOpt **opt, FINT *atm, FINT natm, FINT *bas, FINT nbas, double *env) {
+FINT ng[] = {2, 3, 0, 0, 5, 1, 1, 3};
+CINTall_1e_optimizer(opt, ng, atm, natm, bas, nbas, env);
+}
+FINT int1e_rrr0rr_cart(double *out, FINT *dims, FINT *shls,
+FINT *atm, FINT natm, FINT *bas, FINT nbas, double *env, CINTOpt *opt, double *cache) {
+FINT ng[] = {2, 3, 0, 0, 5, 1, 1, 3};
+CINTEnvVars envs;
+CINTinit_int1e_EnvVars(&envs, ng, shls, atm, natm, bas, nbas, env);
+envs.f_gout = &CINTgout1e_int1e_rrr0rr;
+return CINT1e_drv(out, dims, &envs, cache, &c2s_cart_1e, 0);
+} // int1e_rrr0rr_cart
+FINT int1e_rrr0rr_sph(double *out, FINT *dims, FINT *shls,
+FINT *atm, FINT natm, FINT *bas, FINT nbas, double *env, CINTOpt *opt, double *cache) {
+FINT ng[] = {2, 3, 0, 0, 5, 1, 1, 3};
+CINTEnvVars envs;
+CINTinit_int1e_EnvVars(&envs, ng, shls, atm, natm, bas, nbas, env);
+envs.f_gout = &CINTgout1e_int1e_rrr0rr;
+return CINT1e_drv(out, dims, &envs, cache, &c2s_sph_1e, 0);
+} // int1e_rrr0rr_sph
+FINT int1e_rrr0rr_spinor(double complex *out, FINT *dims, FINT *shls,
+FINT *atm, FINT natm, FINT *bas, FINT nbas, double *env, CINTOpt *opt, double *cache) {
+FINT ng[] = {2, 3, 0, 0, 5, 1, 1, 3};
+CINTEnvVars envs;
+CINTinit_int1e_EnvVars(&envs, ng, shls, atm, natm, bas, nbas, env);
+envs.f_gout = &CINTgout1e_int1e_rrr0rr;
+return CINT1e_spinor_drv(out, dims, &envs, cache, &c2s_sf_1e, 0);
+} // int1e_rrr0rr_spinor
+ALL_CINT1E(int1e_rrr0rr)
+ALL_CINT1E_FORTRAN_(int1e_rrr0rr)
 /* <i|NABLA-RINV |CROSS P j> */
 void CINTgout1e_int1e_ia01p(double *gout, double *g, FINT *idx, CINTEnvVars *envs, FINT gout_empty) {
 FINT nf = envs->nf;

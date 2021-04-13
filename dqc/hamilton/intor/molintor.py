@@ -706,6 +706,9 @@ def _get_intgl_components_shape(shortname: str) -> Tuple[int, ...]:
     re_pattern = r"({pattern})".format(pattern="ip")
     n_ip = len(re.findall(re_pattern, shortname))
 
+    if shortname == "r0":
+        n_ip += 1
+
     comp_shape = (NDIM, ) * n_ip
     return comp_shape
 
@@ -821,7 +824,7 @@ def _intgl_shortname_equiv(s0: str, s1: str, int_type: str) -> Optional[List[Tup
     # to get the same result as s1
 
     if int_type == "int1e":
-        patterns = ["nuc", "ovlp", "rinv", "kin"]
+        patterns = ["nuc", "ovlp", "rinv", "kin", "r0"]
         transpose_paths = [
             [],
             [(-1, -2)],
