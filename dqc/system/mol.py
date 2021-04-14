@@ -309,7 +309,8 @@ def _get_orb_weights(nelecs: torch.Tensor, spin: ZType, frac_mode: bool,
     # (total orbital weights, spin-up orb weights, spin-down orb weights)
 
     # calculate the orbital weights
-    nspin_dn: torch.Tensor = (nelecs - spin) * 0.5 if frac_mode else (nelecs - spin) // 2
+    nspin_dn: torch.Tensor = (nelecs - spin) * 0.5 if frac_mode else \
+        torch.div(nelecs - spin, 2, rounding_mode="floor")
     nspin_up: torch.Tensor = nspin_dn + spin
 
     # total orbital weights
