@@ -11,7 +11,8 @@ from dqc.xc.base_xc import BaseXC
 
 class HamiltonCGTO(BaseHamilton):
     def __init__(self, atombases: List[AtomCGTOBasis], spherical: bool = True,
-                 df: Optional[DensityFitInfo] = None) -> None:
+                 df: Optional[DensityFitInfo] = None,
+                 efield: Optional[torch.Tensor] = None) -> None:
         self.atombases = atombases
         self.spherical = spherical
         self.libcint_wrapper = intor.LibcintWrapper(atombases, spherical)
@@ -21,6 +22,10 @@ class HamiltonCGTO(BaseHamilton):
             self._df: Optional[DFMol] = None
         else:
             self._df = DFMol(df, wrapper=self.libcint_wrapper)
+
+        self._efield = efield
+        if efield is not None:
+            assert efield.ndim == 1 and efield.numel() == 3
 
         self.is_grid_set = False
         self.is_ao_set = False
@@ -50,6 +55,13 @@ class HamiltonCGTO(BaseHamilton):
         nucl_mat = intor.nuclattr(self.libcint_wrapper)
         self.nucl_mat = nucl_mat
         self.kinnucl_mat = kin_mat + nucl_mat
+
+        # electric field integral
+        if self._efield is not None:
+            efield_mat_f = intor.int1e("r0", self.libcint_wrapper)  # (ndim, nao, nao)
+            efield_mat = torch.einsum("dab,d->ab", efield_mat_f, self._efield)
+            self.kinnucl_mat = self.kinnucl_mat + efield_mat
+
         if self._df is None:
             self.el_mat = intor.elrep(self.libcint_wrapper)  # (nao^4)
         else:

@@ -46,6 +46,10 @@ class Mol(BaseSystem):
     * orb_weights: SpinParam[torch.Tensor] or None
         Specifiying the orbital occupancy (or weights) directly. If specified,
         ``spin`` and ``charge`` arguments are ignored.
+    * efield: Optional[torch.Tensor]
+        Uniform electric field of the system. If present, then the energy is
+        calculated based on potential at (0, 0, 0) = 0.
+        If None, then the electric field is assumed to be 0.
     * dtype: torch.dtype
         The data type of tensors in this class.
         Default: torch.float64
@@ -57,11 +61,12 @@ class Mol(BaseSystem):
     def __init__(self,
                  moldesc: Union[str, Tuple[AtomZsType, AtomPosType]],
                  basis: BasisInpType,
+                 *,
                  grid: Union[int, str] = "sg3",
                  spin: Optional[ZType] = None,
                  charge: ZType = 0,
                  orb_weights: Optional[SpinParam[torch.Tensor]] = None,
-                 *,
+                 efield: Optional[torch.Tensor] = None,
                  dtype: torch.dtype = torch.float64,
                  device: torch.device = torch.device('cpu'),
                  ):
@@ -80,7 +85,7 @@ class Mol(BaseSystem):
         atombases = [AtomCGTOBasis(atomz=atz, bases=bas, pos=atpos)
                      for (atz, bas, atpos) in zip(atomzs, allbases, atompos)]
         self._atombases = atombases
-        self._hamilton = HamiltonCGTO(atombases)
+        self._hamilton = HamiltonCGTO(atombases, efield=efield)
         self._atompos = atompos  # (natoms, ndim)
         self._atomzs = atomzs  # (natoms,) int-type or dtype if floating point
         self._atomzs_int = atomzs_int  # (natoms,) int-type rounded from atomzs
@@ -151,7 +156,7 @@ class Mol(BaseSystem):
 
         # change the hamiltonian to have density fit
         df = DensityFitInfo(method=method, auxbases=atomauxbases)
-        self._hamilton = HamiltonCGTO(self._atombases, df=df)
+        self._hamilton = HamiltonCGTO(self._atombases, df=df, efield=efield)
         return self
 
     def get_hamiltonian(self) -> BaseHamilton:

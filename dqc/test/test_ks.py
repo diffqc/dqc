@@ -199,6 +199,23 @@ def test_rks_grad_vxc(xccls, xcparams, atomzs, dist):
     params = tuple(torch.tensor(p, dtype=dtype).requires_grad_() for p in xcparams)
     torch.autograd.gradcheck(get_energy, params)
 
+@pytest.mark.parametrize(
+    "moldesc",
+    ["O 0 0 0.2217; H 0 1.4309 -0.8867; H 0 -1.4309 -0.8867"]
+)
+def test_rks_multipole(moldesc):
+    # test gradient on electric field
+    efield = torch.zeros(3, dtype=dtype).requires_grad_()
+
+    def get_energy(efield):
+        mol = Mol(moldesc, basis="3-21G", dtype=dtype, efield=efield)
+        qc = KS(mol, xc="lda_x").run()
+        ene = qc.energy()
+        return ene
+
+    torch.autograd.gradcheck(get_energy, (efield,))  # dipole
+    torch.autograd.gradgradcheck(get_energy, (efield,))  # quadrupole
+
 ############### Unrestricted Kohn-Sham ###############
 u_atomzs_spins = [
     # atomz, spin
