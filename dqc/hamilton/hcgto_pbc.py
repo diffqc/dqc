@@ -279,8 +279,8 @@ class HamiltonCGTO_PBC(HamiltonCGTO):
         # nuc1: (nkpts, nao, nao, 2 * natoms)
         # nuc1 is not hermitian
         basiswrapper1, nucl_wrapper1 = intor.LibcintWrapper.concatenate(self._basiswrapper, nucl_wrapper)
-        nuc1_c = intor.pbc_coul3c(basiswrapper1, other=basiswrapper1,
-                                  auxwrapper=nucl_wrapper1, kpts_ij=kpts_ij,
+        nuc1_c = intor.pbc_coul3c(basiswrapper1, other1=basiswrapper1,
+                                  other2=nucl_wrapper1, kpts_ij=kpts_ij,
                                   options=self._lattsum_opt)
         nuc1 = -nuc1_c[..., :natoms] + nuc1_c[..., natoms:]
         nuc1 = torch.sum(nuc1, dim=-1)  # (nkpts, nao, nao)

@@ -214,11 +214,11 @@ def pbc_coul2c(wrapper: LibcintWrapper, other: Optional[LibcintWrapper] = None,
     # 2-centre integral for electron repulsion
     return pbc_int2c2e("r12", wrapper, other=other, kpts=kpts, options=options)
 
-def pbc_coul3c(wrapper: LibcintWrapper, other: Optional[LibcintWrapper] = None,
-               auxwrapper: Optional[LibcintWrapper] = None,
+def pbc_coul3c(wrapper: LibcintWrapper, other1: Optional[LibcintWrapper] = None,
+               other2: Optional[LibcintWrapper] = None,
                kpts_ij: Optional[torch.Tensor] = None,
                options: Optional[PBCIntOption] = None) -> torch.Tensor:
-    return pbc_int3c2e("ar12", wrapper, other1=other, other2=auxwrapper,
+    return pbc_int3c2e("ar12", wrapper, other1=other1, other2=other2,
                        kpts_ij=kpts_ij, options=options)
 
 ################# torch autograd function wrappers #################

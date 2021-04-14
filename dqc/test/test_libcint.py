@@ -663,7 +663,7 @@ def test_pbc_integral_3c_vs_pyscf():
                                       lattice=latt)
 
     env, auxwrapper = intor.LibcintWrapper.concatenate(env, auxwrapper)
-    mat_c = intor.pbc_coul3c(env, auxwrapper=auxwrapper, kpts_ij=kpts_ij)
+    mat_c = intor.pbc_coul3c(env, other2=auxwrapper, kpts_ij=kpts_ij)
     mat = mat_c[..., 0] - mat_c[..., 1]  # get the sum of charge (+compensating basis to make it converge)
 
     # matrix generated from pyscf (code to generate is below)

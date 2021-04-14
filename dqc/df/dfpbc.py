@@ -67,7 +67,7 @@ class DFPBC(BaseDF):
         ############# 3-centre 2-electron integral #############
         _basisw, _fusew = intor.LibcintWrapper.concatenate(self._wrapper, fuse_aux_wrapper)
         # (nkpts_ij, nao, nao, nxao+nxcao)
-        j3c_short_f = intor.pbc_coul3c(_basisw, auxwrapper=_fusew, kpts_ij=kpts_ij,
+        j3c_short_f = intor.pbc_coul3c(_basisw, other2=_fusew, kpts_ij=kpts_ij,
                                        options=self._lattsum_opt)
         j3c_short = j3c_short_f[..., :nxao] - j3c_short_f[..., nxao:]  # (nkpts_ij, nao, nao, nxao)
 
