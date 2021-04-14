@@ -191,10 +191,12 @@ class _Int2cFunction(torch.autograd.Function):
 
             # get the integrals required for the derivatives
             sname_derivs = [_get_intgl_deriv_shortname(int_type, shortname, s) for s in ("r1", "r2")]
+            # new axes added to the dimension
+            new_axes_pos = [_get_intgl_deriv_new_axis_pos(int_type, shortname, s) for s in ("r1", "r2")]
             int_fcn = lambda wrappers, name: _Int2cFunction.apply(
                 *ctx.saved_tensors, wrappers, int_type, name)
             # list of tensors with shape: (ndim, ..., nao0, nao1)
-            dout_dposs = _get_integrals(sname_derivs, wrappers, int_type, int_fcn)
+            dout_dposs = _get_integrals(sname_derivs, wrappers, int_type, int_fcn, new_axes_pos)
 
             ndim = dout_dposs[0].shape[0]
             shape = (ndim, -1, *dout_dposs[0].shape[-2:])
@@ -239,9 +241,11 @@ class _Int2cFunction(torch.autograd.Function):
             # rinv_pos: (ndim)
             # get the integrals for the derivatives
             sname_derivs = [_get_intgl_deriv_shortname(int_type, shortname, s) for s in ("r1", "r2")]
+            # new axes added to the dimension
+            new_axes_pos = [_get_intgl_deriv_new_axis_pos(int_type, shortname, s) for s in ("r1", "r2")]
             int_fcn = lambda wrappers, name: _Int2cFunction.apply(
                 *ctx.saved_tensors, wrappers, int_type, name)
-            dout_datposs = _get_integrals(sname_derivs, wrappers, int_type, int_fcn)
+            dout_datposs = _get_integrals(sname_derivs, wrappers, int_type, int_fcn, new_axes_pos)
 
             grad_datpos = grad_out * (dout_datposs[0] + dout_datposs[1])
             grad_rinv_pos = grad_datpos.reshape(grad_datpos.shape[0], -1).sum(dim=-1)
@@ -706,7 +710,9 @@ def _get_intgl_components_shape(shortname: str) -> Tuple[int, ...]:
     re_pattern = r"({pattern})".format(pattern="ip")
     n_ip = len(re.findall(re_pattern, shortname))
 
-    if shortname == "r0":
+    # get raw shortname (without "ip" and "rr")
+    rawsname = shortname.replace("ip", "").replace("rr", "")
+    if rawsname == "r0":
         n_ip += 1
 
     comp_shape = (NDIM, ) * n_ip
@@ -764,13 +770,45 @@ def _get_intgl_deriv_shortname(int_type: str, shortname: str, derivmode: str) ->
     else:
         raise RuntimeError("Unknown derivmode: %s" % derivmode)
 
+def _get_intgl_deriv_new_axis_pos(int_type: str, shortname: str, derivmode: str) -> int:
+    # get the position of the new axes inserted relative to the old shortname
+
+    not_impl_msg = "%s for derivmode %s is not implemented" % (int_type, derivmode)
+    if int_type == "int1e" or int_type == "int2c2e":
+        if derivmode == "r1":
+            return 0
+        elif derivmode == "r2":
+            return -3  # the last 2 axes are for naos
+    elif int_type == "int3c2e":
+        if derivmode == "ra1":
+            return 0
+        elif derivmode == "ra2":
+            raise NotImplementedError(not_impl_msg)
+        elif derivmode == "rb":
+            return -4  # the last 3 axes are for naos
+    elif int_type == "int2e":
+        if derivmode == "ra1":
+            return 0
+        elif derivmode == "ra2":
+            raise NotImplementedError(not_impl_msg)
+        elif derivmode == "rb1":
+            raise NotImplementedError(not_impl_msg)
+        elif derivmode == "rb2":
+            return -5  # the last 4 axes are for naos
+
+    msg = "The int_type %s with derivmode %s does not have new axis added" % (int_type, derivmode)
+    raise RuntimeError(msg)
+
 def _get_integrals(int_names: List[str],
                    wrappers: List[LibcintWrapper],
                    int_type: str,
-                   int_fcn: Callable[[List[LibcintWrapper], str], torch.Tensor]) \
+                   int_fcn: Callable[[List[LibcintWrapper], str], torch.Tensor],
+                   new_axes_pos: Optional[List[int]] = None) \
                    -> List[torch.Tensor]:
-    # return the list of tensors of the integrals given by the list of integral names.
-    # int_fcn is the integral function that receives the name and returns the results.
+    # Return the list of tensors of the integrals given by the list of integral names.
+    # Int_fcn is the integral function that receives the name and returns the results.
+    # If new_axes_pos is specified, then move the new axes to 0, otherwise, just leave
+    # it as it is
 
     res: List[torch.Tensor] = []
     # indicating if the integral is available in the libcint-generated file
@@ -808,13 +846,21 @@ def _get_integrals(int_names: List[str],
                     continue
 
         if res_i is None:
-            # successfully executing the line below indicates that the integral
-            # is available in the libcint-generated files
-            res_i = int_fcn(wrappers, int_names[i])
+            try:
+                # successfully executing the line below indicates that the integral
+                # is available in the libcint-generated files
+                res_i = int_fcn(wrappers, int_names[i])
+            except AttributeError:
+                msg = "The integral %s is not available from libcint, please add it" % int_names[i]
+                raise AttributeError(msg)
+
             int_avail[i] = True
 
         res.append(res_i)
 
+    # move the new axes to dimension 0
+    if new_axes_pos is not None:
+        res = [torch.movedim(r, ax, 0) for (r, ax) in zip(res, new_axes_pos)]
     return res
 
 def _intgl_shortname_equiv(s0: str, s1: str, int_type: str) -> Optional[List[Tuple[int, int]]]:
