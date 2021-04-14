@@ -75,6 +75,7 @@ class Mol(BaseSystem):
         self._grid_inp = grid
         self._basis_inp = basis
         self._grid: Optional[BaseGrid] = None
+        self._efield = efield
 
         # get the AtomCGTOBasis & the hamiltonian
         # atomzs: (natoms,) dtype: torch.int or dtype for floating point
@@ -156,7 +157,7 @@ class Mol(BaseSystem):
 
         # change the hamiltonian to have density fit
         df = DensityFitInfo(method=method, auxbases=atomauxbases)
-        self._hamilton = HamiltonCGTO(self._atombases, df=df, efield=efield)
+        self._hamilton = HamiltonCGTO(self._atombases, df=df, efield=self._efield)
         return self
 
     def get_hamiltonian(self) -> BaseHamilton:
