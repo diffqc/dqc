@@ -1,5 +1,4 @@
 from __future__ import annotations
-import os
 import contextlib
 from typing import Optional, List, Callable
 import torch
@@ -68,7 +67,7 @@ class Cache(object):
         return self._cacheable_pnames
 
     @staticmethod
-    def get_dummy(self) -> Cache:
+    def get_dummy() -> Cache:
         # returns a dummy cache that does not do anything
         return _DummyCache()
 
