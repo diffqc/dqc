@@ -7,7 +7,7 @@ class Lattice(object):
     """
     Lattice is an object that describe the periodicity of the lattice.
     Note that this object does not know about atoms.
-    For the integrated object between the lattice and atoms, please see MolPBC
+    For the integrated object between the lattice and atoms, please see Sol
     """
     def __init__(self, a: torch.Tensor):
         # 2D or 1D repetition are not implemented yet

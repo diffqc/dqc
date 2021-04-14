@@ -15,13 +15,13 @@ from dqc.utils.safeops import safe_cdist
 from dqc.hamilton.intor.lattice import Lattice
 from dqc.hamilton.intor.pbcintor import PBCIntOption
 
-class MolPBC(BaseSystem):
+class Sol(BaseSystem):
     """
-    Describe the system of an isolated molecule.
+    Describe the system of a solid (i.e. periodic boundary condition system).
 
     Arguments
     ---------
-    * moldesc: str or 2-elements tuple (atomzs, atompos)
+    * soldesc: str or 2-elements tuple (atomzs, atompos)
         Description of the molecule system.
         If string, it can be described like "H 0 0 0; H 0.5 0.5 0.5".
         If tuple, the first element of the tuple is the Z number of the atoms while
@@ -55,7 +55,7 @@ class MolPBC(BaseSystem):
     """
 
     def __init__(self,
-                 moldesc: Union[str, Tuple[AtomZsType, AtomPosType]],
+                 soldesc: Union[str, Tuple[AtomZsType, AtomPosType]],
                  alattice: torch.Tensor,
                  basis: Union[str, List[CGTOBasis], List[str], List[List[CGTOBasis]]],
                  grid: Union[int, str] = "sg3",
@@ -74,7 +74,7 @@ class MolPBC(BaseSystem):
         # get the AtomCGTOBasis & the hamiltonian
         # atomzs: (natoms,) dtype: torch.int or dtype for floating point
         # atompos: (natoms, ndim)
-        atomzs, atompos = _parse_moldesc(moldesc, dtype, device)
+        atomzs, atompos = _parse_moldesc(soldesc, dtype, device)
         allbases = _parse_basis(atomzs, basis)  # list of list of CGTOBasis
         atombases = [AtomCGTOBasis(atomz=atz, bases=bas, pos=atpos)
                      for (atz, bas, atpos) in zip(atomzs, allbases, atompos)]

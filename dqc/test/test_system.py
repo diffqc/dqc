@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import pytest
 from dqc.system.mol import Mol
-from dqc.system.molpbc import MolPBC
+from dqc.system.sol import Sol
 from dqc.hamilton.intor.lattice import Lattice
 
 # these tests to make sure the systems parse the inputs correctly
@@ -80,7 +80,7 @@ def test_mol_pbc_nuclei_energy():
     # in periodic boundary condition
 
     def get_ene_ii(atomz, atompos, alattice):
-        m = MolPBC((atomz, atompos), alattice=alattice, basis="6-311++G**", dtype=dtype, spin=1)
+        m = Sol((atomz, atompos), alattice=alattice, basis="6-311++G**", dtype=dtype, spin=1)
         return m.get_nuclei_energy()
 
     # check the true energy
@@ -95,32 +95,32 @@ def test_mol_pbc_nuclei_energy():
 
 @pytest.mark.parametrize("moldesc", moldescs)
 def test_mol_pbc_orbweights(moldesc):
-    m = MolPBC(moldesc, basis="6-311++G**", alattice=alattice, dtype=dtype)
+    m = Sol(moldesc, basis="6-311++G**", alattice=alattice, dtype=dtype)
     orb_weight1 = torch.tensor([2.0, 2.0, 1.0], dtype=dtype)
     assert torch.allclose(m.get_orbweight(), orb_weight1)
 
-    m3 = MolPBC(moldesc, basis="6-311++G**", alattice=alattice, dtype=dtype, spin=3)
+    m3 = Sol(moldesc, basis="6-311++G**", alattice=alattice, dtype=dtype, spin=3)
     orb_weight3 = torch.tensor([2.0, 1.0, 1.0, 1.0], dtype=dtype)
     assert torch.allclose(m3.get_orbweight(), orb_weight3)
 
     # try if it raises an error if spin is invalid
     fail = False
     try:
-        m4 = MolPBC(moldesc, basis="6-311++G**", alattice=alattice, dtype=dtype, spin=4)
+        m4 = Sol(moldesc, basis="6-311++G**", alattice=alattice, dtype=dtype, spin=4)
     except AssertionError:
         fail = True
     assert fail
 
     fail = False
     try:
-        m4 = MolPBC(moldesc, basis="6-311++G**", alattice=alattice, dtype=dtype, spin=-1)
+        m4 = Sol(moldesc, basis="6-311++G**", alattice=alattice, dtype=dtype, spin=-1)
     except AssertionError:
         fail = True
     assert fail
 
 @pytest.mark.parametrize("moldesc", moldescs)
 def test_mol_pbc_grid(moldesc):
-    m = MolPBC(moldesc, basis="6-311++G**", alattice=alattice, dtype=dtype)
+    m = Sol(moldesc, basis="6-311++G**", alattice=alattice, dtype=dtype)
     m.setup_grid()
     rgrid = m.get_grid().get_rgrid()
 

@@ -4,7 +4,7 @@ import torch
 import pytest
 from dqc.qccalc.ks import KS
 from dqc.system.mol import Mol
-from dqc.system.molpbc import MolPBC
+from dqc.system.sol import Sol
 from dqc.xc.base_xc import BaseXC
 from dqc.utils.safeops import safepow, safenorm
 from dqc.utils.datastruct import ValGrad
@@ -433,7 +433,7 @@ def atest_pbc_rks_energy(xc, atomzs, spin, alattice, energy_true, grid):
     # for this test only we test for different types of grids to see if any error is raised
     alattice = torch.as_tensor(alattice, dtype=dtype)
     poss = torch.tensor([[0.0, 0.0, 0.0]], dtype=dtype)
-    mol = MolPBC((atomzs, poss), basis="3-21G", spin=spin, alattice=alattice, dtype=dtype, grid=grid)
+    mol = Sol((atomzs, poss), basis="3-21G", spin=spin, alattice=alattice, dtype=dtype, grid=grid)
     mol.densityfit(method="gdf", auxbasis="def2-sv(p)-jkfit")
     qc = KS(mol, xc=xc, restricted=False).run()
     ene = qc.energy()
@@ -452,7 +452,7 @@ if __name__ == "__main__":
     # for this test only we test for different types of grids to see if any error is raised
     alattice = torch.as_tensor(alattice, dtype=dtype)
     poss = torch.tensor([[0.0, 0.0, 0.0]], dtype=dtype)
-    mol = MolPBC((atomzs, poss), basis="3-21G", spin=spin, alattice=alattice, dtype=dtype, grid=grid)
+    mol = Sol((atomzs, poss), basis="3-21G", spin=spin, alattice=alattice, dtype=dtype, grid=grid)
     mol.densityfit(method="gdf", auxbasis="def2-sv(p)-jkfit")
     qc = KS(mol, xc=xc, restricted=False).run()
     ene = qc.energy()
