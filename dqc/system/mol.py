@@ -11,6 +11,7 @@ from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, SpinParam, ZType, \
 from dqc.utils.periodictable import get_atomz
 from dqc.utils.safeops import occnumber, safe_cdist
 from dqc.api.loadbasis import loadbasis
+from dqc.utils.cache import Cache
 
 AtomZsType  = Union[List[str], List[ZType], torch.Tensor]
 AtomPosType = Union[List[List[float]], np.ndarray, torch.Tensor]
@@ -77,6 +78,9 @@ class Mol(BaseSystem):
         self._grid: Optional[BaseGrid] = None
         self._efield = efield
 
+        # initialize cache
+        self._cache = Cache()
+
         # get the AtomCGTOBasis & the hamiltonian
         # atomzs: (natoms,) dtype: torch.int or dtype for floating point
         # atompos: (natoms, ndim)
@@ -86,7 +90,8 @@ class Mol(BaseSystem):
         atombases = [AtomCGTOBasis(atomz=atz, bases=bas, pos=atpos)
                      for (atz, bas, atpos) in zip(atomzs, allbases, atompos)]
         self._atombases = atombases
-        self._hamilton = HamiltonCGTO(atombases, efield=efield)
+        self._hamilton = HamiltonCGTO(atombases, efield=efield,
+                                      cache=self._cache.add_prefix("hamilton"))
         self._atompos = atompos  # (natoms, ndim)
         self._atomzs = atomzs  # (natoms,) int-type or dtype if floating point
         self._atomzs_int = atomzs_int  # (natoms,) int-type rounded from atomzs
@@ -157,11 +162,39 @@ class Mol(BaseSystem):
 
         # change the hamiltonian to have density fit
         df = DensityFitInfo(method=method, auxbases=atomauxbases)
-        self._hamilton = HamiltonCGTO(self._atombases, df=df, efield=self._efield)
+        self._hamilton = HamiltonCGTO(self._atombases, df=df, efield=self._efield,
+                                      cache=self._cache.add_prefix("hamilton"))
         return self
 
     def get_hamiltonian(self) -> BaseHamilton:
         return self._hamilton
+
+    def set_cache(self, fname: str, paramnames: Optional[List[str]] = None) -> BaseSystem:
+        """
+        Setup the cache of some parameters specified by `paramnames` to be read/written
+        on a file.
+        If the file exists, then the parameters will not be recomputed, but just
+        loaded from the cache instead.
+
+        Arguments
+        ---------
+        fname: str
+            The file to store the cache.
+        paramnames: Optional[List[str]]
+            List of parameter names to be read/write from the cache.
+        """
+        all_paramnames = self._cache.get_cacheable_params()
+        if paramnames is not None:
+            # check the paramnames
+            for pname in paramnames:
+                if pname not in all_paramnames:
+                    msg = "Parameter %s is not cache-able. Cache-able parameters are %s" % \
+                        (pname, all_paramnames)
+                    raise ValueError(msg)
+
+        self._cache.set(fname, paramnames)
+
+        return self
 
     def get_orbweight(self, polarized: bool = False) -> Union[torch.Tensor, SpinParam[torch.Tensor]]:
         if not polarized:

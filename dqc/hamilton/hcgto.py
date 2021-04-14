@@ -8,11 +8,13 @@ from dqc.hamilton.base_hamilton import BaseHamilton
 from dqc.utils.datastruct import AtomCGTOBasis, ValGrad, SpinParam, DensityFitInfo
 from dqc.grid.base_grid import BaseGrid
 from dqc.xc.base_xc import BaseXC
+from dqc.utils.cache import Cache
 
 class HamiltonCGTO(BaseHamilton):
     def __init__(self, atombases: List[AtomCGTOBasis], spherical: bool = True,
                  df: Optional[DensityFitInfo] = None,
-                 efield: Optional[torch.Tensor] = None) -> None:
+                 efield: Optional[torch.Tensor] = None,
+                 cache: Optional[Cache] = None) -> None:
         self.atombases = atombases
         self.spherical = spherical
         self.libcint_wrapper = intor.LibcintWrapper(atombases, spherical)
@@ -35,6 +37,12 @@ class HamiltonCGTO(BaseHamilton):
         self.xcfamily = 1
         self.is_built = False
 
+        # initialize cache
+        self._cache = cache if cache is not None else Cache.get_dummy()
+        self._cache.add_cacheable_params(["overlap", "kinetic", "nuclattr", "efield"])
+        if self._df is None:
+            self._cache.add_cacheable_params(["elrep"])
+
     @property
     def nao(self) -> int:
         return self.libcint_wrapper.nao()
@@ -50,23 +58,27 @@ class HamiltonCGTO(BaseHamilton):
     def build(self) -> BaseHamilton:
         # get the matrices (all (nao, nao), except el_mat)
         # these matrices have already been normalized
-        self.olp_mat = intor.overlap(self.libcint_wrapper)
-        kin_mat = intor.kinetic(self.libcint_wrapper)
-        nucl_mat = intor.nuclattr(self.libcint_wrapper)
-        self.nucl_mat = nucl_mat
-        self.kinnucl_mat = kin_mat + nucl_mat
+        with self._cache.open():
 
-        # electric field integral
-        if self._efield is not None:
-            efield_mat_f = intor.int1e("r0", self.libcint_wrapper)  # (ndim, nao, nao)
-            efield_mat = torch.einsum("dab,d->ab", efield_mat_f, self._efield)
-            self.kinnucl_mat = self.kinnucl_mat + efield_mat
+            self.olp_mat = self._cache.cache("overlap", lambda: intor.overlap(self.libcint_wrapper))
+            kin_mat = self._cache.cache("kinetic", lambda: intor.kinetic(self.libcint_wrapper))
+            nucl_mat = self._cache.cache("nuclattr", lambda: intor.nuclattr(self.libcint_wrapper))
+            self.nucl_mat = nucl_mat
+            self.kinnucl_mat = kin_mat + nucl_mat
 
-        if self._df is None:
-            self.el_mat = intor.elrep(self.libcint_wrapper)  # (nao^4)
-        else:
-            self._df.build()
-        self.is_built = True
+            # electric field integral
+            if self._efield is not None:
+                # (ndim, nao, nao)
+                efield_mat_f = self._cache.cache("efield", lambda: intor.int1e("r0", self.libcint_wrapper))
+                efield_mat = torch.einsum("dab,d->ab", efield_mat_f, self._efield)
+                self.kinnucl_mat = self.kinnucl_mat + efield_mat
+
+            if self._df is None:
+                self.el_mat = self._cache.cache("elrep", lambda: intor.elrep(self.libcint_wrapper))  # (nao^4)
+            else:
+                self._df.build()
+            self.is_built = True
+
         return self
 
     def get_nuclattr(self) -> xt.LinearOperator:

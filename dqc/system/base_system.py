@@ -28,6 +28,16 @@ class BaseSystem(xt.EditableModule):
         pass
 
     @abstractmethod
+    def set_cache(self, fname: str, paramnames: Optional[List[str]] = None) -> BaseSystem:
+        """
+        Set up the cache to read/write some parameters from the given files.
+        If paramnames is not given, then read/write all cache-able parameters
+        specified by each class.
+        Returns self
+        """
+        pass
+
+    @abstractmethod
     def get_orbweight(self, polarized: bool = False) -> Union[torch.Tensor, SpinParam[torch.Tensor]]:
         """
         Returns the atomic orbital weights. If polarized == False, then it

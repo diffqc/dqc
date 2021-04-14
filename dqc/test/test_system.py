@@ -1,6 +1,8 @@
+import os
 import torch
 import numpy as np
 import pytest
+import h5py
 from dqc.system.mol import Mol
 from dqc.system.sol import Sol
 from dqc.hamilton.intor.lattice import Lattice
@@ -75,6 +77,41 @@ def test_mol_nuclei_energy():
     torch.autograd.gradcheck(get_ene_ii, (atomz, atompos))
     torch.autograd.gradgradcheck(get_ene_ii, (atomz, atompos))
 
+def test_mol_cache():
+    # test if cache is stored correctly
+    cache_fname = "_temp_cache.h5"
+    # remove the cache if exists
+    if os.path.exists(cache_fname):
+        os.remove(cache_fname)
+
+    moldesc = "H 0 0 0"
+    mol = Mol(moldesc, basis="3-21G").set_cache(cache_fname)
+    h = mol.get_hamiltonian()
+    h.build()
+
+    # read the stored file
+    with h5py.File(cache_fname, "r") as f:
+        olp_cache = torch.as_tensor(f["hamilton/overlap"])
+
+    olp = h.get_overlap().fullmatrix()
+    assert torch.allclose(olp, olp_cache)
+
+    # try again with different atom, if cache is set, then it should be same
+    # as previous (although it is a wrong result)
+    # TODO: raise a warning if mol properties do not match
+    moldesc1 = "Li 0 0 0"
+    mol1 = Mol(moldesc1, basis="3-21G").set_cache(cache_fname)
+    h1 = mol1.get_hamiltonian()
+    h1.build()
+
+    # remove the cache
+    if os.path.exists(cache_fname):
+        os.remove(cache_fname)
+
+    olp1 = h1.get_overlap().fullmatrix()
+    assert torch.allclose(olp, olp1)
+
+##################### pbc #####################
 def test_mol_pbc_nuclei_energy():
     # test the calculation of ion-ion interaction energy (+ gradients w.r.t. pos)
     # in periodic boundary condition
