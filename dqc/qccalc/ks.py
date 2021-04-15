@@ -102,10 +102,12 @@ class KS(BaseQCCalc):
 
     def energy(self) -> torch.Tensor:
         # returns the total energy of the system
+        assert self.has_run
         return self.engine.dm2energy(self._dm)
 
     def aodm(self) -> Union[torch.Tensor, SpinParam[torch.Tensor]]:
         # returns the density matrix in the atomic-orbital basis
+        assert self.has_run
         return self._dm
 
 class _KSEngine(xt.EditableModule):
