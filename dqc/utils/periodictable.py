@@ -59,7 +59,66 @@ periodic_table_atomz = {
     "Xe": 54,
 }
 
+atom_masses = {  # atom masses in a.u.
+    # from https://www.angelo.edu/faculty/kboudrea/periodic/structure_mass.htm
+    1: 1.00797,
+    2: 4.00260,
+    3: 6.941,
+    4: 9.01218,
+    5: 10.81,
+    6: 12.011,
+    7: 14.0067,
+    8: 15.9994,
+    9: 18.998403,
+    10: 20.179,
+    11: 22.98977,
+    12: 24.305,
+    13: 26.98154,
+    14: 28.0855,
+    15: 30.97376,
+    16: 32.06,
+    17: 35.453,
+    18: 39.948,
+    19: 39.0983,
+    20: 40.08,
+    21: 44.9559,
+    22: 47.90,
+    23: 50.9415,
+    24: 51.996,
+    25: 54.9380,
+    26: 55.847,
+    27: 58.9332,
+    28: 58.70,
+    29: 63.546,
+    30: 65.38,
+    31: 69.72,
+    32: 72.59,
+    33: 74.9216,
+    34: 78.96,
+    35: 79.904,
+    36: 83.80,
+    37: 85.4678,
+    38: 87.62,
+    39: 88.9059,
+    40: 91.22,
+    41: 92.9064,
+    42: 95.94,
+    43: 98.,
+    44: 101.07,
+    45: 102.9055,
+    46: 106.4,
+    47: 107.868,
+    48: 112.41,
+    49: 114.82,
+    50: 118.69,
+    51: 121.75,
+    53: 126.9045,
+    52: 127.60,
+    54: 131.30,
+}
+
 def get_atomz(elmt: Union[str, ZType]) -> ZType:
+    # returns the atomic number from the given element
     if isinstance(elmt, str):
         return periodic_table_atomz[elmt]
     elif isinstance(elmt, torch.Tensor):
@@ -67,3 +126,7 @@ def get_atomz(elmt: Union[str, ZType]) -> ZType:
         return elmt
     else:  # float or int
         return elmt
+
+def get_atom_mass(atomz: int) -> float:
+    # returns the atomic mass in atomic unit
+    return atom_masses[atomz]

@@ -8,7 +8,7 @@ from dqc.grid.base_grid import BaseGrid
 from dqc.grid.factory import get_grid
 from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, SpinParam, ZType, \
                                  is_z_float, BasisInpType, DensityFitInfo
-from dqc.utils.periodictable import get_atomz
+from dqc.utils.periodictable import get_atomz, get_atom_mass
 from dqc.utils.safeops import occnumber, safe_cdist
 from dqc.api.loadbasis import loadbasis
 from dqc.utils.cache import Cache
@@ -238,6 +238,23 @@ class Mol(BaseSystem):
     def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
         pass
 
+    ################### properties ###################
+    @property
+    def atompos(self) -> torch.Tensor:
+        return self._atompos
+
+    @property
+    def atomzs(self) -> torch.Tensor:
+        return self._atomzs
+
+    @property
+    def atommasses(self) -> torch.Tensor:
+        # returns the atomic mass (only for non-isotope for now)
+        if torch.is_floating_point(self._atomzs):
+            raise RuntimeError("Atom masses are not available for floating point Z")
+        return torch.tensor([get_atom_mass(atomz) for atomz in self._atomzs],
+                            dtype=self._dtype, device=self._device)
+
     @property
     def spin(self) -> ZType:
         return self._spin
@@ -249,6 +266,10 @@ class Mol(BaseSystem):
     @property
     def numel(self) -> ZType:
         return self._numel
+
+    @property
+    def efield(self) -> Optional[torch.Tensor]:
+        return self._efield
 
 def _parse_moldesc(moldesc: Union[str, Tuple[AtomZsType, AtomPosType]],
                    dtype: torch.dtype,

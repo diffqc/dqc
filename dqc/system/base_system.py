@@ -74,6 +74,27 @@ class BaseSystem(xt.EditableModule):
 
     ####################### system properties #######################
     @abstractproperty
+    def atompos(self) -> torch.Tensor:
+        """
+        Returns the atom positions as a tensor with shape (natoms, ndim)
+        """
+        pass
+
+    @abstractmethod
+    def atomzs(self) -> torch.Tensor:
+        """
+        Returns the tensor containing the atomic number with shape (natoms)
+        """
+        pass
+
+    @abstractmethod
+    def atommasses(self) -> torch.Tensor:
+        """
+        Returns the tensor containing atomic mass with shape (natoms) in atomic unit
+        """
+        pass
+
+    @abstractproperty
     def spin(self) -> ZType:
         """
         Returns the total spin of the system.
@@ -91,5 +112,13 @@ class BaseSystem(xt.EditableModule):
     def numel(self) -> ZType:
         """
         Returns the total number of the electrons in the system.
+        """
+        pass
+
+    @abstractproperty
+    def efield(self) -> Optional[torch.Tensor]:
+        """
+        Returns the external electric field of the system, or None if there is
+        no electric field.
         """
         pass

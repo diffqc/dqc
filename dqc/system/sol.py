@@ -12,6 +12,7 @@ from dqc.system.mol import _parse_moldesc, _parse_basis, _get_nelecs_spin, \
 from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, ZType, BasisInpType, \
                                  SpinParam, DensityFitInfo
 from dqc.utils.safeops import safe_cdist
+from dqc.utils.periodictable import get_atom_mass
 from dqc.hamilton.intor.lattice import Lattice
 from dqc.hamilton.intor.pbcintor import PBCIntOption
 
@@ -210,6 +211,21 @@ class Sol(BaseSystem):
     def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
         pass
 
+    ################### properties ###################
+    @property
+    def atompos(self) -> torch.Tensor:
+        return self._atompos
+
+    @property
+    def atomzs(self) -> torch.Tensor:
+        return self._atomzs
+
+    @property
+    def atommasses(self) -> torch.Tensor:
+        # returns the atomic mass (only for non-isotope for now)
+        return torch.tensor([get_atom_mass(atomz) for atomz in self._atomzs],
+                            dtype=self._dtype, device=self._device)
+
     @property
     def spin(self) -> ZType:
         return self._spin
@@ -221,3 +237,8 @@ class Sol(BaseSystem):
     @property
     def numel(self) -> ZType:
         return self._numel
+
+    @property
+    def efield(self) -> Optional[torch.Tensor]:
+        # solid with external efield has not been implemented
+        return None
