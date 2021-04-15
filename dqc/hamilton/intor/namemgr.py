@@ -1,5 +1,6 @@
 from __future__ import annotations
 from collections import defaultdict
+from typing import Optional, Tuple, List
 import re
 import copy
 from dqc.utils.misc import memoize_method
@@ -16,10 +17,10 @@ class IntorNameManager(object):
     sep_name = ["a", "b"]  # separator of basis (other than the middle operator)
 
     # components shape of raw operator and basis operators
-    rawop_comp = defaultdict(tuple, {
+    rawop_comp = defaultdict(tuple, {  # type: ignore
         "r0": (3,)
     })
-    op_comp = defaultdict(tuple, {
+    op_comp = defaultdict(tuple, {  # type: ignore
         "ip": (3,)
     })
 
@@ -90,7 +91,7 @@ class IntorNameManager(object):
         if op_ndim == 0:
             return None
 
-        ops_flat = sum(self._ops[:ibasis], [])
+        ops_flat: List[str] = sum(self._ops[:ibasis], [])
         new_ndim = sum([self.op_ndim[op] for op in ops_flat])
 
         # check if rawsname should also be included
@@ -102,14 +103,14 @@ class IntorNameManager(object):
 
     def get_intgl_components_shape(self) -> Tuple[int, ...]:
         # returns the component shape of the array of the given integral
-        ops_flat_l = sum(self._ops[:self._imid], [])
-        ops_flat_r = sum(self._ops[self._imid:], [])
+        ops_flat_l: List[str] = sum(self._ops[:self._imid], [])
+        ops_flat_r: List[str] = sum(self._ops[self._imid:], [])
         comp_shape = sum([self.op_comp[op] for op in ops_flat_l], ()) + \
             self.rawop_comp[self._rawop] + \
             sum([self.op_comp[op] for op in ops_flat_r], ())
         return comp_shape
 
-    def get_transpose_path_to(self, other: IntorNameManager) -> Optional[List[int, ...]]:
+    def get_transpose_path_to(self, other: IntorNameManager) -> Optional[List[Tuple[int, int]]]:
         # check if the integration `other` can be achieved by transposing `self`
         # returns None if it cannot.
         # returns the list of two dims if it can for the transpose-path of `self`
@@ -118,7 +119,7 @@ class IntorNameManager(object):
         nbasis = self._nbasis
         # get the transpose paths
         if nbasis == 2:
-            transpose_paths = [
+            transpose_paths: List[List[Tuple[int, int]]] = [
                 [],
                 [(-1, -2)],
             ]
@@ -139,9 +140,9 @@ class IntorNameManager(object):
                 [(-1, -3), (-2, -4), (-3, -4)],
             ]
         else:
-            self._raise_nbasis_error(nbasis)
+            raise self._nbasis_error(nbasis)
 
-        def _swap(p: List[str], path: List[Tuple[int, int]]) -> List[str]:
+        def _swap(p: List[List[str]], path: List[Tuple[int, int]]) -> List[List[str]]:
             # swap the pattern according to the given transpose path
             r = p[:]  # make a copy
             for i0, i1 in path:
@@ -155,7 +156,7 @@ class IntorNameManager(object):
         return None
 
     @classmethod
-    def split_name(cls, int_type: str, shortname: str) -> Tuple[str, List[str]]:
+    def split_name(cls, int_type: str, shortname: str) -> Tuple[str, List[List[str]]]:
         # split the shortname into operator per basis and return the raw shortname as well
         # the first returned element is the raw shortname (i.e. the middle operator)
         # while the second returned element is the list of basis-operator shortname
@@ -185,14 +186,14 @@ class IntorNameManager(object):
             ops_r1, ops_r2 = ops_r.split("b")
             ops_str = [ops_l1, ops_l2, ops_r1, ops_r2]
         else:
-            self._raise_nbasis_error(nbasis)
+            raise cls._nbasis_error(nbasis)
 
         ops = [re.findall(deriv_pattern, op_str) for op_str in ops_str]
         assert len(ops) == nbasis
         return rawsname, ops
 
     @classmethod
-    def join_name(cls, int_type: str, rawsname: str, ops: List[str]) -> str:
+    def join_name(cls, int_type: str, rawsname: str, ops: List[List[str]]) -> str:
         # get the shortname given rawsname and list of basis ops
         nbasis = cls.get_nbasis(int_type)
         ops_str = ["".join(op) for op in ops]
@@ -206,7 +207,7 @@ class IntorNameManager(object):
             return ops_str[0] + cls.sep_name[0] + ops_str[1] + rawsname + ops_str[2] + \
                 cls.sep_name[1] + ops_str[3]
         else:
-            cls._raise_nbasis_error(nbasis)
+            raise cls._nbasis_error(nbasis)
 
     @classmethod
     def get_nbasis(cls, int_type: str) -> int:
@@ -221,5 +222,5 @@ class IntorNameManager(object):
             raise RuntimeError(f"Unknown integral type: {int_type}")
 
     @classmethod
-    def _raise_nbasis_error(cls, nbasis: int):
-        raise RuntimeError(f"Unknown integral with {nbasis} basis")
+    def _nbasis_error(cls, nbasis: int):
+        return RuntimeError(f"Unknown integral with {nbasis} basis")

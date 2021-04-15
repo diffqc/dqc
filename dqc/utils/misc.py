@@ -1,9 +1,11 @@
-from typing import Callable, overload
+from typing import Callable, overload, TypeVar, Any
 import functools
 import torch
 import scipy.special
 
-def memoize_method(fcn: Callable) -> Callable:
+T = TypeVar('T')
+
+def memoize_method(fcn: Callable[[Any], T]) -> Callable[[Any], T]:
     # alternative for lru_cache for memoizing a method without any arguments
     # lru_cache can produce memory leak for a method
     # this can be known by running test_ks_mem.py individually
@@ -11,7 +13,7 @@ def memoize_method(fcn: Callable) -> Callable:
     cachename = "__cch_" + fcn.__name__
 
     @functools.wraps(fcn)
-    def new_fcn(self):
+    def new_fcn(self) -> T:
         if cachename in self.__dict__:
             return self.__dict__[cachename]
         else:

@@ -80,14 +80,14 @@ class BaseSystem(xt.EditableModule):
         """
         pass
 
-    @abstractmethod
+    @abstractproperty
     def atomzs(self) -> torch.Tensor:
         """
         Returns the tensor containing the atomic number with shape (natoms)
         """
         pass
 
-    @abstractmethod
+    @abstractproperty
     def atommasses(self) -> torch.Tensor:
         """
         Returns the tensor containing atomic mass with shape (natoms) in atomic unit

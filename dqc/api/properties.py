@@ -99,6 +99,7 @@ def edipole(qc: BaseQCCalc) -> torch.Tensor:
 
     # check if the electric field requires grad
     _check_differentiability(efield, "electric field", "dipole")
+    assert isinstance(efield, torch.Tensor)
 
     dipole = _jac(ene, efield)
     return dipole
@@ -125,6 +126,7 @@ def equadrupole(qc: BaseQCCalc) -> torch.Tensor:
 
     # check if the electric field requires grad
     _check_differentiability(efield, "electric field", "quadpole")
+    assert isinstance(efield, torch.Tensor)
 
     dipole = _jac(ene, efield, create_graph=True)  # (ndim,)
     quadrupole = _jac(dipole, efield)  # (ndim, ndim)

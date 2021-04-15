@@ -704,7 +704,7 @@ def _get_intgl_optimizer(opname: str,
 ############### name derivation manager functions ###############
 def _get_integrals(int_nmgrs: List[IntorNameManager],
                    wrappers: List[LibcintWrapper],
-                   int_fcn: Callable[[List[LibcintWrapper], str], torch.Tensor],
+                   int_fcn: Callable[[List[LibcintWrapper], IntorNameManager], torch.Tensor],
                    new_axes_pos: List[int]) \
                    -> List[torch.Tensor]:
     # Return the list of tensors of the integrals given by the list of integral names.
