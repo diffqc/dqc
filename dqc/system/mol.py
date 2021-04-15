@@ -252,7 +252,7 @@ class Mol(BaseSystem):
         # returns the atomic mass (only for non-isotope for now)
         if torch.is_floating_point(self._atomzs):
             raise RuntimeError("Atom masses are not available for floating point Z")
-        return torch.tensor([get_atom_mass(atomz) for atomz in self._atomzs],
+        return torch.tensor([get_atom_mass(int(atomz)) for atomz in self._atomzs],
                             dtype=self._dtype, device=self._device)
 
     @property

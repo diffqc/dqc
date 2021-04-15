@@ -223,7 +223,7 @@ class Sol(BaseSystem):
     @property
     def atommasses(self) -> torch.Tensor:
         # returns the atomic mass (only for non-isotope for now)
-        return torch.tensor([get_atom_mass(atomz) for atomz in self._atomzs],
+        return torch.tensor([get_atom_mass(int(atomz)) for atomz in self._atomzs],
                             dtype=self._dtype, device=self._device)
 
     @property
