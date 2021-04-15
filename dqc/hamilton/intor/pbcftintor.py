@@ -132,7 +132,7 @@ class PBCFTIntor(object):
         assert isinstance(lattice, Lattice)
 
         # get the output's component shape
-        comp_shape = _get_intgl_components_shape(shortname)
+        comp_shape = _get_intgl_components_shape(int_type, shortname)
         ncomp = reduce(operator.mul, comp_shape, 1)
 
         # estimate the rcut and the lattice translation vectors

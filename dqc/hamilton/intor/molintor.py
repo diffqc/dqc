@@ -219,6 +219,7 @@ class _Int2cFunction(torch.autograd.Function):
                 natoms = allposs.shape[0]
                 sname_rinv = shortname.replace("nuc", "rinv")
                 sname_derivs = [_get_intgl_deriv_shortname(int_type, sname_rinv, s) for s in ("r1", "r2")]
+                new_axes_pos = [_get_intgl_deriv_new_axis_pos(int_type, sname_rinv, s) for s in ("r1", "r2")]
 
                 for i in range(natoms):
                     atomz = wrappers[0].atombases[i].atomz
@@ -227,7 +228,8 @@ class _Int2cFunction(torch.autograd.Function):
                     int_fcn = lambda wrappers, name: _Int2cFunction.apply(
                         allcoeffs, allalphas, allposs, allposs[i],
                         wrappers, int_type, name)
-                    dout_datposs = _get_integrals(sname_derivs, wrappers, int_type, int_fcn)  # (ndim, ..., nao, nao)
+                    dout_datposs = _get_integrals(sname_derivs, wrappers, int_type,
+                                                  int_fcn, new_axes_pos)  # (ndim, ..., nao, nao)
 
                     grad_datpos = grad_out * (dout_datposs[0] + dout_datposs[1])
                     grad_datpos = grad_datpos.reshape(grad_datpos.shape[0], -1).sum(dim=-1)
@@ -350,9 +352,11 @@ class _Int3cFunction(torch.autograd.Function):
 
             sname_derivs = [_get_intgl_deriv_shortname(int_type, shortname, sname)
                             for sname in ("ra1", "ra2", "rb")]
+            new_axes_pos = [_get_intgl_deriv_new_axis_pos(int_type, shortname, sname)
+                            for sname in ("ra1", "ra2", "rb")]
             int_fcn = lambda wrappers, name: _Int3cFunction.apply(
                 *ctx.saved_tensors, wrappers, int_type, name)
-            dout_dposs = _get_integrals(sname_derivs, wrappers, int_type, int_fcn)
+            dout_dposs = _get_integrals(sname_derivs, wrappers, int_type, int_fcn, new_axes_pos)
 
             # negative because the integral calculates the nabla w.r.t. the
             # spatial coordinate, not the basis central position
@@ -472,9 +476,11 @@ class _Int4cFunction(torch.autograd.Function):
 
             sname_derivs = [_get_intgl_deriv_shortname(int_type, shortname, sname)
                             for sname in ("ra1", "ra2", "rb1", "rb2")]
+            new_axes_pos = [_get_intgl_deriv_new_axis_pos(int_type, shortname, sname)
+                            for sname in ("ra1", "ra2", "rb1", "rb2")]
             int_fcn = lambda wrappers, name: _Int4cFunction.apply(
                 *ctx.saved_tensors, wrappers, int_type, name)
-            dout_dposs = _get_integrals(sname_derivs, wrappers, int_type, int_fcn)
+            dout_dposs = _get_integrals(sname_derivs, wrappers, int_type, int_fcn, new_axes_pos)
 
             # negative because the integral calculates the nabla w.r.t. the
             # spatial coordinate, not the basis central position
@@ -598,7 +604,7 @@ class Intor(object):
         self.optimizer = _get_intgl_optimizer(opname, self.atm, self.bas, self.env)
 
         # prepare the output
-        comp_shape = _get_intgl_components_shape(shortname)
+        comp_shape = _get_intgl_components_shape(int_type, shortname)
         self.outshape = comp_shape + tuple(w.nao() for w in wrappers)
         self.ncomp = reduce(operator.mul, comp_shape, 1)
         self.shls_slice = sum((w.shell_idxs for w in wrappers), ())
@@ -703,20 +709,67 @@ def _get_intgl_optimizer(opname: str,
     opt = ctypes.cast(cintopt, _cintoptHandler)
     return opt
 
-def _get_intgl_components_shape(shortname: str) -> Tuple[int, ...]:
+def _get_intgl_components_shape(int_type: str, shortname: str) -> Tuple[int, ...]:
     # returns the component shape of the array of the given integral
 
-    # calculate the occurence of a pattern in string s
-    re_pattern = r"({pattern})".format(pattern="ip")
-    n_ip = len(re.findall(re_pattern, shortname))
+    # # calculate the occurence of a pattern in string s
+    # re_pattern = r"({pattern})".format(pattern="ip")
+    # n_ip = len(re.findall(re_pattern, shortname))
 
-    # get raw shortname (without "ip" and "rr")
-    rawsname = shortname.replace("ip", "").replace("rr", "")
-    if rawsname == "r0":
-        n_ip += 1
+    # get raw shortname (without "ip" and "rr") and split the derivative operators
+    rawsname, ops = _split_shortname(int_type, shortname)
+    n_ip = sum([_get_ndim_from_op(op) for op in ops])
+    n_ip += _get_ndim_from_rawsname(rawsname)
 
     comp_shape = (NDIM, ) * n_ip
     return comp_shape
+
+def _get_ndim_from_op(ops: List[str]) -> int:
+    # get the number of new dimensions added by the operators
+    return ops.count("ip")
+
+def _get_ndim_from_rawsname(rawsname: str) -> int:
+    # get the number of new dimensions added by the raw operator
+    if rawsname == "r0":
+        return 1
+    return 0
+
+
+def _split_shortname(int_type: str, shortname: str) -> Tuple[str, List[str]]:
+    # split the shortname into operator per basis and return the raw shortname as well
+
+    deriv_ops = _get_deriv_ops()
+    deriv_pattern = re.compile("(" + ("|".join(deriv_ops)) + ")")
+
+    # get the raw shortname (i.e. shortname without derivative operators)
+    rawsname = shortname
+    for op in deriv_ops:
+        rawsname = rawsname.replace(op, "")
+
+    if int_type == "int1e" or int_type == "int2c2e":
+        ops_str = shortname.split(rawsname)
+    elif int_type == "int3c2e":
+        assert rawsname.startswith("a"), rawsname
+        rawsname = rawsname[1:]
+        ops_l, ops_r = shortname.split(rawsname)
+        ops_l1, ops_l2 = ops_l.split("a")
+        ops_str = [ops_l1, ops_l2, ops_r]
+    elif int_type == "int2e":
+        assert rawsname.startswith("a") and rawsname.endswith("b"), rawsname
+        rawsname = rawsname[1:-1]
+        ops_l, ops_r = shortname.split(rawsname)
+        ops_l1, ops_l2 = ops_l.split("a")
+        ops_r1, ops_r2 = ops_r.split("b")
+        ops_str = [ops_l1, ops_l2, ops_r1, ops_r2]
+    else:
+        raise RuntimeError("Unknown integral type: %s" % int_type)
+
+    ops = [re.findall(deriv_pattern, op_str) for op_str in ops_str]
+    return rawsname, ops
+
+def _get_deriv_ops() -> List[str]:
+    # return the name of derivative operations used in this file
+    return ["ip", "rr"]
 
 ############### name derivation manager functions ###############
 def _get_intgl_deriv_shortname(int_type: str, shortname: str, derivmode: str) -> str:
@@ -780,19 +833,23 @@ def _get_intgl_deriv_new_axis_pos(int_type: str, shortname: str, derivmode: str)
         elif derivmode == "r2":
             return -3  # the last 2 axes are for naos
     elif int_type == "int3c2e":
+        rawsname, ops = _split_shortname(int_type, shortname)
+        assert len(ops) == 3
         if derivmode == "ra1":
             return 0
         elif derivmode == "ra2":
-            raise NotImplementedError(not_impl_msg)
+            return sum([_get_ndim_from_op(op) for op in ops[:1]])
         elif derivmode == "rb":
             return -4  # the last 3 axes are for naos
     elif int_type == "int2e":
+        rawsname, ops = _split_shortname(int_type, shortname)
+        assert len(ops) == 4
         if derivmode == "ra1":
             return 0
         elif derivmode == "ra2":
-            raise NotImplementedError(not_impl_msg)
+            return sum([_get_ndim_from_op(op) for op in ops[:1]])
         elif derivmode == "rb1":
-            raise NotImplementedError(not_impl_msg)
+            return sum([_get_ndim_from_op(op) for op in ops[:2]]) + _get_ndim_from_rawsname(rawsname)
         elif derivmode == "rb2":
             return -5  # the last 4 axes are for naos
 
