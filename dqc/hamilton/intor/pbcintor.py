@@ -13,9 +13,8 @@ from dqc.hamilton.intor.utils import np2ctypes, int2ctypes, CPBC, CGTO, NDIM, \
 from dqc.utils.types import get_complex_dtype
 from dqc.utils.pbc import estimate_ovlp_rcut
 from dqc.hamilton.intor.lattice import Lattice
-from dqc.hamilton.intor.molintor import _check_and_set, _get_intgl_name, \
-                                        _get_intgl_components_shape, \
-                                        _get_intgl_optimizer
+from dqc.hamilton.intor.molintor import _check_and_set, _get_intgl_optimizer
+from dqc.hamilton.intor.namemgr import IntorNameManager
 
 __all__ = ["PBCIntOption", "pbc_int1e", "pbc_int3c2e",
            "pbc_overlap", "pbc_kinetic", "pbc_coul2c", "pbc_coul3c"]
@@ -83,7 +82,7 @@ def pbc_int1e(shortname: str, wrapper: LibcintWrapper,
         *wrapper.lattice.params,
         kpts1,
         [wrapper, other1],
-        "int1e", shortname, options1)
+        IntorNameManager("int1e", shortname), options1)
 
 def pbc_int2c2e(shortname: str, wrapper: LibcintWrapper,
                 other: Optional[LibcintWrapper] = None,
@@ -132,7 +131,7 @@ def pbc_int2c2e(shortname: str, wrapper: LibcintWrapper,
         *wrapper.lattice.params,
         kpts1,
         [wrapper, other1],
-        "int2c2e", shortname, options1)
+        IntorNameManager("int2c2e", shortname), options1)
 
 def pbc_int3c2e(shortname: str, wrapper: LibcintWrapper,
                 other1: Optional[LibcintWrapper] = None,
@@ -195,7 +194,7 @@ def pbc_int3c2e(shortname: str, wrapper: LibcintWrapper,
         *wrapper.lattice.params,
         kpts_ij1,
         [wrapper, other1w, other2w],
-        "int3c2e", shortname, options1)
+        IntorNameManager("int3c2e", shortname), options1)
 
 # shortcuts
 def pbc_overlap(wrapper: LibcintWrapper, other: Optional[LibcintWrapper] = None,
@@ -232,15 +231,15 @@ class _PBCInt2cFunction(torch.autograd.Function):
                 alattice: torch.Tensor,
                 # other parameters
                 kpts: torch.Tensor,
-                wrappers: List[LibcintWrapper], int_type: str, shortname: str,
+                wrappers: List[LibcintWrapper], int_nmgr: IntorNameManager,
                 options: PBCIntOption) -> torch.Tensor:
         # allcoeffs: (ngauss_tot,)
         # allalphas: (ngauss_tot,)
         # allposs: (natom, ndim)
 
-        out_tensor = PBCIntor(int_type, shortname, wrappers, kpts, options).calc()
+        out_tensor = PBCIntor(int_nmgr, wrappers, kpts, options).calc()
         ctx.save_for_backward(allcoeffs, allalphas, allposs, alattice, kpts)
-        ctx.other_info = (wrappers, int_type, shortname, options)
+        ctx.other_info = (wrappers, int_nmgr, options)
         return out_tensor
 
     @staticmethod
@@ -257,16 +256,16 @@ class _PBCInt3cFunction(torch.autograd.Function):
                 alattice: torch.Tensor,
                 # other parameters
                 kpts_ij: torch.Tensor,
-                wrappers: List[LibcintWrapper], int_type: str, shortname: str,
+                wrappers: List[LibcintWrapper], int_nmgr: IntorNameManager,
                 options: PBCIntOption) -> torch.Tensor:
         # allcoeffs: (ngauss_tot,)
         # allalphas: (ngauss_tot,)
         # allposs: (natom, ndim)
         # kpts_ij: (nkpts, 2, ndim)
 
-        out_tensor = PBCIntor(int_type, shortname, wrappers, kpts_ij, options).calc()
+        out_tensor = PBCIntor(int_nmgr, wrappers, kpts_ij, options).calc()
         ctx.save_for_backward(allcoeffs, allalphas, allposs, alattice, kpts_ij)
-        ctx.other_info = (wrappers, int_type, shortname, options)
+        ctx.other_info = (wrappers, int_nmgr, options)
         return out_tensor
 
     @staticmethod
@@ -275,7 +274,7 @@ class _PBCInt3cFunction(torch.autograd.Function):
 
 ################# integrator object (direct interface to lib*) #################
 class PBCIntor(object):
-    def __init__(self, int_type: str, shortname: str, wrappers: List[LibcintWrapper],
+    def __init__(self, int_nmgr: IntorNameManager, wrappers: List[LibcintWrapper],
                  kpts_inp: torch.Tensor, options: PBCIntOption):
         # This is a class for once integration only
         # I made a class for refactoring reason because the integrals share
@@ -285,12 +284,12 @@ class PBCIntor(object):
         assert len(wrappers) > 0
         wrapper0 = wrappers[0]
         kpts_inp_np = kpts_inp.detach().numpy()  # (nk, ndim)
-        opname = _get_intgl_name(int_type, shortname, wrapper0.spherical)
+        opname = int_nmgr.get_intgl_name(wrapper0.spherical)
         lattice = wrapper0.lattice
         assert isinstance(lattice, Lattice)
 
         # get the output's component shape
-        comp_shape = _get_intgl_components_shape(int_type, shortname)
+        comp_shape = int_nmgr.get_intgl_components_shape()
         ncomp = reduce(operator.mul, comp_shape, 1)
 
         # estimate the rcut and the lattice translation vectors
@@ -298,10 +297,9 @@ class PBCIntor(object):
         rcut = estimate_ovlp_rcut(options.precision, coeffs, alphas)
         ls = np.asarray(lattice.get_lattice_ls(rcut=rcut))
 
-        self.int_type = int_type
+        self.int_type = int_nmgr.int_type
         self.wrappers = wrappers
         self.kpts_inp_np = kpts_inp_np
-        self.shortname = shortname
         self.opname = opname
         self.dtype = wrapper0.dtype
         self.device = wrapper0.device

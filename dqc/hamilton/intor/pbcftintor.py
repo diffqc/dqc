@@ -14,7 +14,7 @@ from dqc.hamilton.intor.pbcintor import PBCIntOption, _check_and_set_pbc, \
 from dqc.utils.types import get_complex_dtype
 from dqc.utils.pbc import estimate_ovlp_rcut
 from dqc.hamilton.intor.lattice import Lattice
-from dqc.hamilton.intor.molintor import _get_intgl_components_shape
+from dqc.hamilton.intor.namemgr import IntorNameManager
 
 __all__ = ["pbcft_int1e", "pbcft_overlap"]
 
@@ -76,7 +76,7 @@ def pbcft_int1e(shortname: str, wrapper: LibcintWrapper,
         Gvgrid1,
         kpts1,
         [wrapper, other1],
-        "int1e", shortname, options1)
+        IntorNameManager("int1e", shortname), options1)
 
 # shortcuts
 def pbcft_overlap(wrapper: LibcintWrapper,
@@ -99,15 +99,15 @@ class _PBCInt2cFTFunction(torch.autograd.Function):
                 Gvgrid: torch.Tensor,
                 kpts: torch.Tensor,
                 # non-tensor parameters
-                wrappers: List[LibcintWrapper], int_type: str, shortname: str,
+                wrappers: List[LibcintWrapper], int_nmgr: IntorNameManager,
                 options: PBCIntOption) -> torch.Tensor:
         # allcoeffs: (ngauss_tot,)
         # allalphas: (ngauss_tot,)
         # allposs: (natom, ndim)
 
-        out_tensor = PBCFTIntor(int_type, shortname, wrappers, Gvgrid, kpts, options).calc()
+        out_tensor = PBCFTIntor(int_nmgr, wrappers, Gvgrid, kpts, options).calc()
         ctx.save_for_backward(allcoeffs, allalphas, allposs, alattice, Gvgrid, kpts)
-        ctx.other_info = (wrappers, int_type, shortname, options)
+        ctx.other_info = (wrappers, int_nmgr, options)
         return out_tensor
 
     @staticmethod
@@ -116,7 +116,7 @@ class _PBCInt2cFTFunction(torch.autograd.Function):
 
 ################# integrator object (direct interface to lib*) #################
 class PBCFTIntor(object):
-    def __init__(self, int_type: str, shortname: str, wrappers: List[LibcintWrapper],
+    def __init__(self, int_nmgr: IntorNameManager, wrappers: List[LibcintWrapper],
                  Gvgrid_inp: torch.Tensor, kpts_inp: torch.Tensor, options: PBCIntOption):
         # This is a class for once integration only
         # I made a class for refactoring reason because the integrals share
@@ -127,12 +127,12 @@ class PBCFTIntor(object):
         wrapper0 = wrappers[0]
         kpts_inp_np = kpts_inp.detach().numpy()  # (nk, ndim)
         GvT = np.asarray(Gvgrid_inp.detach().numpy().T, order="C")  # (ng, ndim)
-        opname = _get_ft_intgl_name(int_type, shortname, wrapper0.spherical)
+        opname = int_nmgr.get_ft_intgl_name(wrapper0.spherical)
         lattice = wrapper0.lattice
         assert isinstance(lattice, Lattice)
 
         # get the output's component shape
-        comp_shape = _get_intgl_components_shape(int_type, shortname)
+        comp_shape = int_nmgr.get_intgl_components_shape()
         ncomp = reduce(operator.mul, comp_shape, 1)
 
         # estimate the rcut and the lattice translation vectors
@@ -140,11 +140,10 @@ class PBCFTIntor(object):
         rcut = estimate_ovlp_rcut(options.precision, coeffs, alphas)
         ls = np.asarray(lattice.get_lattice_ls(rcut=rcut))
 
-        self.int_type = int_type
+        self.int_type = int_nmgr.int_type
         self.wrappers = wrappers
         self.GvT = GvT
         self.kpts_inp_np = kpts_inp_np
-        self.shortname = shortname
         self.opname = opname
         self.dtype = wrapper0.dtype
         self.device = wrapper0.device
@@ -222,11 +221,3 @@ class PBCFTIntor(object):
         out_tensor = torch.as_tensor(out, dtype=get_complex_dtype(self.dtype),
                                      device=self.device)
         return out_tensor
-
-def _get_ft_intgl_name(int_type: str, shortname: str, spherical: bool) -> str:
-    # convert the shortname into full name of the integral in libcint
-    cartsph = "sph" if spherical else "cart"
-    if int_type == "int1e":
-        return "GTO_ft_%s_%s" % (shortname, cartsph)
-    else:
-        raise NotImplementedError("Unimplemented FT integral for %s" % int_type)
