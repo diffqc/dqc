@@ -175,6 +175,8 @@ class Mol(BaseSystem):
         on a file.
         If the file exists, then the parameters will not be recomputed, but just
         loaded from the cache instead.
+        Cache is usually used for repeated calculations where the cached parameters
+        are not changed (e.g. running multiple systems with slightly different environment.)
 
         Arguments
         ---------

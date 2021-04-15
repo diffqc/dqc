@@ -1,6 +1,7 @@
 from __future__ import annotations
 import contextlib
-from typing import Optional, List, Callable
+from typing import Optional, List, Callable, Dict, Any
+import warnings
 import torch
 import numpy as np
 import h5py
@@ -19,7 +20,7 @@ class Cache(object):
 
     def cache(self, pname: str, fcn: Callable[[], torch.Tensor]) -> torch.Tensor:
         # if not has been set, then just calculate and return
-        if not self._isset():
+        if not self.isset():
             return fcn()
 
         # if the param is not to be cached, then just calculate and return
@@ -66,6 +67,43 @@ class Cache(object):
         # return the cacheable parameter names
         return self._cacheable_pnames
 
+    def check_signature(self, sig_dict: Dict[str, Any], _groupname: Optional[str] = "/"):
+        # Executed while the file is opened, if there is no signature, then add
+        # the signature, if there is a signature in the file, then match it.
+        # If they do not match, print a warning, otherwise, do nothing
+        # _groupname is internal parameter within this class, should not be
+        # specified by classes other than Cache and its inheritances.
+
+        if not self.isset():
+            return
+
+        fh = self._get_file_handler()
+        sig_attrname = "signature"
+
+        # get the group
+        if _groupname in fh:
+            group = fh[_groupname]
+        else:
+            group = fh.create_group(_groupname)
+
+        # create the signature string
+        sig_str = "\n\n".join(["%s:\n%s" % (k, str(v)) for (k, v) in sig_dict.items()])
+
+        # if the signature does not exist, then write the signature as an attribute
+        if sig_attrname not in group.attrs:
+            group.attrs[sig_attrname] = str(sig_str)
+
+        # if the signature exist, then check it, if it does not match, raise a warning
+        else:
+            cached_sig = str(group.attrs[sig_attrname])
+            if cached_sig != sig_str:
+                msg = ("Mismatch of the cached signature.\nCached signature:\n%s\n"
+                       "-----------------------\n"
+                       "Current signature:\n%s" % (cached_sig, sig_str))
+                warnings.warn(msg)
+
+        group.attrs["signature"] = str(sig_str)
+
     @staticmethod
     def get_dummy() -> Cache:
         # returns a dummy cache that does not do anything
@@ -87,7 +125,7 @@ class Cache(object):
         else:
             return self._fhandler
 
-    def _isset(self) -> bool:
+    def isset(self) -> bool:
         # returns the indicator whether the cache object has been set
         return self._fname is not None
 
@@ -116,11 +154,11 @@ class _PrefixedCache(Cache):
 
     @contextlib.contextmanager
     def open(self):
-        try:
-            with self._obj.open() as f:
+        with self._obj.open() as f:
+            try:
                 yield f
-        finally:
-            pass
+            finally:
+                pass
 
     def add_prefix(self, prefix: str) -> Cache:
         # return a deeper prefixed object
@@ -136,6 +174,20 @@ class _PrefixedCache(Cache):
         # this can only be done on the root cache (non-prefixed) to avoid
         # confusion about which name should be provided (absolute or relative)
         raise RuntimeError("Cache.get_cacheable_params() must be done on non-prefixed cache")
+
+    def check_signature(self, sig_dict: Dict[str, Any], _groupname: Optional[str] = "/"):
+        # use the prefix as the groupname to do signature check of the root object
+        if not self.isset():
+            return
+
+        groupname = "/" + self._prefix.replace(".", "/")
+        if groupname.endswith("/"):
+            groupname = groupname[:-1]
+
+        self._obj.check_signature(sig_dict, _groupname=groupname)
+
+    def isset(self) -> bool:
+        return self._obj.isset()
 
     def _prefixed(self, pname: str) -> str:
         # returns the prefixed name
@@ -168,6 +220,12 @@ class _DummyCache(Cache):
 
     def get_cacheable_params(self) -> List[str]:
         return []
+
+    def check_signature(self, sig_dict: Dict[str, Any], _groupname: Optional[str] = "/"):
+        pass
+
+    def isset(self):
+        return False
 
 def _normalize_prefix(prefix: str) -> str:
     # added a dot at the end of prefix if it is not so

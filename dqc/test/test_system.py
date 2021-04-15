@@ -96,13 +96,14 @@ def test_mol_cache():
     olp = h.get_overlap().fullmatrix()
     assert torch.allclose(olp, olp_cache)
 
-    # try again with different atom, if cache is set, then it should be same
+    # Try again with different atom, if cache is set, then it should be same
     # as previous (although it is a wrong result)
-    # TODO: raise a warning if mol properties do not match
-    moldesc1 = "Li 0 0 0"
-    mol1 = Mol(moldesc1, basis="3-21G").set_cache(cache_fname)
-    h1 = mol1.get_hamiltonian()
-    h1.build()
+    # It must raise a warning for different system
+    with pytest.warns(UserWarning, match=r"Mismatch [ \w]*cached signature[ \w]*"):
+        moldesc1 = "Li 0 0 0"
+        mol1 = Mol(moldesc1, basis="3-21G").set_cache(cache_fname, ["hamilton.overlap"])
+        h1 = mol1.get_hamiltonian()
+        h1.build()
 
     # remove the cache
     if os.path.exists(cache_fname):

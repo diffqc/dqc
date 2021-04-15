@@ -20,6 +20,7 @@ class HamiltonCGTO(BaseHamilton):
         self.libcint_wrapper = intor.LibcintWrapper(atombases, spherical)
         self.dtype = self.libcint_wrapper.dtype
         self.device = self.libcint_wrapper.device
+        self._dfoptions = df
         if df is None:
             self._df: Optional[DFMol] = None
         else:
@@ -59,6 +60,13 @@ class HamiltonCGTO(BaseHamilton):
         # get the matrices (all (nao, nao), except el_mat)
         # these matrices have already been normalized
         with self._cache.open():
+
+            # check the signature
+            self._cache.check_signature({
+                "atombases": self.atombases,
+                "spherical": self.spherical,
+                "dfoptions": self._dfoptions,
+            })
 
             self.olp_mat = self._cache.cache("overlap", lambda: intor.overlap(self.libcint_wrapper))
             kin_mat = self._cache.cache("kinetic", lambda: intor.kinetic(self.libcint_wrapper))
