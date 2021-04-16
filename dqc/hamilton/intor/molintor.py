@@ -732,6 +732,8 @@ def _get_integrals(int_nmgrs: List[IntorNameManager],
                 twrappers = _swap_list(wrappers, transpose_path)
                 if twrappers == wrappers:
                     res_i = _transpose(res[j], transpose_path)
+                    permute_path = int_nmgrs[j].get_comp_permute_path(transpose_path)
+                    res_i = res_i.permute(*permute_path)
                     break
 
                 # otherwise, use the swapped integral with the swapped wrappers,
@@ -740,6 +742,8 @@ def _get_integrals(int_nmgrs: List[IntorNameManager],
                 elif int_avail[j]:
                     res_i = int_fcn(twrappers, int_nmgrs[j])
                     res_i = _transpose(res_i, transpose_path)
+                    permute_path = int_nmgrs[j].get_comp_permute_path(transpose_path)
+                    res_i = res_i.permute(*permute_path)
                     break
 
                 # if the integral is not available, then continue the searching
@@ -757,12 +761,13 @@ def _get_integrals(int_nmgrs: List[IntorNameManager],
 
             int_avail[i] = True
 
-        # move the new axes (if any) to dimension 0
-        assert res_i is not None
-        if new_axes_pos[i] is not None:
-            res_i = torch.movedim(res_i, new_axes_pos[i], 0)
-
         res.append(res_i)
+
+    # move the new axes (if any) to dimension 0
+    assert res_i is not None
+    for i in range(len(res)):
+        if new_axes_pos[i] is not None:
+            res[i] = torch.movedim(res[i], new_axes_pos[i], 0)
 
     return res
 

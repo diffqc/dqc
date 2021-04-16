@@ -18,7 +18,7 @@ def h2o_qc():
     efield = torch.zeros(3, dtype=dtype).requires_grad_()
 
     mol = Mol(moldesc=(atomzs, atomposs), basis="3-21G", dtype=dtype, efield=efield)
-    qc = KS(mol, xc="lda_x").run()
+    qc = KS(mol, xc="lda_x+lda_c_pw").run()
     return qc
 
 def test_hess(h2o_qc):
@@ -28,6 +28,6 @@ def test_hess(h2o_qc):
 
 def atest_vibration(h2o_qc):
     freq, normcoord = vibration(h2o_qc)
-    print(freq)
+    print(freq / 2.4188843265857e-17 / 3e8 / 1e2)
     print(normcoord)
     raise RuntimeError

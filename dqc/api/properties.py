@@ -72,8 +72,8 @@ def vibration(qc: BaseQCCalc) -> Tuple[torch.Tensor, torch.Tensor]:
     freq = eival ** 0.5
 
     # reverse the sorting to make it sorted from largest to smallest
-    freq = freq[::-1]
-    eivec = eivec[:, ::-1]
+    freq = torch.flip(freq, dims=(-1,))
+    eivec = torch.flip(eivec, dims=(-1,))
     return freq, eivec
 
 @memoize_method
