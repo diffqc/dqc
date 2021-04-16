@@ -59,7 +59,7 @@ periodic_table_atomz = {
     "Xe": 54,
 }
 
-atom_masses = {  # atom masses in a.u.
+atom_masses = {  # isotope-averaged atom masses in a.m.u.
     # from https://www.angelo.edu/faculty/kboudrea/periodic/structure_mass.htm
     1: 1.00797,
     2: 4.00260,
@@ -129,4 +129,4 @@ def get_atomz(elmt: Union[str, ZType]) -> ZType:
 
 def get_atom_mass(atomz: int) -> float:
     # returns the atomic mass in atomic unit
-    return atom_masses[atomz]
+    return atom_masses[atomz] * 1822.888486209
