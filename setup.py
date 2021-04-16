@@ -28,7 +28,7 @@ setup(
         "basis_set_exchange",
         "h5py>=3.1.0",
         "xitorch>=0.2.0",
-        "pytorch>=1.7.1",  # ideally the nightly build (1.8.0), but we will just have 1.7.1 for the moment
+        "torch>=1.7.1",  # ideally the nightly build (1.8.0), but we will just have 1.7.1 for the moment
     ],
     classifiers=[
         "Development Status :: 3 - Alpha",
