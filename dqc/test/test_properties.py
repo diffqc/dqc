@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 import pytest
 from dqc.api.properties import hessian_pos, vibration, edipole, equadrupole
 from dqc.system.mol import Mol
@@ -28,6 +29,6 @@ def test_hess(h2o_qc):
 
 def atest_vibration(h2o_qc):
     freq, normcoord = vibration(h2o_qc)
-    print(freq / 2.4188843265857e-17 / 3e8 / 1e2)
+    print(freq / 2.4188843265857e-17 / 2.99792458e8 / 1e2)
     print(normcoord)
     raise RuntimeError

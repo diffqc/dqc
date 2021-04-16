@@ -1,5 +1,6 @@
 from typing import Tuple, Optional, Any
 import torch
+import numpy as np
 import xitorch as xt
 import xitorch.linalg
 from dqc.qccalc.base_qccalc import BaseQCCalc
@@ -65,11 +66,11 @@ def vibration(qc: BaseQCCalc) -> Tuple[torch.Tensor, torch.Tensor]:
     # eival: (natoms * ndim)
     # eivec: (natoms * ndim, natoms * ndim)
     # eival and eivec are automatically sorted from smallest eival to the largest
-    hess = hess + hess.transpose(-2, -1).conj()
+    hess = (hess + hess.transpose(-2, -1).conj()) * 0.5
     Alinop = xt.LinearOperator.m(hess, is_hermitian=True)
     Mlinop = xt.LinearOperator.m(mass_mat, is_hermitian=True)
     eival, eivec = xt.linalg.symeig(A=Alinop, M=Mlinop)
-    freq = eival ** 0.5
+    freq = eival ** 0.5 / (2 * np.pi)
 
     # reverse the sorting to make it sorted from largest to smallest
     freq = torch.flip(freq, dims=(-1,))
