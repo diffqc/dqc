@@ -21,7 +21,7 @@ __all__ = ["pbcft_int1e", "pbcft_overlap"]
 # Fourier transform integrals
 def pbcft_int1e(shortname: str, wrapper: LibcintWrapper,
                 other: Optional[LibcintWrapper] = None,
-                Gvgrid: Optional[torch.Tensor] = None,
+                gvgrid: Optional[torch.Tensor] = None,
                 kpts: Optional[torch.Tensor] = None,
                 options: Optional[PBCIntOption] = None):
     r"""
@@ -43,7 +43,7 @@ def pbcft_int1e(shortname: str, wrapper: LibcintWrapper,
         Another environment wrapper containing the basis. This environment
         must have the same complete environment as `wrapper` (e.g. `other` can be
         a subset of `wrapper`). If unspecified, then `other = wrapper`.
-    Gvgrid: Optional[torch.Tensor]
+    gvgrid: Optional[torch.Tensor]
         The reciprocal coordinate of $\mathbf{G}$ with shape `(nggrid, ndim)`.
         If unspecified, then it is assumed to be all zeros.
     kpts: Optional[torch.Tensor]
@@ -67,13 +67,13 @@ def pbcft_int1e(shortname: str, wrapper: LibcintWrapper,
     other1 = _check_and_set_pbc(wrapper, other)
     options1 = _get_default_options(options)
     kpts1 = _get_default_kpts(kpts, dtype=wrapper.dtype, device=wrapper.device)
-    Gvgrid1 = _get_default_kpts(Gvgrid, dtype=wrapper.dtype, device=wrapper.device)
+    gvgrid1 = _get_default_kpts(gvgrid, dtype=wrapper.dtype, device=wrapper.device)
 
     assert isinstance(wrapper.lattice, Lattice)  # check if wrapper has a lattice
     return _PBCInt2cFTFunction.apply(
         *wrapper.params,
         *wrapper.lattice.params,
-        Gvgrid1,
+        gvgrid1,
         kpts1,
         [wrapper, other1],
         IntorNameManager("int1e", shortname), options1)
@@ -81,10 +81,10 @@ def pbcft_int1e(shortname: str, wrapper: LibcintWrapper,
 # shortcuts
 def pbcft_overlap(wrapper: LibcintWrapper,
                   other: Optional[LibcintWrapper] = None,
-                  Gvgrid: Optional[torch.Tensor] = None,
+                  gvgrid: Optional[torch.Tensor] = None,
                   kpts: Optional[torch.Tensor] = None,
                   options: Optional[PBCIntOption] = None):
-    return pbcft_int1e("ovlp", wrapper, other, Gvgrid, kpts, options)
+    return pbcft_int1e("ovlp", wrapper, other, gvgrid, kpts, options)
 
 ################# torch autograd function wrappers #################
 class _PBCInt2cFTFunction(torch.autograd.Function):
@@ -96,7 +96,7 @@ class _PBCInt2cFTFunction(torch.autograd.Function):
                 # lattice params
                 alattice: torch.Tensor,
                 # other parameters
-                Gvgrid: torch.Tensor,
+                gvgrid: torch.Tensor,
                 kpts: torch.Tensor,
                 # non-tensor parameters
                 wrappers: List[LibcintWrapper], int_nmgr: IntorNameManager,
@@ -105,8 +105,8 @@ class _PBCInt2cFTFunction(torch.autograd.Function):
         # allalphas: (ngauss_tot,)
         # allposs: (natom, ndim)
 
-        out_tensor = PBCFTIntor(int_nmgr, wrappers, Gvgrid, kpts, options).calc()
-        ctx.save_for_backward(allcoeffs, allalphas, allposs, alattice, Gvgrid, kpts)
+        out_tensor = PBCFTIntor(int_nmgr, wrappers, gvgrid, kpts, options).calc()
+        ctx.save_for_backward(allcoeffs, allalphas, allposs, alattice, gvgrid, kpts)
         ctx.other_info = (wrappers, int_nmgr, options)
         return out_tensor
 
@@ -117,7 +117,7 @@ class _PBCInt2cFTFunction(torch.autograd.Function):
 ################# integrator object (direct interface to lib*) #################
 class PBCFTIntor(object):
     def __init__(self, int_nmgr: IntorNameManager, wrappers: List[LibcintWrapper],
-                 Gvgrid_inp: torch.Tensor, kpts_inp: torch.Tensor, options: PBCIntOption):
+                 gvgrid_inp: torch.Tensor, kpts_inp: torch.Tensor, options: PBCIntOption):
         # This is a class for once integration only
         # I made a class for refactoring reason because the integrals share
         # some parameters
@@ -126,7 +126,7 @@ class PBCFTIntor(object):
         assert len(wrappers) > 0
         wrapper0 = wrappers[0]
         kpts_inp_np = kpts_inp.detach().numpy()  # (nk, ndim)
-        GvT = np.asarray(Gvgrid_inp.detach().numpy().T, order="C")  # (ng, ndim)
+        GvT = np.asarray(gvgrid_inp.detach().numpy().T, order="C")  # (ng, ndim)
         opname = int_nmgr.get_ft_intgl_name(wrapper0.spherical)
         lattice = wrapper0.lattice
         assert isinstance(lattice, Lattice)

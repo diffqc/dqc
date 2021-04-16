@@ -3,7 +3,6 @@ from collections import defaultdict
 from typing import Optional, Tuple, List
 import re
 import copy
-from dqc.utils.misc import memoize_method
 
 # name manager of the integrals
 

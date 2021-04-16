@@ -736,8 +736,8 @@ def test_pbc_ft_integral_1e(int_type):
         [0.2, 0.1, 0.3],
     ], dtype=dtype)
     ngrid = 3
-    Gvgrid = torch.zeros(ngrid, 3, dtype=dtype)  # (ngrid, ndim)
-    Gvgrid[:, 0] = torch.linspace(-5, 5, ngrid, dtype=dtype)
+    gvgrid = torch.zeros(ngrid, 3, dtype=dtype)  # (ngrid, ndim)
+    gvgrid[:, 0] = torch.linspace(-5, 5, ngrid, dtype=dtype)
 
     if int_type == "overlap":
         opft = intor.pbcft_overlap
@@ -746,7 +746,7 @@ def test_pbc_ft_integral_1e(int_type):
         raise RuntimeError("Unknown int_type: %s" % int_type)
 
     # check the shape of the integral
-    mat_ft = opft(env, kpts=kpts, Gvgrid=Gvgrid)
+    mat_ft = opft(env, kpts=kpts, gvgrid=gvgrid)
     assert mat_ft.shape[0] == kpts.shape[0]
     assert mat_ft.shape[-1] == ngrid
     assert mat_ft.shape[-2] == env.nao()
@@ -754,13 +754,13 @@ def test_pbc_ft_integral_1e(int_type):
 
     # check the subset
     env1 = env[: len(env) // 2]
-    mat_ft1 = opft(env, other=env1, kpts=kpts, Gvgrid=Gvgrid)
-    mat_ft2 = opft(env1, other=env1, kpts=kpts, Gvgrid=Gvgrid)
+    mat_ft1 = opft(env, other=env1, kpts=kpts, gvgrid=gvgrid)
+    mat_ft2 = opft(env1, other=env1, kpts=kpts, gvgrid=gvgrid)
     nenv1 = env1.nao()
     assert torch.allclose(mat_ft[:, :, :nenv1], mat_ft1)
     assert torch.allclose(mat_ft[:, :nenv1, :nenv1], mat_ft2)
 
-    # check if the results are equal if Gvgrid is all zeros (i.e. ignored)
+    # check if the results are equal if gvgrid is all zeros (i.e. ignored)
     mat0ft = opft(env, kpts=kpts).squeeze(-1)
     mat0 = op(env, kpts=kpts)
     assert torch.allclose(mat0ft, mat0)
@@ -816,7 +816,7 @@ def test_pbc_ft_integral_1e(int_type):
     # else:
     #     raise RuntimeError("Unknown int_type: %s" % int_type)
     #
-    # mat_scf = ft_aopair_kpts(cell, Gvgrid, kptjs=kpts.numpy(), intor=int_name)
+    # mat_scf = ft_aopair_kpts(cell, gvgrid, kptjs=kpts.numpy(), intor=int_name)
     # mat_scf = np.rollaxis(mat_scf, 1, 4)
     # mat_scf_t = torch.as_tensor(mat_scf)
     # print(mat_scf_t)
@@ -851,24 +851,24 @@ def test_eval_ft_gto(angmom):
     )
     wrapper = intor.LibcintWrapper([atom_basis], spherical=True)
     ngrid = 100
-    Gvgrid = torch.zeros(ngrid, 3, dtype=dtype)  # (ngrid, ndim)
-    Gvgrid[:, 0] = torch.linspace(-5, 5, ngrid, dtype=dtype)
+    gvgrid = torch.zeros(ngrid, 3, dtype=dtype)  # (ngrid, ndim)
+    gvgrid[:, 0] = torch.linspace(-5, 5, ngrid, dtype=dtype)
     if angmom == 0:
         c = np.sqrt(4 * np.pi)  # s-normalization
     elif angmom == 1:
         c = np.sqrt(4 * np.pi / 3)  # p-normalization
-    ao_ft_value = intor.eval_gto_ft(wrapper, Gvgrid) * c
+    ao_ft_value = intor.eval_gto_ft(wrapper, gvgrid) * c
 
     assert ao_ft_value.shape[0] == wrapper.nao()
     assert ao_ft_value.shape[1] == ngrid
 
     # compare with analytically calculated values
-    exp_part = torch.exp(-Gvgrid[:, 0] ** 2 / (4 * alphas))  # (ngrid,)
+    exp_part = torch.exp(-gvgrid[:, 0] ** 2 / (4 * alphas))  # (ngrid,)
     if angmom == 0:
         true_value = coeffs * (np.pi / alphas) ** 1.5 * exp_part  # (nb, ngrid)
     elif angmom == 1:
         true_value = -1j * coeffs * np.pi ** 1.5 / 2. / alphas ** 2.5 * exp_part  # (nb, ngrid)
-        true_value = true_value.unsqueeze(-2) * Gvgrid.transpose(-2, -1)  # (ndim, nb, ngrid)
+        true_value = true_value.unsqueeze(-2) * gvgrid.transpose(-2, -1)  # (ndim, nb, ngrid)
         true_value = true_value.reshape(-1, ngrid)
     true_value = true_value.to(torch.complex128)
 

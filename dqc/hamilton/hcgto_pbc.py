@@ -307,7 +307,7 @@ class HamiltonCGTO_PBC(HamiltonCGTO):
         cnucl_ft = intor.eval_gto_ft(cnucl_wrapper, gvgrids)  # (natoms, ngv)
         # overlap integral of the electron basis' Fourier Transform
         cbas_ft = intor.pbcft_overlap(
-            self._basiswrapper, Gvgrid=-gvgrids, kpts=self._kpts,
+            self._basiswrapper, gvgrid=-gvgrids, kpts=self._kpts,
             options=self._lattsum_opt)  # (nkpts, nao, nao, ngv)
         # coulomb kernel Fourier Transform
         coul_ft = unweighted_coul_ft(gvgrids) * gvweights  # (ngv,)

@@ -1,7 +1,6 @@
 from typing import Optional, List, Tuple, Callable
 import ctypes
 import copy
-import re
 import operator
 from functools import reduce
 import numpy as np

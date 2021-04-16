@@ -226,7 +226,7 @@ class DFPBC(BaseDF):
             kpt_j = kpts_j[i:i + 1]  # (1, ndim)
             gvk = gvgrids + kpt_ij  # (ngv, ndim)
             aoao_ft_i = intor.pbcft_overlap(
-                self._wrapper, Gvgrid=gvk, kpts=kpt_j,
+                self._wrapper, gvgrid=gvk, kpts=kpt_j,
                 options=self._lattsum_opt)  # (1, nao, nao, ngv)
             res[i] = aoao_ft_i[0]
         return res

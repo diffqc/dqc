@@ -10,9 +10,9 @@ from dqc.utils.types import get_complex_dtype
 __all__ = ["evl_ft", "eval_gto_ft"]
 
 # evaluation of the Fourier Transform of the CGTO basis
-def evl_ft(shortname: str, wrapper: LibcintWrapper, Gvgrid: torch.Tensor) -> torch.Tensor:
+def evl_ft(shortname: str, wrapper: LibcintWrapper, gvgrid: torch.Tensor) -> torch.Tensor:
     r"""
-    Evaluate the Fourier Transform-ed gaussian type orbital at the given Gvgrid.
+    Evaluate the Fourier Transform-ed gaussian type orbital at the given gvgrid.
     The Fourier Transform is defined as:
 
     $$
@@ -27,7 +27,7 @@ def evl_ft(shortname: str, wrapper: LibcintWrapper, Gvgrid: torch.Tensor) -> tor
         The type of integral (currently only "" is accepted).
     wrapper: LibcintWrapper
         The gaussian basis wrapper to be evaluated.
-    Gvgrid: torch.Tensor
+    gvgrid: torch.Tensor
         Tensor with shape `(nggrid, ndim)` where the fourier transformed function
         is evaluated
 
@@ -39,11 +39,11 @@ def evl_ft(shortname: str, wrapper: LibcintWrapper, Gvgrid: torch.Tensor) -> tor
     """
     if shortname != "":
         raise NotImplementedError("FT evaluation for '%s' is not implemented" % shortname)
-    return _EvalGTO_FT.apply(*wrapper.params, Gvgrid, wrapper, shortname)
+    return _EvalGTO_FT.apply(*wrapper.params, gvgrid, wrapper, shortname)
 
 # shortcuts
-def eval_gto_ft(wrapper: LibcintWrapper, Gvgrid: torch.Tensor) -> torch.Tensor:
-    return evl_ft("", wrapper, Gvgrid)
+def eval_gto_ft(wrapper: LibcintWrapper, gvgrid: torch.Tensor) -> torch.Tensor:
+    return evl_ft("", wrapper, gvgrid)
 
 class _EvalGTO_FT(torch.autograd.Function):
     @staticmethod
@@ -55,14 +55,14 @@ class _EvalGTO_FT(torch.autograd.Function):
                 pos: torch.Tensor,  # (natom, ndim)
 
                 # tensors used in forward
-                Gvgrid: torch.Tensor,  # (ngrid, ndim)
+                gvgrid: torch.Tensor,  # (ngrid, ndim)
 
                 # other non-tensor info
                 wrapper: LibcintWrapper,
                 shortname: str) -> torch.Tensor:
 
-        res = gto_ft_evaluator(wrapper, Gvgrid)  # (*, nao, ngrid)
-        ctx.save_for_backward(alphas, coeffs, pos, Gvgrid)
+        res = gto_ft_evaluator(wrapper, gvgrid)  # (*, nao, ngrid)
+        ctx.save_for_backward(alphas, coeffs, pos, gvgrid)
         ctx.other_info = (wrapper, shortname)
         return res
 
@@ -70,7 +70,7 @@ class _EvalGTO_FT(torch.autograd.Function):
     def backward(ctx, grad_res: torch.Tensor) -> Tuple[Optional[torch.Tensor], ...]:  # type: ignore
         raise NotImplementedError("gradients of GTO FT evals are not implemented")
 
-def gto_ft_evaluator(wrapper: LibcintWrapper, Gvgrid: torch.Tensor) -> torch.Tensor:
+def gto_ft_evaluator(wrapper: LibcintWrapper, gvgrid: torch.Tensor) -> torch.Tensor:
     # evaluate Fourier Transform of the basis which is defined as
     # FT(f(r)) = integral(f(r) * exp(-ik.r) dr)
 
@@ -79,10 +79,10 @@ def gto_ft_evaluator(wrapper: LibcintWrapper, Gvgrid: torch.Tensor) -> torch.Ten
     # this is mainly from PySCF
     # https://github.com/pyscf/pyscf/blob/c9aa2be600d75a97410c3203abf35046af8ca615/pyscf/gto/ft_ao.py#L107
 
-    assert Gvgrid.ndim == 2
-    assert Gvgrid.shape[-1] == NDIM
+    assert gvgrid.ndim == 2
+    assert gvgrid.shape[-1] == NDIM
 
-    # Gvgrid: (ngrid, ndim)
+    # gvgrid: (ngrid, ndim)
     # returns: (nao, ngrid)
     dtype = wrapper.dtype
     device = wrapper.device
@@ -119,9 +119,9 @@ def gto_ft_evaluator(wrapper: LibcintWrapper, Gvgrid: torch.Tensor) -> torch.Ten
     ao_loc = wrapper.full_shell_to_aoloc
     atm, bas, env = wrapper.atm_bas_env
 
-    # prepare the Gvgrid
-    GvT = np.asarray(Gvgrid.detach().numpy().T, order="C")
-    nGv = Gvgrid.shape[0]
+    # prepare the gvgrid
+    GvT = np.asarray(gvgrid.detach().numpy().T, order="C")
+    nGv = gvgrid.shape[0]
 
     # prepare the output matrix
     outshape = (wrapper.nao(), nGv)

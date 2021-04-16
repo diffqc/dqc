@@ -3,7 +3,6 @@ import torch
 import xitorch as xt
 import xitorch.linalg
 from dqc.qccalc.base_qccalc import BaseQCCalc
-from dqc.system.base_system import BaseSystem
 from dqc.utils.misc import memoize_method
 
 __all__ = ["hessian_pos", "vibration", "edipole", "equadrupole"]
