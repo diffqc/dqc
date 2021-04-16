@@ -46,9 +46,11 @@ jobs:
         make
         cd ../../..
     - name: Install libxc
+      run: |
         cd submodules/libxc
         python setup.py install
         cd ../..
     - name: Run test
+      run: |
         cd dqc/test
         pytest
