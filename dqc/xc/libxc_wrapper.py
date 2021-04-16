@@ -246,7 +246,7 @@ def _get_libxc_res(inp: Mapping[str, Union[np.ndarray, Tuple[np.ndarray, ...], t
         if polarized:
             assert isinstance(rho, np.ndarray)
             start = np.zeros(1, dtype=rho.dtype)
-            rho = sum(_unpack_input(rho), start=start)  # rho[:, 0] + rho[:, 1]
+            rho = sum(_unpack_input(rho), start)  # rho[:, 0] + rho[:, 1]
         res0 = res[0] * rho
         res = (res0, *res[1:])
 
