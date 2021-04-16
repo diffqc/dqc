@@ -16,6 +16,7 @@ class IntorNameManager(object):
     sep_name = ["a", "b"]  # separator of basis (other than the middle operator)
 
     # components shape of raw operator and basis operators
+    # should be a tuple with AT MOST 1 element
     rawop_comp = defaultdict(tuple, {  # type: ignore
         "r0": (3,)
     })
@@ -116,7 +117,7 @@ class IntorNameManager(object):
         # to get the same result as `other`
 
         nbasis = self._nbasis
-        # get the transpose paths
+        # get the basis transpose paths
         if nbasis == 2:
             transpose_paths: List[List[Tuple[int, int]]] = [
                 [],
@@ -153,6 +154,40 @@ class IntorNameManager(object):
             if _swap(self._ops, transpose_path) == other._ops:
                 return transpose_path
         return None
+
+    def get_comp_permute_path(self, transpose_path: List[Tuple[int, int]]) -> List[int]:
+        # get the component permute path given the basis transpose path
+        flat_ops = sum(self._ops, [])
+        n_ip = flat_ops.count("ip")
+
+        # get the positions of the axes
+        dim_pos = []
+        ioffset = 0
+        for i, ops in enumerate(self._ops):
+            if i == self._imid:
+                naxes = self.rawop_ndim[self._rawop]
+                dim_pos.append(list(range(ioffset, ioffset + naxes)))
+                ioffset += naxes
+            naxes = sum([self.op_ndim[op] for op in ops])
+            dim_pos.append(list(range(ioffset, ioffset + naxes)))
+            ioffset += naxes
+
+        # add the bases' axes (assuming each basis only occupy one axes)
+        for i in range(self._nbasis):
+            dim_pos.append([ioffset])
+            ioffset += 1
+
+        # swap the axes
+        for t0, t1 in transpose_path:
+            s0 = t0 + self._nbasis
+            s1 = t1 + self._nbasis
+            s0 += 1 if s0 >= self._imid else 0
+            s1 += 1 if s1 >= self._imid else 0
+            dim_pos[s0], dim_pos[s1] = dim_pos[s1], dim_pos[s0]
+
+        # flatten the list to get the permutation path
+        dim_pos_flat = sum(dim_pos, [])
+        return dim_pos_flat
 
     @classmethod
     def split_name(cls, int_type: str, shortname: str) -> Tuple[str, List[List[str]]]:
