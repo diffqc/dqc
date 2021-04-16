@@ -11,7 +11,7 @@ on:
 
 jobs:
 
-  typestylecheck:
+  test:
 
     runs-on: ubuntu-latest
     strategy:
