@@ -17,8 +17,10 @@ def h2o_qc():
         [0.0, -1.4309, -0.8867],
     ], dtype=dtype).requires_grad_()
     efield = torch.zeros(3, dtype=dtype).requires_grad_()
+    grad_efield = torch.zeros((3, 3), dtype=dtype).requires_grad_()
 
-    mol = Mol(moldesc=(atomzs, atomposs), basis="3-21G", dtype=dtype, efield=efield)
+    efields = (efield, grad_efield)
+    mol = Mol(moldesc=(atomzs, atomposs), basis="3-21G", dtype=dtype, efield=efields)
     qc = KS(mol, xc="lda_x+lda_c_pw").run()
     return qc
 
@@ -70,7 +72,15 @@ def test_edipole(h2o_qc):
 
     assert torch.allclose(h2o_dip, pyscf_h2o_dip, rtol=3e-4)
 
-def atest_equadrupole(h2o_qc):
-    h2o_quad = equadrupole(h2o_qc, unit="da")
-    print(h2o_quad)
-    raise RuntimeError()
+def test_equadrupole(h2o_qc):
+    # test if the quadrupole properties close to cccbdb precomputed values
+
+    h2o_quad = equadrupole(h2o_qc, unit="debye*angst")
+
+    cccbdb_h2o_quad = torch.tensor([
+        [-6.907, 0.0, 0.0],
+        [0.0, -4.222, 0.0],
+        [0.0, 0.0, -5.838],
+    ], dtype=dtype)
+
+    assert torch.allclose(h2o_quad, cccbdb_h2o_quad, rtol=2e-2)

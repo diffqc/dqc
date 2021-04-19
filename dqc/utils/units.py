@@ -59,7 +59,7 @@ _edipole_converter = {
 }
 
 _equadrupole_converter = {
-    "d*a": DEBYE * BOHR / ANGSTROM  # Debye angstrom
+    "debye*angst": DEBYE * BOHR / ANGSTROM  # Debye angstrom
 }
 
 def _avail_keys(converter: Dict[str, float]) -> str:

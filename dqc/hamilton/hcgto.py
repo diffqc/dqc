@@ -74,11 +74,13 @@ class HamiltonCGTO(BaseHamilton):
             # electric field integral
             if self._efield is not None:
                 # (ndim, nao, nao)
+                fac: float = 1.0
                 for i in range(len(self._efield)):
+                    fac *= i + 1
                     intor_fcn = lambda: intor.int1e("r0" * (i + 1), self.libcint_wrapper)
                     efield_mat_f = self._cache.cache(f"efield{i}", intor_fcn)
                     efield_mat = torch.einsum("dab,d->ab", efield_mat_f, self._efield[i])
-                    self.kinnucl_mat = self.kinnucl_mat + efield_mat
+                    self.kinnucl_mat = self.kinnucl_mat + efield_mat / fac
 
             if self._df is None:
                 self.el_mat = self._cache.cache("elrep", lambda: intor.elrep(self.libcint_wrapper))  # (nao^4)

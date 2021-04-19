@@ -159,8 +159,15 @@ def _edipole(qc: BaseQCCalc) -> torch.Tensor:
     _check_differentiability(efield[0], "electric field", "dipole")
     assert isinstance(efield[0], torch.Tensor)
 
+    # get the contribution from electron
     dipole = -_jac(ene, efield[0])
-    return dipole
+
+    # get the contribution from ions
+    atompos = system.atompos  # (natoms, ndim)
+    atomzs = system.atomzs.to(atompos.dtype)  # (natoms)
+    ion_dipole = torch.einsum("ad,a->d", atompos, atomzs)
+
+    return dipole + ion_dipole
 
 @memoize_method
 def _equadrupole(qc: BaseQCCalc) -> torch.Tensor:
@@ -175,10 +182,16 @@ def _equadrupole(qc: BaseQCCalc) -> torch.Tensor:
     _check_differentiability(efield[1], "gradient electric field", "quadpole")
     assert isinstance(efield[1], torch.Tensor)
 
-    quadrupole = -_jac(ene, efield[1], create_graph=True)  # (ndim, ndim)
     ndim = 3
+    quadrupole = -2 * _jac(ene, efield[1], create_graph=True)  # (ndim, ndim)
     quadrupole = quadrupole.reshape(ndim, ndim)
-    return quadrupole
+
+    # get the contribution from ions
+    atompos = system.atompos  # (natoms, ndim)
+    atomzs = system.atomzs.to(atompos.dtype)  # (natoms)
+    ion_quadrupole = torch.einsum("ad,ae,a->de", atompos, atompos, atomzs)
+
+    return quadrupole + ion_quadrupole
 
 ########### helper functions ###########
 

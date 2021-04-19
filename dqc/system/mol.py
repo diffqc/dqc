@@ -416,15 +416,6 @@ def _preprocess_efield(efs: Optional[Tuple[torch.Tensor, ...]]) -> Optional[Tupl
         assert efi.numel() == numel, \
             f"The {i}-th tuple element of efield must have {numel} elements"
 
-        if i == 0:
-            pass  # do nothing
-        elif i == 1:
-            # for grad(E), multiply the diagonal with 0.5
-            efi = efi.reshape(3, 3)
-            efi = efi * (1 - 0.5 * torch.eye(3, dtype=efi.dtype, device=efi.device))
-        else:
-            raise RuntimeError(f"Electric field {i}-th gradient is not supported")
-
         res_list.append(efi.reshape(-1))
 
     return tuple(res_list)
