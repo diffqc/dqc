@@ -80,8 +80,9 @@ def vibration(qc: BaseQCCalc) -> Tuple[torch.Tensor, torch.Tensor]:
 @memoize_method
 def edipole(qc: BaseQCCalc) -> torch.Tensor:
     """
-    Returns the electric dipole moment of the system, i.e. derivative of energy
-    w.r.t. electric field.
+    Returns the electric dipole moment of the system, i.e. negative derivative
+    of energy w.r.t. electric field.
+    The dipole is pointing from negative to positive charge.
 
     Arguments
     ---------
@@ -101,7 +102,7 @@ def edipole(qc: BaseQCCalc) -> torch.Tensor:
     _check_differentiability(efield, "electric field", "dipole")
     assert isinstance(efield, torch.Tensor)
 
-    dipole = _jac(ene, efield)
+    dipole = -_jac(ene, efield)
     return dipole
 
 @memoize_method

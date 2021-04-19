@@ -30,6 +30,7 @@ def test_hess(h2o_qc):
 def test_vibration(h2o_qc):
     # test if the vibration of h2o is similar to what pyscf computes
 
+    # the frequency is in atomic unit, needs to be converted to cm^-1
     freq, normcoord = vibration(h2o_qc)
     freq_cm1 = freq / 2.4188843265857e-17 / 2.99792458e8 / 1e2
 
@@ -49,3 +50,25 @@ def test_vibration(h2o_qc):
 
     # NOTE: rtol is a bit high, init?
     assert torch.allclose(freq_cm1[:3], pyscf_freq_cm1, rtol=1e-2)
+
+def test_edipole(h2o_qc):
+    # test if the electric dipole of h2o similar to pyscf
+
+    # the dipole is in atomic unit, needs to be converted to Debye
+    h2o_dip = edipole(h2o_qc) * 2.541746473
+
+    # precomputed dipole moment from pyscf (code to generate is below)
+    pyscf_h2o_dip = torch.tensor([-7.35382039e-16, -9.80612124e-15, -2.31439912e+00], dtype=dtype)
+
+    # # code to generate the dipole moment
+    # from pyscf import gto, dft
+    # from pyscf.prop.freq import rks
+    # mol = gto.M(atom='''
+    #             O 0 0 0.2217
+    #             H 0  1.4309 -0.8867
+    #             H 0 -1.4309 -0.8867''',
+    #             basis='321g', unit="Bohr")
+    # mf = dft.RKS(mol, xc="lda_x,lda_c_pw").run()
+    # mf.dip_moment()
+
+    assert torch.allclose(h2o_dip, pyscf_h2o_dip, rtol=3e-4)
