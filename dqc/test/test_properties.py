@@ -69,3 +69,8 @@ def test_edipole(h2o_qc):
     # mf.dip_moment()
 
     assert torch.allclose(h2o_dip, pyscf_h2o_dip, rtol=3e-4)
+
+def atest_equadrupole(h2o_qc):
+    h2o_quad = equadrupole(h2o_qc, unit="da")
+    print(h2o_quad)
+    raise RuntimeError()

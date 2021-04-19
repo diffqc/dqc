@@ -239,6 +239,6 @@ class Sol(BaseSystem):
         return self._numel
 
     @property
-    def efield(self) -> Optional[torch.Tensor]:
+    def efield(self) -> Optional[Tuple[torch.Tensor, ...]]:
         # solid with external efield has not been implemented
         return None

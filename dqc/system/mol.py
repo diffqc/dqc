@@ -47,9 +47,14 @@ class Mol(BaseSystem):
     * orb_weights: SpinParam[torch.Tensor] or None
         Specifiying the orbital occupancy (or weights) directly. If specified,
         ``spin`` and ``charge`` arguments are ignored.
-    * efield: Optional[torch.Tensor]
-        Uniform electric field of the system. If present, then the energy is
+    * efield: Union[torch.Tensor, Tuple[torch.Tensor, ...], None]
+        Uniform electric field of the system. If a tensor, then it is assumed
+        to be a constant electric field with the energy is
         calculated based on potential at (0, 0, 0) = 0.
+        If a tuple of tensor, then the first element will have a shape of (ndim,)
+        representing the constant electric field, second element is the gradient
+        of electric field with the last dimension is the direction of the electric
+        field, third element is the gradgrad of electric field, etc.
         If None, then the electric field is assumed to be 0.
     * dtype: torch.dtype
         The data type of tensors in this class.
@@ -67,7 +72,7 @@ class Mol(BaseSystem):
                  spin: Optional[ZType] = None,
                  charge: ZType = 0,
                  orb_weights: Optional[SpinParam[torch.Tensor]] = None,
-                 efield: Optional[torch.Tensor] = None,
+                 efield: Union[torch.Tensor, Tuple[torch.Tensor, ...], None] = None,
                  dtype: torch.dtype = torch.float64,
                  device: torch.device = torch.device('cpu'),
                  ):
@@ -76,7 +81,10 @@ class Mol(BaseSystem):
         self._grid_inp = grid
         self._basis_inp = basis
         self._grid: Optional[BaseGrid] = None
-        self._efield = efield
+
+        # make efield a tuple
+        self._efield = _normalize_efield(efield)
+        self._preproc_efield = _preprocess_efield(self._efield)
 
         # initialize cache
         self._cache = Cache()
@@ -90,7 +98,7 @@ class Mol(BaseSystem):
         atombases = [AtomCGTOBasis(atomz=atz, bases=bas, pos=atpos)
                      for (atz, bas, atpos) in zip(atomzs, allbases, atompos)]
         self._atombases = atombases
-        self._hamilton = HamiltonCGTO(atombases, efield=efield,
+        self._hamilton = HamiltonCGTO(atombases, efield=self._preproc_efield,
                                       cache=self._cache.add_prefix("hamilton"))
         self._atompos = atompos  # (natoms, ndim)
         self._atomzs = atomzs  # (natoms,) int-type or dtype if floating point
@@ -162,7 +170,7 @@ class Mol(BaseSystem):
 
         # change the hamiltonian to have density fit
         df = DensityFitInfo(method=method, auxbases=atomauxbases)
-        self._hamilton = HamiltonCGTO(self._atombases, df=df, efield=self._efield,
+        self._hamilton = HamiltonCGTO(self._atombases, df=df, efield=self._preproc_efield,
                                       cache=self._cache.add_prefix("hamilton"))
         return self
 
@@ -268,7 +276,7 @@ class Mol(BaseSystem):
         return self._numel
 
     @property
-    def efield(self) -> Optional[torch.Tensor]:
+    def efield(self) -> Optional[Tuple[torch.Tensor, ...]]:
         return self._efield
 
 def _parse_moldesc(moldesc: Union[str, Tuple[AtomZsType, AtomPosType]],
@@ -381,3 +389,42 @@ def _get_orb_weights(nelecs: torch.Tensor, spin: ZType, frac_mode: bool,
         _orb_weights_d = occnumber(0, n=1, dtype=dtype, device=device)
 
     return _orb_weights, _orb_weights_u, _orb_weights_d
+
+def _normalize_efield(efield: Union[torch.Tensor, Tuple[torch.Tensor, ...], None]) \
+        -> Optional[Tuple[torch.Tensor, ...]]:
+    # making efield a tuple or None
+
+    if isinstance(efield, torch.Tensor):
+        efs: Optional[Tuple[torch.Tensor, ...]] = (efield,)
+    else:
+        efs = efield
+
+    return efs
+
+def _preprocess_efield(efs: Optional[Tuple[torch.Tensor, ...]]) -> Optional[Tuple[torch.Tensor, ...]]:
+    # preprocess the efield tuple such that the energy is just a simple tensor
+    # product with the integrals
+
+    if efs is None:
+        return efs
+
+    assert isinstance(efs, tuple)
+    res_list: List[torch.Tensor] = []
+    for i in range(len(efs)):
+        efi = efs[i]
+        numel = 3 ** (i + 1)
+        assert efi.numel() == numel, \
+            f"The {i}-th tuple element of efield must have {numel} elements"
+
+        if i == 0:
+            pass  # do nothing
+        elif i == 1:
+            # for grad(E), multiply the diagonal with 0.5
+            efi = efi.reshape(3, 3)
+            efi = efi * (1 - 0.5 * torch.eye(3, dtype=efi.dtype, device=efi.device))
+        else:
+            raise RuntimeError(f"Electric field {i}-th gradient is not supported")
+
+        res_list.append(efi.reshape(-1))
+
+    return tuple(res_list)

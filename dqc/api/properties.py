@@ -85,7 +85,7 @@ def edipole(qc: BaseQCCalc, unit: Optional[str] = "Debye") -> torch.Tensor:
     edip = edipole_to(edip, unit)
     return edip
 
-def equadrupole(qc: BaseQCCalc, unit: Optional[str] = None) -> torch.Tensor:
+def equadrupole(qc: BaseQCCalc, unit: Optional[str] = "Debye*Angst") -> torch.Tensor:
     """
     Returns the electric quadrupole moment of the system, i.e. derivative of energy
     w.r.t. electric field.
@@ -152,12 +152,13 @@ def _edipole(qc: BaseQCCalc) -> torch.Tensor:
     ene = qc.energy()
     system = qc.get_system()
     efield = system.efield
+    assert len(efield) > 0, "To calculate dipole, the constant electric field must be provided"
 
     # check if the electric field requires grad
-    _check_differentiability(efield, "electric field", "dipole")
-    assert isinstance(efield, torch.Tensor)
+    _check_differentiability(efield[0], "electric field", "dipole")
+    assert isinstance(efield[0], torch.Tensor)
 
-    dipole = -_jac(ene, efield)
+    dipole = -_jac(ene, efield[0])
     return dipole
 
 @memoize_method
@@ -166,13 +167,13 @@ def _equadrupole(qc: BaseQCCalc) -> torch.Tensor:
     ene = qc.energy()
     system = qc.get_system()
     efield = system.efield
+    assert len(efield) > 1, "To calculate quadrupole, the gradient electric field must be provided"
 
     # check if the electric field requires grad
-    _check_differentiability(efield, "electric field", "quadpole")
-    assert isinstance(efield, torch.Tensor)
+    _check_differentiability(efield[1], "gradient electric field", "quadpole")
+    assert isinstance(efield[1], torch.Tensor)
 
-    dipole = _jac(ene, efield, create_graph=True)  # (ndim,)
-    quadrupole = _jac(dipole, efield)  # (ndim, ndim)
+    quadrupole = -_jac(ene, efield[1], create_graph=True)  # (ndim, ndim)
     return quadrupole
 
 ########### helper functions ###########

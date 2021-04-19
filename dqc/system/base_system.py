@@ -2,7 +2,7 @@ from __future__ import annotations
 from abc import abstractmethod, abstractproperty
 import torch
 import xitorch as xt
-from typing import List, Union, Optional
+from typing import List, Union, Optional, Tuple
 from dqc.hamilton.base_hamilton import BaseHamilton
 from dqc.grid.base_grid import BaseGrid
 from dqc.utils.datastruct import SpinParam, ZType, BasisInpType
@@ -116,7 +116,7 @@ class BaseSystem(xt.EditableModule):
         pass
 
     @abstractproperty
-    def efield(self) -> Optional[torch.Tensor]:
+    def efield(self) -> Optional[Tuple[torch.Tensor, ...]]:
         """
         Returns the external electric field of the system, or None if there is
         no electric field.

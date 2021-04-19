@@ -1,4 +1,4 @@
-from typing import List, Optional, Union, overload
+from typing import List, Optional, Union, overload, Tuple
 import torch
 import xitorch as xt
 import dqc.hamilton.intor as intor
@@ -13,7 +13,7 @@ from dqc.utils.cache import Cache
 class HamiltonCGTO(BaseHamilton):
     def __init__(self, atombases: List[AtomCGTOBasis], spherical: bool = True,
                  df: Optional[DensityFitInfo] = None,
-                 efield: Optional[torch.Tensor] = None,
+                 efield: Optional[Tuple[torch.Tensor, ...]] = None,
                  cache: Optional[Cache] = None) -> None:
         self.atombases = atombases
         self.spherical = spherical
@@ -27,9 +27,6 @@ class HamiltonCGTO(BaseHamilton):
             self._df = DFMol(df, wrapper=self.libcint_wrapper)
 
         self._efield = efield
-        if efield is not None:
-            assert efield.ndim == 1 and efield.numel() == 3
-
         self.is_grid_set = False
         self.is_ao_set = False
         self.is_grad_ao_set = False
@@ -40,7 +37,7 @@ class HamiltonCGTO(BaseHamilton):
 
         # initialize cache
         self._cache = cache if cache is not None else Cache.get_dummy()
-        self._cache.add_cacheable_params(["overlap", "kinetic", "nuclattr", "efield"])
+        self._cache.add_cacheable_params(["overlap", "kinetic", "nuclattr", "efield0"])
         if self._df is None:
             self._cache.add_cacheable_params(["elrep"])
 
@@ -77,9 +74,11 @@ class HamiltonCGTO(BaseHamilton):
             # electric field integral
             if self._efield is not None:
                 # (ndim, nao, nao)
-                efield_mat_f = self._cache.cache("efield", lambda: intor.int1e("r0", self.libcint_wrapper))
-                efield_mat = torch.einsum("dab,d->ab", efield_mat_f, self._efield)
-                self.kinnucl_mat = self.kinnucl_mat + efield_mat
+                for i in range(len(self._efield)):
+                    intor_fcn = lambda: intor.int1e("r0" * (i + 1), self.libcint_wrapper)
+                    efield_mat_f = self._cache.cache(f"efield{i}", intor_fcn)
+                    efield_mat = torch.einsum("dab,d->ab", efield_mat_f, self._efield[i])
+                    self.kinnucl_mat = self.kinnucl_mat + efield_mat
 
             if self._df is None:
                 self.el_mat = self._cache.cache("elrep", lambda: intor.elrep(self.libcint_wrapper))  # (nao^4)

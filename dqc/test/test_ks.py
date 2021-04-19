@@ -206,15 +206,18 @@ def test_rks_grad_vxc(xccls, xcparams, atomzs, dist):
 def test_rks_multipole(moldesc):
     # test gradient on electric field
     efield = torch.zeros(3, dtype=dtype).requires_grad_()
+    grad_efield = torch.zeros((3, 3), dtype=dtype).requires_grad_()
 
-    def get_energy(efield):
-        mol = Mol(moldesc, basis="3-21G", dtype=dtype, efield=efield)
+    def get_energy(efield, grad_efield):
+        efields = (efield, grad_efield)
+        mol = Mol(moldesc, basis="3-21G", dtype=dtype, efield=efields)
         qc = KS(mol, xc="lda_x").run()
         ene = qc.energy()
         return ene
 
-    torch.autograd.gradcheck(get_energy, (efield,))  # dipole
-    torch.autograd.gradgradcheck(get_energy, (efield,))  # quadrupole
+    torch.autograd.gradcheck(get_energy, (efield, grad_efield))  # dipole and quadrupole
+    # not doing 2nd grad check on grad_efield to save time
+    torch.autograd.gradgradcheck(get_energy, (efield, grad_efield.detach()))
 
 ############### Unrestricted Kohn-Sham ###############
 u_atomzs_spins = [
