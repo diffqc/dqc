@@ -5,13 +5,13 @@ import xitorch as xt
 import xitorch.linalg
 from dqc.qccalc.base_qccalc import BaseQCCalc
 from dqc.utils.misc import memoize_method
+from dqc.utils.units import length_to, freq_to, edipole_to, equadrupole_to
 
 __all__ = ["hessian_pos", "vibration", "edipole", "equadrupole"]
 
 # This file contains functions to calculate the perturbation properties of systems.
 
-@memoize_method
-def hessian_pos(qc: BaseQCCalc) -> torch.Tensor:
+def hessian_pos(qc: BaseQCCalc, unit: Optional[str] = None) -> torch.Tensor:
     """
     Returns the Hessian of energy with respect to atomic positions.
 
@@ -20,12 +20,95 @@ def hessian_pos(qc: BaseQCCalc) -> torch.Tensor:
     qc: BaseQCCalc
         Quantum Chemistry calculation that has run.
 
+    unit: Optional[str]
+        The returned unit. If None, returns in atomic unit.
+
     Returns
     -------
     torch.Tensor
         Tensor with shape (natoms * ndim, natoms * ndim) represents the Hessian
         of the energy with respect to the atomic position
     """
+    hess = _hessian_pos(qc)
+    hess = length_to(hess, unit)
+    return hess
+
+def vibration(qc: BaseQCCalc, freq_unit: Optional[str] = "cm^-1",
+              length_unit: Optional[str] = None) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Calculate the vibration mode of the system based on the Hessian of energy
+    with respect to atomic position.
+
+    Arguments
+    ---------
+    qc: BaseQCCalc
+        The qc calc object that has been executed.
+    freq_unit: Optional[str]
+        The returned unit for the frequency. If None, returns in atomic unit.
+    length_unit: Optional[str]
+        The returned unit for the normal mode coordinate. If None, returns in
+        atomic unit
+
+    Returns
+    -------
+    Tuple[torch.Tensor, torch.Tensor]
+        Tuple of tensors where the first tensor is the frequency in atomic unit
+        with shape `(natoms * ndim)` sorted from the largest to smallest,
+        and the second tensor is the normal coordinate axes in atomic unit
+        with shape `(natoms * ndim, natoms * ndim)` where each column corresponds
+        to each axis sorted from the largest frequency to smallest frequency.
+    """
+    freq, mode = _vibration(qc)
+    freq = freq_to(freq, freq_unit)
+    mode = length_to(mode, length_unit)
+    return freq, mode
+
+def edipole(qc: BaseQCCalc, unit: Optional[str] = "Debye") -> torch.Tensor:
+    """
+    Returns the electric dipole moment of the system, i.e. negative derivative
+    of energy w.r.t. electric field.
+    The dipole is pointing from negative to positive charge.
+
+    Arguments
+    ---------
+    qc: BaseQCCalc
+        The qc calc object that has been executed.
+    unit: Optional[str]
+        The returned dipole unit. If None, returns in atomic unit.
+
+    Returns
+    -------
+    torch.Tensor
+        Tensor representing the dipole moment in atomic unit with shape (ndim,)
+    """
+    edip = _edipole(qc)
+    edip = edipole_to(edip, unit)
+    return edip
+
+def equadrupole(qc: BaseQCCalc, unit: Optional[str] = None) -> torch.Tensor:
+    """
+    Returns the electric quadrupole moment of the system, i.e. derivative of energy
+    w.r.t. electric field.
+
+    Arguments
+    ---------
+    qc: BaseQCCalc
+        The qc calc object that has been executed.
+    unit: Optional[str]
+        The returned quadrupole unit. If None, returns in atomic unit.
+
+    Returns
+    -------
+    torch.Tensor
+        Tensor representing the quadrupole moment in atomic unit in (ndim, ndim)
+    """
+    equad = _equadrupole(qc)
+    equad = equadrupole_to(equad, unit)
+    return equad
+
+@memoize_method
+def _hessian_pos(qc: BaseQCCalc) -> torch.Tensor:
+    # calculate the hessian in atomic unit
     ene = qc.energy()
     system = qc.get_system()
     atompos = system.atompos
@@ -39,25 +122,10 @@ def hessian_pos(qc: BaseQCCalc) -> torch.Tensor:
     return hess_e_pos
 
 @memoize_method
-def vibration(qc: BaseQCCalc) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Calculate the vibration mode of the system based on the Hessian of energy
-    with respect to atomic position.
+def _vibration(qc: BaseQCCalc) -> Tuple[torch.Tensor, torch.Tensor]:
+    # calculate the vibrational mode and returns the frequencies and normal modes
+    # freqs are sorted from largest to smallest
 
-    Arguments
-    ---------
-    qc: BaseQCCalc
-        The qc calc object that has been executed.
-
-    Returns
-    -------
-    Tuple[torch.Tensor, torch.Tensor]
-        Tuple of tensors where the first tensor is the frequency in atomic unit
-        with shape `(natoms * ndim)` sorted from the largest to smallest,
-        and the second tensor is the normal coordinate axes in atomic unit
-        with shape `(natoms * ndim, natoms * ndim)` where each column corresponds
-        to each axis sorted from the largest frequency to smallest frequency.
-    """
     hess = hessian_pos(qc)  # (natoms * ndim, natoms * ndim)
     mass = qc.get_system().atommasses  # (natoms)
     ndim = hess.shape[0] // mass.shape[0]
@@ -70,7 +138,7 @@ def vibration(qc: BaseQCCalc) -> Tuple[torch.Tensor, torch.Tensor]:
     Alinop = xt.LinearOperator.m(hess, is_hermitian=True)
     Mlinop = xt.LinearOperator.m(mass_mat, is_hermitian=True)
     eival, eivec = xt.linalg.symeig(A=Alinop, M=Mlinop)
-    freq = eival ** 0.5 / (2 * np.pi)
+    freq = (eival.abs() ** 0.5) * torch.sign(eival) / (2 * np.pi)
 
     # reverse the sorting to make it sorted from largest to smallest
     freq = torch.flip(freq, dims=(-1,))
@@ -78,22 +146,9 @@ def vibration(qc: BaseQCCalc) -> Tuple[torch.Tensor, torch.Tensor]:
     return freq, eivec
 
 @memoize_method
-def edipole(qc: BaseQCCalc) -> torch.Tensor:
-    """
-    Returns the electric dipole moment of the system, i.e. negative derivative
-    of energy w.r.t. electric field.
-    The dipole is pointing from negative to positive charge.
-
-    Arguments
-    ---------
-    qc: BaseQCCalc
-        The qc calc object that has been executed.
-
-    Returns
-    -------
-    torch.Tensor
-        Tensor representing the dipole moment in atomic unit with shape (ndim,)
-    """
+def _edipole(qc: BaseQCCalc) -> torch.Tensor:
+    # calculate the electric dipole and returns in atomic unit
+    # the electric dipole is pointing from - to + charge
     ene = qc.energy()
     system = qc.get_system()
     efield = system.efield
@@ -106,21 +161,8 @@ def edipole(qc: BaseQCCalc) -> torch.Tensor:
     return dipole
 
 @memoize_method
-def equadrupole(qc: BaseQCCalc) -> torch.Tensor:
-    """
-    Returns the electric quadrupole moment of the system, i.e. derivative of energy
-    w.r.t. electric field.
-
-    Arguments
-    ---------
-    qc: BaseQCCalc
-        The qc calc object that has been executed.
-
-    Returns
-    -------
-    torch.Tensor
-        Tensor representing the quadrupole moment in atomic unit in (ndim, ndim)
-    """
+def _equadrupole(qc: BaseQCCalc) -> torch.Tensor:
+    # calculate the electric quadrupole and returns in atomic unit
     ene = qc.energy()
     system = qc.get_system()
     efield = system.efield
