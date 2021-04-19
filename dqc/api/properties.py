@@ -152,6 +152,7 @@ def _edipole(qc: BaseQCCalc) -> torch.Tensor:
     ene = qc.energy()
     system = qc.get_system()
     efield = system.efield
+    assert isinstance(efield, tuple)
     assert len(efield) > 0, "To calculate dipole, the constant electric field must be provided"
 
     # check if the electric field requires grad
@@ -167,6 +168,7 @@ def _equadrupole(qc: BaseQCCalc) -> torch.Tensor:
     ene = qc.energy()
     system = qc.get_system()
     efield = system.efield
+    assert isinstance(efield, tuple)
     assert len(efield) > 1, "To calculate quadrupole, the gradient electric field must be provided"
 
     # check if the electric field requires grad
@@ -174,6 +176,8 @@ def _equadrupole(qc: BaseQCCalc) -> torch.Tensor:
     assert isinstance(efield[1], torch.Tensor)
 
     quadrupole = -_jac(ene, efield[1], create_graph=True)  # (ndim, ndim)
+    ndim = 3
+    quadrupole = quadrupole.reshape(ndim, ndim)
     return quadrupole
 
 ########### helper functions ###########
