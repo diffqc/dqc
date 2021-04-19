@@ -61,6 +61,24 @@
   '("int1e_grjxp"               ( \| g r cross p \|))
   '("int1e_rinv"                (\| rinv \|))
   '("int1e_drinv"               (\| nabla-rinv \|))
+  ;
+  ; multipole integrals
+  '("int1e_r0r0"                ( \| r0 r0 \| ))
+  '("int1e_r0r0r0"              ( \| r0 r0 r0 \| ))
+  ; position derivative of multipole integrals
+  '("int1e_ipr0r0"              ( nabla \| r0 r0 \| ))
+  '("int1e_ipr0r0ip"            ( nabla \| r0 r0 \| nabla ))
+  '("int1e_ipipr0r0"            ( nabla nabla \| r0 r0 \| ))
+  '("int1e_ipr0r0r0"            ( nabla \| r0 r0 r0 \| ))
+  '("int1e_ipr0r0r0ip"          ( nabla \| r0 r0 r0 \| nabla ))
+  '("int1e_ipipr0r0r0"          ( nabla nabla \| r0 r0 r0 \| ))
+  ; basis derivative of multipole integrals
+  '("int1e_rrr0r0"              ( ri dot ri \| r0 r0 \| ))
+  '("int1e_rrr0r0rr"            ( ri dot ri \| r0 r0 \| rj dot rj ))
+  '("int1e_rrrrr0r0"            ( ri dot ri ri dot ri \| r0 r0 \| ))
+  '("int1e_rrr0r0r0"            ( ri dot ri \| r0 r0 r0 \| ))
+  '("int1e_rrr0r0r0rr"          ( ri dot ri \| r0 r0 r0 \| rj dot rj ))
+  '("int1e_rrrrr0r0r0"          ( ri dot ri ri dot ri \| r0 r0 r0 \| ))
 )
 
 (gen-cint "intor2.c"

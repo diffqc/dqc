@@ -82,7 +82,8 @@ def get_int_type_and_frac(int_type):
 #################### intors ####################
 @pytest.mark.parametrize(
     "int_type",
-    ["overlap", "kinetic", "nuclattr", "elrep", "coul2c", "coul3c", "r0"]
+    ["overlap", "kinetic", "nuclattr", "elrep", "coul2c", "coul3c", "r0",
+     "r0r0", "r0r0r0"]
 )
 def test_integral_vs_pyscf(int_type):
     # check if the integrals from dqc agrees with pyscf
@@ -104,6 +105,10 @@ def test_integral_vs_pyscf(int_type):
         mat = intor.coul3c(env)
     elif int_type == "r0":
         mat = intor.int1e("r0", env)
+    elif int_type == "r0r0":
+        mat = intor.int1e("r0r0", env)
+    elif int_type == "r0r0r0":
+        mat = intor.int1e("r0r0r0", env)
 
     # get the matrix from pyscf
     mol = get_mol_pyscf(dtype)
@@ -121,10 +126,14 @@ def test_integral_vs_pyscf(int_type):
         int_name = "int3c2e_sph"
     elif int_type == "r0":
         int_name = "int1e_r_sph"
+    elif int_type == "r0r0":
+        int_name = "int1e_rr_sph"
+    elif int_type == "r0r0r0":
+        int_name = "int1e_rrr_sph"
     mat_scf = pyscf.gto.moleintor.getints(int_name, mol._atm, mol._bas, mol._env)
     mat_scf = torch.tensor(mat_scf, dtype=dtype)
 
-    if int_type != "r0":
+    if not int_type.startswith("r0"):
         assert torch.allclose(mat_scf, mat)
     else:
         assert torch.allclose(mat_scf, mat, atol=5e-7)
@@ -238,7 +247,7 @@ def test_nuc_integral_frac_atomz_grad():
 @pytest.mark.parametrize(
     "int_type",
     ["overlap", "kinetic", "nuclattr", "nuclattr-frac",
-     "elrep", "coul2c", "coul3c", "r0"]
+     "elrep", "coul2c", "coul3c", "r0", "r0r0"]
 )
 def test_integral_grad_pos(int_type):
     int_type, is_z_frac = get_int_type_and_frac(int_type)
@@ -271,6 +280,8 @@ def test_integral_grad_pos(int_type):
             return intor.coul3c(env)
         elif name == "r0":
             return intor.int1e("r0", env)
+        elif name == "r0r0":
+            return intor.int1e("r0r0", env)
         else:
             raise RuntimeError()
 
@@ -321,7 +332,7 @@ def test_integral_subset_grad_pos(intc_type, allsubsets):
 @pytest.mark.parametrize(
     "int_type",
     ["overlap", "kinetic", "nuclattr", "nuclattr-frac",
-     "elrep", "coul2c", "coul3c", "r0"]
+     "elrep", "coul2c", "coul3c", "r0", "r0r0"]
 )
 def test_integral_grad_basis(int_type):
     int_type, is_z_frac = get_int_type_and_frac(int_type)
@@ -374,10 +385,12 @@ def test_integral_grad_basis(int_type):
             return intor.coul3c(env)
         elif name == "r0":
             return intor.int1e("r0", env)
+        elif name == "r0r0":
+            return intor.int1e("r0r0", env)
         else:
             raise RuntimeError()
 
-    if int_type in ["elrep", "r0", "coul3c"]:
+    if int_type in ["elrep", "r0", "r0r0", "r0r0r0", "coul3c"]:
         ncontr, nangmom = (1, 1)  # saving time
     # change the numbers to 1 for debugging
     else:
