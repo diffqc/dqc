@@ -1,5 +1,8 @@
 # DQC: Differentiable Quantum Chemistry
 
+![Build](https://img.shields.io/github/workflow/status/mfkasim1/dqc/ci?style=flat-square)
+[![Code coverage](https://img.shields.io/codecov/c/github/mfkasim1/dqc?style=flat-square)](https://app.codecov.io/gh/mfkasim1/dqc)
+
 Differentiable quantum chemistry package.
 Currently only support differentiable density functional theory (DFT) calculation.
 
