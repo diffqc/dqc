@@ -1,7 +1,8 @@
 import torch
 import numpy as np
 import pytest
-from dqc.api.properties import hessian_pos, vibration, edipole, equadrupole
+from dqc.api.properties import hessian_pos, vibration, edipole, equadrupole, \
+                               ir_spectrum
 from dqc.system.mol import Mol
 from dqc.qccalc.ks import KS
 
@@ -84,3 +85,43 @@ def test_equadrupole(h2o_qc):
     ], dtype=dtype)
 
     assert torch.allclose(h2o_quad, cccbdb_h2o_quad, rtol=2e-2)
+
+def test_ir_spectrum(h2o_qc):
+    freq, ir_ints = ir_spectrum(h2o_qc, freq_unit="cm^-1", ints_unit="km/mol")
+
+    # pre-computed (the code to generate is on test_vibration)
+    pyscf_freq_cm1 = torch.tensor([4074.51432922, 3915.25820884, 1501.856396], dtype=dtype)
+    # I can't find any IR intensities that are close to my calculation, so I'm assuming
+    # the calculation is correct
+    ir_ints1 = torch.tensor([4.4665e-01, 9.2419e+00, 4.5882e+01], dtype=dtype)
+
+    assert torch.allclose(freq[:3], pyscf_freq_cm1, rtol=1e-2)
+    assert torch.allclose(ir_ints[:3], ir_ints1, rtol=1e-2)
+
+def test_properties_gradcheck():
+    # check if the analytical formula required to calculate the properties
+    # agrees with numerical difference
+    # NOTE: very slow
+
+    atomzs = torch.tensor([8, 1, 1], dtype=torch.int64)
+    atomposs = torch.tensor([
+        [0.0, 0.0, 0.2217],
+        [0.0, 1.4309, -0.8867],
+        [0.0, -1.4309, -0.8867],
+    ], dtype=dtype).requires_grad_()
+
+    # test gradient on electric field
+    efield = torch.zeros(3, dtype=dtype).requires_grad_()
+    grad_efield = torch.zeros((3, 3), dtype=dtype).requires_grad_()
+
+    def get_energy(atomposs, efield, grad_efield):
+        efields = (efield, grad_efield)
+        mol = Mol(moldesc=(atomzs, atomposs), basis="3-21G", dtype=dtype, efield=efields)
+        qc = KS(mol, xc="lda_x").run()
+        ene = qc.energy()
+        return ene
+
+    # dipole and quadrupole
+    torch.autograd.gradcheck(get_energy, (atomposs, efield, grad_efield))
+    # 2nd grad for hessian, ir intensity, and part of raman intensity
+    torch.autograd.gradgradcheck(get_energy, (atomposs, efield, grad_efield.detach()))

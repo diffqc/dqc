@@ -4,17 +4,25 @@ import torch
 # This file contains various physical constants and functions to convert units
 # from the atomic units
 
-__all__ = ["length_to", "time_to", "freq_to", "edipole_to", "equadrupole_to"]
+__all__ = ["length_to", "time_to", "freq_to", "ir_ints_to",
+           "edipole_to", "equadrupole_to"]
 
-LIGHT_SPEED = 2.99792458e8  # m/s
-BOHR = 5.29177210903e-11  # m
+# 1 atomic unit in SI
+LENGTH = 5.29177210903e-11  # m
 TIME = 2.4188843265857e-17  # s
+CHARGE = 1.602176634e-19  # C
+
+# 1 atomic unit in other unit
 DEBYE = 2.541746473  # Debye (for dipole)
+ANGSTROM = LENGTH / 1e-10  # angstrom (length)
+AMU = 5.485799090649e-4  # atomic mass unit (mass)
+
+# constants in SI
+LIGHT_SPEED = 2.99792458e8  # m/s
 
 # scales
 ATTO = 1e-15
 FEMTO = 1e-12
-ANGSTROM = 1e-10
 NANO = 1e-9
 MICRO = 1e-6
 MILLI = 1e-3
@@ -29,10 +37,10 @@ PhysVarType = torch.Tensor
 UnitType = Optional[str]
 
 _length_converter = {
-    "angst": BOHR / ANGSTROM,
-    "angstrom": BOHR / ANGSTROM,
-    "m": BOHR,
-    "cm": BOHR / CENTI,
+    "angst": ANGSTROM,
+    "angstrom": ANGSTROM,
+    "m": LENGTH,
+    "cm": LENGTH / CENTI,
 }
 
 _freq_converter = {
@@ -43,6 +51,11 @@ _freq_converter = {
     "mhz": 1.0 / TIME / MEGA,
     "ghz": 1.0 / TIME / GIGA,
     "thz": 1.0 / TIME / TERA,
+}
+
+_ir_ints_converter = {
+    "(debye/angst)^2/amu": (DEBYE / ANGSTROM) ** 2 / AMU,
+    "km/mol": (DEBYE / ANGSTROM) ** 2 / AMU * 42.256,  # from https://dx.doi.org/10.1002%2Fjcc.24344
 }
 
 _time_converter = {
@@ -59,7 +72,7 @@ _edipole_converter = {
 }
 
 _equadrupole_converter = {
-    "debye*angst": DEBYE * BOHR / ANGSTROM  # Debye angstrom
+    "debye*angst": DEBYE * ANGSTROM  # Debye angstrom
 }
 
 def _avail_keys(converter: Dict[str, float]) -> str:
@@ -86,6 +99,11 @@ def time_to(a: PhysVarType, unit: UnitType) -> PhysVarType:
 def freq_to(a: PhysVarType, unit: UnitType) -> PhysVarType:
     # convert unit frequency from atomic unit to the given unit
     return _converter_to(a, unit, _freq_converter)
+
+@_add_docstr_to("IR intensity", _ir_ints_converter)
+def ir_ints_to(a: PhysVarType, unit: UnitType) -> PhysVarType:
+    # convert unit IR intensity from atomic unit to the given unit
+    return _converter_to(a, unit, _ir_ints_converter)
 
 @_add_docstr_to("length", _length_converter)
 def length_to(a: PhysVarType, unit: UnitType) -> PhysVarType:

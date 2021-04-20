@@ -5,7 +5,7 @@ import xitorch as xt
 import xitorch.linalg
 from dqc.qccalc.base_qccalc import BaseQCCalc
 from dqc.utils.misc import memoize_method
-from dqc.utils.units import length_to, freq_to, edipole_to, equadrupole_to
+from dqc.utils.units import length_to, freq_to, edipole_to, equadrupole_to, ir_ints_to
 
 __all__ = ["hessian_pos", "vibration", "edipole", "equadrupole"]
 
@@ -62,6 +62,35 @@ def vibration(qc: BaseQCCalc, freq_unit: Optional[str] = "cm^-1",
     freq = freq_to(freq, freq_unit)
     mode = length_to(mode, length_unit)
     return freq, mode
+
+def ir_spectrum(qc: BaseQCCalc, freq_unit: Optional[str] = "cm^-1",
+                ints_unit: Optional[str] = "(debye/angst)^2/amu") \
+        -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Calculate the frequency and relative intensity of the IR vibrational spectra.
+    Unlike ``vibration``, this method only returns parts where the frequency is
+    positive.
+
+    Arguments
+    ---------
+    qc: BaseQCCalc
+        The qc calc object that has been executed.
+    freq_unit: Optional[str]
+        The returned unit for the frequency. If None, returns in atomic unit.
+    ints_unit: Optional[str]
+        The returned unit for the intensity. If None, returns in atomic unit.
+
+    Returns
+    -------
+    Tuple[torch.Tensor, torch.Tensor]
+        Tuple of tensors where the first tensor is the frequency in the given unit
+        with shape `(nfreqs,)` sorted from the largest to smallest, and the second
+        tensor is the IR intensity with the same order as the frequency.
+    """
+    freq, ir_ints = _ir_spectrum(qc)
+    freq = freq_to(freq, freq_unit)
+    ir_ints = ir_ints_to(ir_ints, ints_unit)
+    return freq, ir_ints
 
 def edipole(qc: BaseQCCalc, unit: Optional[str] = "Debye") -> torch.Tensor:
     """
@@ -144,6 +173,31 @@ def _vibration(qc: BaseQCCalc) -> Tuple[torch.Tensor, torch.Tensor]:
     freq = torch.flip(freq, dims=(-1,))
     eivec = torch.flip(eivec, dims=(-1,))
     return freq, eivec
+
+@memoize_method
+def _ir_spectrum(qc: BaseQCCalc) -> Tuple[torch.Tensor, torch.Tensor]:
+    # Calculates the IR vibrational spectrum and returns the frequencies and
+    # intensities.
+    # Unlike vibration, this function only returns the positive frequencies,
+    # sorted from the largest frequency to the lowest frequency.
+    system = qc.get_system()
+    atompos = system.atompos  # (natoms, ndim)
+
+    freqs, normal_modes = _vibration(qc)  # (natoms * ndim), (natoms * ndim, natoms * ndim)
+
+    # only retain the positive frequencies
+    pos_freqs = freqs > 0
+    freqs = freqs[pos_freqs]  # (nfreqs,)
+    normal_modes = normal_modes[:, pos_freqs]  # (natoms * ndim, nfreqs)
+
+    # get the derivative of dipole moment w.r.t. positions
+    with torch.enable_grad():
+        mu = _edipole(qc)  # (ndim)
+    dmu_dr = _jac(mu, atompos)  # (ndim, natoms * ndim)
+    dmu_dq = torch.matmul(dmu_dr, normal_modes)  # (ndim, nfreqs)
+    ir_ints = torch.einsum("df,df->f", dmu_dq, dmu_dq)  # (nfreqs,)
+
+    return freqs, ir_ints
 
 @memoize_method
 def _edipole(qc: BaseQCCalc) -> torch.Tensor:
