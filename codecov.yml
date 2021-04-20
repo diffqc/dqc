@@ -1,0 +1,7 @@
+ignore:
+  - "setup.py"
+  - "lib/*"
+  - "benchmark-pyscf/*"
+  - "dqc/benchmarks/*"
+github_checks:
+    annotations: false
