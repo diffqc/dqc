@@ -67,7 +67,7 @@ def ir_spectrum(qc: BaseQCCalc, freq_unit: Optional[str] = "cm^-1",
                 ints_unit: Optional[str] = "(debye/angst)^2/amu") \
         -> Tuple[torch.Tensor, torch.Tensor]:
     """
-    Calculate the frequency and relative intensity of the IR vibrational spectra.
+    Calculate the frequency and intensity of the IR vibrational spectra.
     Unlike ``vibration``, this method only returns parts where the frequency is
     positive.
 

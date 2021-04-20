@@ -1,3 +1,4 @@
+from typing import Union, List
 import torch
 import numpy as np
 import pytest
@@ -5,8 +6,33 @@ from dqc.api.properties import hessian_pos, vibration, edipole, equadrupole, \
                                ir_spectrum
 from dqc.system.mol import Mol
 from dqc.qccalc.ks import KS
+from dqc.xc.base_xc import BaseXC
+from dqc.utils.safeops import safepow
+from dqc.utils.datastruct import ValGrad, SpinParam
 
 dtype = torch.float64
+
+# using pytorch-based lda because 4th derivative of lda is not available from
+# libxc
+class LDAX(BaseXC):
+    def __init__(self):
+        self.a = -0.7385587663820223
+        self.p = 4.0 / 3
+
+    @property
+    def family(self):
+        return 1
+
+    def get_edensityxc(self, densinfo: Union[ValGrad, SpinParam[ValGrad]]) -> torch.Tensor:
+        if isinstance(densinfo, ValGrad):
+            rho = densinfo.value.abs()  # safeguarding from nan
+            return self.a * safepow(rho, self.p)
+            # return self.a * rho ** self.p
+        else:
+            return 0.5 * (self.get_edensityxc(densinfo.u * 2) + self.get_edensityxc(densinfo.d * 2))
+
+    def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
+        return []
 
 @pytest.fixture
 def h2o_qc():
@@ -113,11 +139,12 @@ def test_properties_gradcheck():
     # test gradient on electric field
     efield = torch.zeros(3, dtype=dtype).requires_grad_()
     grad_efield = torch.zeros((3, 3), dtype=dtype).requires_grad_()
+    ldax = LDAX()
 
     def get_energy(atomposs, efield, grad_efield):
         efields = (efield, grad_efield)
         mol = Mol(moldesc=(atomzs, atomposs), basis="3-21G", dtype=dtype, efield=efields)
-        qc = KS(mol, xc="lda_x").run()
+        qc = KS(mol, xc=ldax).run()
         ene = qc.energy()
         return ene
 
@@ -125,3 +152,15 @@ def test_properties_gradcheck():
     torch.autograd.gradcheck(get_energy, (atomposs, efield, grad_efield))
     # 2nd grad for hessian, ir intensity, and part of raman intensity
     torch.autograd.gradgradcheck(get_energy, (atomposs, efield, grad_efield.detach()))
+
+    def get_jac_ene(atomposs, efield, grad_efield):
+        # get the jacobian of energy w.r.t. atompos
+        atomposs = atomposs.requires_grad_()
+        ene = get_energy(atomposs, efield, grad_efield)
+        jac_ene = torch.autograd.grad(ene, atomposs, create_graph=True)[0]
+        return jac_ene
+
+    torch.autograd.gradcheck(get_jac_ene, (atomposs.detach(), efield, grad_efield.detach()))
+    # raman spectra intensities
+    torch.autograd.gradgradcheck(get_jac_ene, (atomposs.detach(), efield, grad_efield.detach()),
+        atol=3e-4)
