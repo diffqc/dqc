@@ -143,7 +143,7 @@ def test_ir_spectrum(h2o_qc):
     assert torch.allclose(ir_ints[:3], ir_ints1, rtol=1e-2)
 
 # this test is memory extensive, so skip if there is no available memory
-@pytest.mark.skipif(psutil.virtual_memory().available < 20e9, reason="Not enough memory")
+@pytest.mark.skipif(psutil.virtual_memory().available < 15e9, reason="Not enough memory")
 def test_raman_spectrum(h2o_qc_torch_lda):
     freq, raman_ints = raman_spectrum(h2o_qc_torch_lda, freq_unit="cm^-1", ints_unit="angst^4/amu")
 
@@ -194,7 +194,7 @@ def test_properties_gradcheck(check_type):
         return jac_ene
 
     if check_type == "jac_ene":
-        if psutil.virtual_memory().available < 20e9:
+        if psutil.virtual_memory().available < 15e9:
             pytest.skip("Not enough memory")
         else:
             torch.autograd.gradcheck(get_jac_ene, (atomposs.detach(), efield, grad_efield.detach()))
