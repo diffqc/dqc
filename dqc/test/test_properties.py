@@ -3,7 +3,7 @@ import torch
 import numpy as np
 import pytest
 from dqc.api.properties import hessian_pos, vibration, edipole, equadrupole, \
-                               ir_spectrum
+                               ir_spectrum, raman_spectrum
 from dqc.system.mol import Mol
 from dqc.qccalc.ks import KS
 from dqc.xc.base_xc import BaseXC
@@ -49,6 +49,23 @@ def h2o_qc():
     efields = (efield, grad_efield)
     mol = Mol(moldesc=(atomzs, atomposs), basis="3-21G", dtype=dtype, efield=efields)
     qc = KS(mol, xc="lda_x+lda_c_pw").run()
+    return qc
+
+@pytest.fixture
+def h2o_qc_torch_lda():
+    # run the self-consistent ks-dft iteration for h2o
+    atomzs = torch.tensor([8, 1, 1], dtype=torch.int64)
+    atomposs = torch.tensor([
+        [0.0, 0.0, 0.2217],
+        [0.0, 1.4309, -0.8867],
+        [0.0, -1.4309, -0.8867],
+    ], dtype=dtype).requires_grad_()
+    efield = torch.zeros(3, dtype=dtype).requires_grad_()
+    grad_efield = torch.zeros((3, 3), dtype=dtype).requires_grad_()
+
+    efields = (efield, grad_efield)
+    mol = Mol(moldesc=(atomzs, atomposs), basis="3-21G", dtype=dtype, efield=efields)
+    qc = KS(mol, xc=LDAX()).run()
     return qc
 
 def test_hess(h2o_qc):
@@ -123,6 +140,14 @@ def test_ir_spectrum(h2o_qc):
 
     assert torch.allclose(freq[:3], pyscf_freq_cm1, rtol=1e-2)
     assert torch.allclose(ir_ints[:3], ir_ints1, rtol=1e-2)
+
+def test_raman_spectrum(h2o_qc_torch_lda):
+    freq, raman_ints = raman_spectrum(h2o_qc_torch_lda, freq_unit="cm^-1", ints_unit="angst^4/amu")
+
+    # I can't find any reference for Raman intensities, so assuming the calculation
+    # is correct
+    raman_ints1 = torch.tensor([3.6194e+01, 7.9613e+01, 1.3458e+01], dtype=dtype)
+    assert torch.allclose(raman_ints[:3], raman_ints1, rtol=1e-2)
 
 def test_properties_gradcheck():
     # check if the analytical formula required to calculate the properties

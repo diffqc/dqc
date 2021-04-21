@@ -5,7 +5,8 @@ import xitorch as xt
 import xitorch.linalg
 from dqc.qccalc.base_qccalc import BaseQCCalc
 from dqc.utils.misc import memoize_method
-from dqc.utils.units import length_to, freq_to, edipole_to, equadrupole_to, ir_ints_to
+from dqc.utils.units import length_to, freq_to, edipole_to, equadrupole_to, ir_ints_to, \
+                            raman_ints_to
 
 __all__ = ["hessian_pos", "vibration", "edipole", "equadrupole"]
 
@@ -91,6 +92,34 @@ def ir_spectrum(qc: BaseQCCalc, freq_unit: Optional[str] = "cm^-1",
     freq = freq_to(freq, freq_unit)
     ir_ints = ir_ints_to(ir_ints, ints_unit)
     return freq, ir_ints
+
+def raman_spectrum(qc: BaseQCCalc, freq_unit: Optional[str] = "cm^-1",
+                   ints_unit: Optional[str] = "angst^4/amu") \
+        -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Calculates the frequency, static Raman intensity spectra, and depolarization ratio.
+    Like IR spectrum, this method only returns parts where the frequency is positive.
+
+    Arguments
+    ---------
+    qc: BaseQCCalc
+        The qc calc object that has been executed.
+    freq_unit: Optional[str]
+        The returned unit for the frequency. If None, returns in atomic unit.
+    ints_unit: Optional[str]
+        The returned unit for the Raman intensity. If None, returns in atomic unit.
+
+    Returns
+    -------
+    Tuple[torch.Tensor, torch.Tensor]
+        Tuple of tensors where the first tensor is the frequency in the given unit
+        with shape `(nfreqs,)` sorted from the largest to smallest, and the second
+        tensor is the IR intensity with the same order as the frequency.
+    """
+    freq, raman_ints = _raman_spectrum(qc)
+    freq = freq_to(freq, freq_unit)
+    raman_ints = raman_ints_to(raman_ints, ints_unit)
+    return freq, raman_ints
 
 def edipole(qc: BaseQCCalc, unit: Optional[str] = "Debye") -> torch.Tensor:
     """
@@ -183,12 +212,9 @@ def _ir_spectrum(qc: BaseQCCalc) -> Tuple[torch.Tensor, torch.Tensor]:
     system = qc.get_system()
     atompos = system.atompos  # (natoms, ndim)
 
-    freqs, normal_modes = _vibration(qc)  # (natoms * ndim), (natoms * ndim, natoms * ndim)
-
     # only retain the positive frequencies
-    pos_freqs = freqs > 0
-    freqs = freqs[pos_freqs]  # (nfreqs,)
-    normal_modes = normal_modes[:, pos_freqs]  # (natoms * ndim, nfreqs)
+    freqs, normal_modes = _vibration(qc)  # (natoms * ndim), (natoms * ndim, natoms * ndim)
+    freqs, normal_modes = _only_positive_freqs(freqs, normal_modes)
 
     # get the derivative of dipole moment w.r.t. positions
     with torch.enable_grad():
@@ -198,6 +224,40 @@ def _ir_spectrum(qc: BaseQCCalc) -> Tuple[torch.Tensor, torch.Tensor]:
     ir_ints = torch.einsum("df,df->f", dmu_dq, dmu_dq)  # (nfreqs,)
 
     return freqs, ir_ints
+
+@memoize_method
+def _raman_spectrum(qc: BaseQCCalc) -> Tuple[torch.Tensor, torch.Tensor]:
+    # calculate the frequency and intensity of Raman spectra in atomic unit
+    # ref: https://doi.org/10.1080/00268970701516412
+    system = qc.get_system()
+    atompos = system.atompos  # (natoms, ndim)
+    efields = system.efield
+    assert isinstance(efields, tuple) and len(efields) >= 1
+
+    # get the vibrational frequencies and normal modes
+    # freqs: (nmodes,)
+    # normal_modes: (natoms * ndim, nmodes)
+    freqs, normal_modes = _only_positive_freqs(*_vibration(qc))
+
+    # get the derivative of dipole moment w.r.t. efield and positions
+    with torch.enable_grad():
+        mu = _edipole(qc)  # (ndim)
+        alpha = _jac(mu, efields[0])  # (ndim, ndim)
+    dalpha_dr = _jac(alpha, atompos)  # (ndim, ndim, natoms * ndim)
+    dalpha_dq = torch.matmul(dalpha_dr, normal_modes)  # (ndim, ndim, nmodes)
+
+    # eq (3) & (4) in the ref
+    alpha_p2 = (torch.einsum("iim->m", dalpha_dq) / 3.0) ** 2
+    gamma_p2 = 0.5 * ((dalpha_dq[0, 0] - dalpha_dq[1, 1]) ** 2 +
+                      (dalpha_dq[0, 0] - dalpha_dq[2, 2]) ** 2 +
+                      (dalpha_dq[1, 1] - dalpha_dq[2, 2]) ** 2 +
+                      3 * (dalpha_dq[0, 1] ** 2 + dalpha_dq[0, 2] ** 2 +
+                           dalpha_dq[1, 0] ** 2 + dalpha_dq[1, 2] ** 2 +
+                           dalpha_dq[2, 0] ** 2 + dalpha_dq[2, 1] ** 2))
+
+    # eq (2) in the ref
+    raman_ints = 45 * alpha_p2 + 7 * gamma_p2
+    return freqs, raman_ints
 
 @memoize_method
 def _edipole(qc: BaseQCCalc) -> torch.Tensor:
@@ -274,3 +334,10 @@ def _check_differentiability(a: Any, aname: str, propname: str):
     if not (isinstance(a, torch.Tensor) and a.requires_grad):
         msg = "Differentiable tensor %s is required to calculate the %s" % (aname, propname)
         raise RuntimeError(msg)
+
+def _only_positive_freqs(freqs: torch.Tensor, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    # only selects the components corresponding to the positive frequencies
+    pos_freqs = freqs > 0
+    freqs = freqs[pos_freqs]  # (nfreqs,)
+    x = x[:, pos_freqs]  # (natoms * ndim, nfreqs)
+    return freqs, x
