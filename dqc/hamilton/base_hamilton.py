@@ -80,11 +80,19 @@ class BaseHamilton(xt.EditableModule):
         # return: (*BDH, nao, nao)
         pass
 
-    @abstractmethod
+    @overload
     def get_exchange(self, dm: torch.Tensor) -> xt.LinearOperator:
+        ...
+
+    @overload
+    def get_exchange(self, dm: SpinParam[torch.Tensor]) -> SpinParam[xt.LinearOperator]:
+        ...
+
+    @abstractmethod
+    def get_exchange(self, dm):
         """
         Obtains the LinearOperator of the exchange operator.
-        Known as the K-matrix.
+        It is -0.5 * K where K is the K matrix obtained from 2-electron integral.
         """
         # dm: (*BD, nao, nao)
         # return: (*BDH, nao, nao)

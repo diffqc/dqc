@@ -1,13 +1,14 @@
 from __future__ import annotations
 import torch
 from dataclasses import dataclass
-from typing import Optional, Union, List, TypeVar, Generic
+from typing import Optional, Union, List, TypeVar, Generic, Callable, overload
 from dqc.utils.misc import gaussian_int
 
 __all__ = ["CGTOBasis", "AtomCGTOBasis", "ValGrad", "ZType", "is_z_float",
            "BasisInpType", "DensityFitInfo", "SpinParam"]
 
 T = TypeVar('T')
+P = TypeVar('P')
 
 # type of the atom Z
 ZType = Union[int, float, torch.Tensor]
@@ -73,6 +74,34 @@ class DensityFitInfo:
 class SpinParam(Generic[T]):
     u: T
     d: T
+
+    def sum(a: Union[SpinParam[T], T]) -> T:
+        # get the sum of up and down parameters
+        if isinstance(a, SpinParam):
+            return a.u + a.d  # type: ignore
+        else:
+            return a
+
+    @overload
+    @staticmethod
+    def apply_fcn(fcn: Callable[..., P], *a: SpinParam[T]) -> SpinParam[P]:  # type: ignore
+        ...
+
+    @overload
+    @staticmethod
+    def apply_fcn(fcn: Callable[..., P], *a: T) -> P:
+        ...
+
+    @staticmethod
+    def apply_fcn(fcn, *a):
+        # apply the function for each up and down elements of a
+        assert len(a) > 0
+        if isinstance(a[0], SpinParam):
+            u_vals = [aa.u for aa in a]
+            d_vals = [aa.d for aa in a]
+            return SpinParam(u=fcn(*u_vals), d=fcn(*d_vals))
+        else:
+            return fcn(*a)
 
 @dataclass
 class ValGrad:

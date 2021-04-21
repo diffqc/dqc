@@ -112,7 +112,15 @@ class HamiltonCGTO_PBC(HamiltonCGTO):
         assert self._df is not None
         return self._df.get_elrep(dm)
 
+    @overload
     def get_exchange(self, dm: torch.Tensor) -> xt.LinearOperator:
+        ...
+
+    @overload
+    def get_exchange(self, dm: SpinParam[torch.Tensor]) -> SpinParam[xt.LinearOperator]:
+        ...
+
+    def get_exchange(self, dm):
         msg = "Exact exchange for periodic boundary conditions has not been implemented"
         raise NotImplementedError(msg)
 

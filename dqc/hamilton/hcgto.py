@@ -117,17 +117,29 @@ class HamiltonCGTO(BaseHamilton):
             elrep = self._df.get_elrep(dm)
             return elrep
 
+    @overload
     def get_exchange(self, dm: torch.Tensor) -> xt.LinearOperator:
+        ...
+
+    @overload
+    def get_exchange(self, dm: SpinParam[torch.Tensor]) -> SpinParam[xt.LinearOperator]:
+        ...
+
+    def get_exchange(self, dm):
         # get the exchange operator
         # dm: (*BD, nao, nao)
         # el_mat: (nao, nao, nao, nao)
         # return: (*BD, nao, nao)
         if self._df is not None:
             raise RuntimeError("Exact exchange cannot be computed with density fitting")
-        else:
-            mat = torch.einsum("...kl,ijkl->...ij", dm, self.el_mat)
+        elif isinstance(dm, torch.Tensor):
+            mat = -0.5 * torch.einsum("...jk,ijkl->...il", dm, self.el_mat)
             mat = (mat + mat.transpose(-2, -1)) * 0.5  # reduce numerical instability
             return xt.LinearOperator.m(mat, is_hermitian=True)
+        else:  # dm is SpinParam
+            # using the spin-scaling property of exchange energy
+            return SpinParam(u=self.get_exchange(2 * dm.u),
+                             d=self.get_exchange(2 * dm.d))
 
     def ao_orb2dm(self, orb: torch.Tensor, orb_weight: torch.Tensor) -> torch.Tensor:
         # convert the atomic orbital to the density matrix
@@ -323,6 +335,8 @@ class HamiltonCGTO(BaseHamilton):
                 return [prefix + "el_mat"]
             else:
                 return self._df.getparamnames("get_elrep", prefix=prefix + "_df.")
+        elif methodname == "get_exchange":
+            return [prefix + "el_mat"]
         elif methodname == "ao_orb2dm":
             return []
         elif methodname == "get_vext":
