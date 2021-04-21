@@ -2,6 +2,7 @@ from typing import Union, List
 import torch
 import numpy as np
 import pytest
+import psutil
 from dqc.api.properties import hessian_pos, vibration, edipole, equadrupole, \
                                ir_spectrum, raman_spectrum
 from dqc.system.mol import Mol
@@ -141,6 +142,8 @@ def test_ir_spectrum(h2o_qc):
     assert torch.allclose(freq[:3], pyscf_freq_cm1, rtol=1e-2)
     assert torch.allclose(ir_ints[:3], ir_ints1, rtol=1e-2)
 
+# this test is memory extensive, so skip if there is no available memory
+@pytest.mark.skipif(psutil.virtual_memory().available < 20e9, reason="Not enough memory")
 def test_raman_spectrum(h2o_qc_torch_lda):
     freq, raman_ints = raman_spectrum(h2o_qc_torch_lda, freq_unit="cm^-1", ints_unit="angst^4/amu")
 
@@ -149,7 +152,11 @@ def test_raman_spectrum(h2o_qc_torch_lda):
     raman_ints1 = torch.tensor([3.6194e+01, 7.9613e+01, 1.3458e+01], dtype=dtype)
     assert torch.allclose(raman_ints[:3], raman_ints1, rtol=1e-2)
 
-def test_properties_gradcheck():
+@pytest.mark.parametrize(
+    "check_type",
+    ["ene", "jac_ene"]
+)
+def test_properties_gradcheck(check_type):
     # check if the analytical formula required to calculate the properties
     # agrees with numerical difference
     # NOTE: very slow
@@ -173,10 +180,11 @@ def test_properties_gradcheck():
         ene = qc.energy()
         return ene
 
-    # dipole and quadrupole
-    torch.autograd.gradcheck(get_energy, (atomposs, efield, grad_efield))
-    # 2nd grad for hessian, ir intensity, and part of raman intensity
-    torch.autograd.gradgradcheck(get_energy, (atomposs, efield, grad_efield.detach()))
+    if check_type == "ene":
+        # dipole and quadrupole
+        torch.autograd.gradcheck(get_energy, (atomposs, efield, grad_efield))
+        # 2nd grad for hessian, ir intensity, and part of raman intensity
+        torch.autograd.gradgradcheck(get_energy, (atomposs, efield, grad_efield.detach()))
 
     def get_jac_ene(atomposs, efield, grad_efield):
         # get the jacobian of energy w.r.t. atompos
@@ -185,7 +193,11 @@ def test_properties_gradcheck():
         jac_ene = torch.autograd.grad(ene, atomposs, create_graph=True)[0]
         return jac_ene
 
-    torch.autograd.gradcheck(get_jac_ene, (atomposs.detach(), efield, grad_efield.detach()))
-    # raman spectra intensities
-    torch.autograd.gradgradcheck(get_jac_ene, (atomposs.detach(), efield, grad_efield.detach()),
-        atol=3e-4)
+    if check_type == "jac_ene":
+        if psutil.virtual_memory().available < 20e9:
+            pytest.skip("Not enough memory")
+        else:
+            torch.autograd.gradcheck(get_jac_ene, (atomposs.detach(), efield, grad_efield.detach()))
+            # raman spectra intensities
+            torch.autograd.gradgradcheck(get_jac_ene, (atomposs.detach(), efield, grad_efield.detach()),
+                                         atol=3e-4)

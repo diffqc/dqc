@@ -7,3 +7,4 @@ numpy>=1.8.2
 basis_set_exchange
 xitorch>=0.1.0
 pyscf>=1.7.6
+psutil>=5.8.0
