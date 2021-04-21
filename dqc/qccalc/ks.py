@@ -4,12 +4,12 @@ import xitorch as xt
 import xitorch.linalg
 import xitorch.optimize
 from dqc.system.base_system import BaseSystem
-from dqc.qccalc.base_qccalc import BaseQCCalc
+from dqc.qccalc.scf_qccalc import SCF_QCCalc, BaseSCFEngine
 from dqc.xc.base_xc import BaseXC
 from dqc.api.getxc import get_xc
 from dqc.utils.datastruct import SpinParam
 
-class KS(BaseQCCalc):
+class KS(SCF_QCCalc):
     """
     Performing Restricted or Unrestricted Kohn-Sham DFT calculation.
 
@@ -33,84 +33,10 @@ class KS(BaseQCCalc):
                  vext: Optional[torch.Tensor] = None,
                  restricted: Optional[bool] = None):
 
-        # create the kohn-sham engine
-        self.engine = _KSEngine(system, xc, vext, restricted)
+        engine = _KSEngine(system, xc, vext, restricted)
+        super().__init__(engine)
 
-        # misc info
-        self.polarized = self.engine.polarized
-        self.shape = self.engine.shape
-        self.dtype = self.engine.dtype
-        self.device = self.engine.device
-        self.has_run = False
-
-    def get_system(self) -> BaseSystem:
-        return self.engine.get_system()
-
-    def run(self, dm0: Optional[Union[torch.Tensor, SpinParam[torch.Tensor]]] = None,  # type: ignore
-            eigen_options: Optional[Mapping[str, Any]] = None,
-            fwd_options: Optional[Mapping[str, Any]] = None,
-            bck_options: Optional[Mapping[str, Any]] = None) -> BaseQCCalc:
-
-        # setup the default options
-        if eigen_options is None:
-            eigen_options = {
-                "method": "exacteig"
-            }
-        if fwd_options is None:
-            fwd_options = {
-                "method": "broyden1",
-                "alpha": -0.5,
-                "maxiter": 50,
-                # "verbose": True,
-            }
-        if bck_options is None:
-            bck_options = {
-                # NOTE: it seems like in most cases the jacobian matrix is posdef
-                # if it is not the case, we can just remove the line below
-                "posdef": True,
-                # "verbose": True,
-            }
-
-        # save the eigen_options for use in diagonalization
-        self.engine.set_eigen_options(eigen_options)
-
-        # set up the initial self-consistent param guess
-        if dm0 is None:
-            if not self.polarized:
-                dm0 = torch.zeros(self.shape, dtype=self.dtype,
-                                  device=self.device)
-            else:
-                dm0_u = torch.zeros(self.shape, dtype=self.dtype,
-                                    device=self.device)
-                dm0_d = torch.zeros(self.shape, dtype=self.dtype,
-                                    device=self.device)
-                dm0 = SpinParam(u=dm0_u, d=dm0_d)
-
-        scp0 = self.engine.dm2scp(dm0)
-
-        # do the self-consistent iteration
-        scp = xitorch.optimize.equilibrium(
-            fcn=self.engine.scp2scp,
-            y0=scp0,
-            bck_options={**bck_options},
-            **fwd_options)
-
-        # post-process parameters
-        self._dm = self.engine.scp2dm(scp)
-        self.has_run = True
-        return self
-
-    def energy(self) -> torch.Tensor:
-        # returns the total energy of the system
-        assert self.has_run
-        return self.engine.dm2energy(self._dm)
-
-    def aodm(self) -> Union[torch.Tensor, SpinParam[torch.Tensor]]:
-        # returns the density matrix in the atomic-orbital basis
-        assert self.has_run
-        return self._dm
-
-class _KSEngine(xt.EditableModule):
+class _KSEngine(BaseSCFEngine):
     """
     Private class of Engine to be used with KS.
     This class provides the calculation of the self-consistency iteration step
