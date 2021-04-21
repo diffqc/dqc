@@ -117,6 +117,18 @@ class HamiltonCGTO(BaseHamilton):
             elrep = self._df.get_elrep(dm)
             return elrep
 
+    def get_exchange(self, dm: torch.Tensor) -> xt.LinearOperator:
+        # get the exchange operator
+        # dm: (*BD, nao, nao)
+        # el_mat: (nao, nao, nao, nao)
+        # return: (*BD, nao, nao)
+        if self._df is not None:
+            raise RuntimeError("Exact exchange cannot be computed with density fitting")
+        else:
+            mat = torch.einsum("...kl,ijkl->...ij", dm, self.el_mat)
+            mat = (mat + mat.transpose(-2, -1)) * 0.5  # reduce numerical instability
+            return xt.LinearOperator.m(mat, is_hermitian=True)
+
     def ao_orb2dm(self, orb: torch.Tensor, orb_weight: torch.Tensor) -> torch.Tensor:
         # convert the atomic orbital to the density matrix
         # in CGTO, it is U.W.U^T

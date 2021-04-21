@@ -74,6 +74,17 @@ class BaseHamilton(xt.EditableModule):
     def get_elrep(self, dm: torch.Tensor) -> xt.LinearOperator:
         """
         Obtains the LinearOperator of the Coulomb electron repulsion operator.
+        Known as the J-matrix.
+        """
+        # dm: (*BD, nao, nao)
+        # return: (*BDH, nao, nao)
+        pass
+
+    @abstractmethod
+    def get_exchange(self, dm: torch.Tensor) -> xt.LinearOperator:
+        """
+        Obtains the LinearOperator of the exchange operator.
+        Known as the K-matrix.
         """
         # dm: (*BD, nao, nao)
         # return: (*BDH, nao, nao)

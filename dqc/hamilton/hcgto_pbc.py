@@ -112,6 +112,10 @@ class HamiltonCGTO_PBC(HamiltonCGTO):
         assert self._df is not None
         return self._df.get_elrep(dm)
 
+    def get_exchange(self, dm: torch.Tensor) -> xt.LinearOperator:
+        msg = "Exact exchange for periodic boundary conditions has not been implemented"
+        raise NotImplementedError(msg)
+
     def ao_orb2dm(self, orb: torch.Tensor, orb_weight: torch.Tensor) -> torch.Tensor:
         # convert the atomic orbital to the density matrix
 
