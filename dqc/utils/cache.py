@@ -7,6 +7,23 @@ import numpy as np
 import h5py
 
 class Cache(object):
+    """
+    Internal object to store/load cache for heavy-load calculations.
+    For a class to be able to use cache, it has to have cache as its members.
+    The same cache object can also be passed to other object either via
+        `.add_prefix` method or just passed as it is.
+    The list of cacheable parameters are constructed within the class.
+    The file to store cache also set within the class via `set` method, if no
+        file is set, then the cache does not work.
+    To load/store cache, the context handler, `.open()` needs to be called.
+    We use the magic method `cache` here to load/store cache, i.e. if the given
+        dataset is not in the cache, then it is calculated then stored.
+    Otherwise, the dataset is just loaded from the cache file.
+    To avoid loading the wrong cache (e.g. the same file name is set for two
+        different objects), we provide `check_signature` method which will
+        raise a warning if the signature from the cached file and the input of
+        `check_signature` do not match.
+    """
     def __init__(self):
         self._cacheable_pnames: List[str] = []
         self._fname: Optional[str] = None
