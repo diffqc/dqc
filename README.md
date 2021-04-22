@@ -4,7 +4,8 @@
 [![Code coverage](https://img.shields.io/codecov/c/github/mfkasim1/dqc?style=flat-square)](https://app.codecov.io/gh/mfkasim1/dqc)
 
 Differentiable quantum chemistry package.
-Currently only support differentiable density functional theory (DFT) calculation.
+Currently only support differentiable density functional theory (DFT)
+and Hartree-Fock (HF) calculation.
 
 ## Requirements
 
