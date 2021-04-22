@@ -12,6 +12,7 @@ from dqc.utils.pbc import unweighted_coul_ft, get_gcut
 from dqc.grid.base_grid import BaseGrid
 from dqc.xc.base_xc import BaseXC
 from dqc.hamilton.intor.lattice import Lattice
+from dqc.utils.cache import Cache
 
 class HamiltonCGTO_PBC(HamiltonCGTO):
     """
@@ -23,11 +24,13 @@ class HamiltonCGTO_PBC(HamiltonCGTO):
     """
     def __init__(self, atombases: List[AtomCGTOBasis],
                  latt: Lattice,
+                 *,
                  kpts: Optional[torch.Tensor] = None,
                  wkpts: Optional[torch.Tensor] = None,  # weights of k-points to get the density
                  spherical: bool = True,
                  df: Optional[DensityFitInfo] = None,
-                 lattsum_opt: Optional[Union[intor.PBCIntOption, Dict]] = None) -> None:
+                 lattsum_opt: Optional[Union[intor.PBCIntOption, Dict]] = None,
+                 cache: Optional[Cache] = None) -> None:
         self._atombases = atombases
         self._spherical = spherical
         self._lattice = latt
@@ -55,12 +58,17 @@ class HamiltonCGTO_PBC(HamiltonCGTO):
         assert self._wkpts.ndim == 1
         assert self._kpts.ndim == 2
 
+        # initialize cache
+        self._cache = cache if cache is not None else Cache.get_dummy()
+        self._cache.add_cacheable_params(["overlap", "kinetic", "nuclattr"])
+
         if df is None:
             self._df: Optional[BaseDF] = None
         else:
             self._df = DFPBC(dfinfo=df, wrapper=self._basiswrapper, kpts=self._kpts,
                              wkpts=self._wkpts, eta=self._eta,
-                             lattsum_opt=self._lattsum_opt)
+                             lattsum_opt=self._lattsum_opt,
+                             cache=self._cache.add_prefix("df"))
 
         self._is_built = False
 
@@ -82,11 +90,23 @@ class HamiltonCGTO_PBC(HamiltonCGTO):
                 "Periodic boundary condition without density fitting is not implemented")
         assert isinstance(self._df, BaseDF)
         # (nkpts, nao, nao)
-        self._olp_mat = intor.pbc_overlap(self._basiswrapper, kpts=self._kpts,
-                                          options=self._lattsum_opt)
-        self._kin_mat = intor.pbc_kinetic(self._basiswrapper, kpts=self._kpts,
-                                          options=self._lattsum_opt)
-        self._nucl_mat = self._calc_nucl_attr()
+        with self._cache.open():
+
+            # check the signature
+            self._cache.check_signature({
+                "atombases": self._atombases,
+                "spherical": self._spherical,
+                "lattice": self._lattice.lattice_vectors().detach(),
+            })
+
+            self._olp_mat = self._cache.cache(
+                "overlap", lambda: intor.pbc_overlap(self._basiswrapper, kpts=self._kpts,
+                                                     options=self._lattsum_opt))
+            self._kin_mat = self._cache.cache(
+                "kinetic", lambda: intor.pbc_kinetic(self._basiswrapper, kpts=self._kpts,
+                                                     options=self._lattsum_opt))
+            self._nucl_mat = self._cache.cache("nuclattr", self._calc_nucl_attr)
+
         self._kinnucl_mat = self._kin_mat + self._nucl_mat
         self._df.build()
         self._is_built = True

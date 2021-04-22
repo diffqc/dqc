@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 import numpy as np
 import torch
 import xitorch as xt
@@ -8,6 +8,7 @@ from dqc.df.base_df import BaseDF
 from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, DensityFitInfo
 from dqc.utils.types import get_complex_dtype
 from dqc.utils.pbc import unweighted_coul_ft, get_gcut
+from dqc.utils.cache import Cache
 
 class DFPBC(BaseDF):
     """
@@ -16,7 +17,9 @@ class DFPBC(BaseDF):
     """
     def __init__(self, dfinfo: DensityFitInfo, wrapper: intor.LibcintWrapper,
                  kpts: torch.Tensor, wkpts: torch.Tensor, eta: float,
-                 lattsum_opt: intor.PBCIntOption):
+                 lattsum_opt: intor.PBCIntOption,
+                 *,
+                 cache: Optional[Cache] = None):
         self._dfinfo = dfinfo
         self._wrapper = wrapper
         self._eta = eta
@@ -28,6 +31,10 @@ class DFPBC(BaseDF):
         assert wrapper.lattice is not None
         self._lattice = wrapper.lattice
         self._is_built = False
+
+        # set up cache
+        self._cache = cache if cache is not None else Cache.get_dummy()
+        self._cache.add_cacheable_params(["j2c", "j3c", "el_mat"])
 
     def build(self) -> BaseDF:
         self._is_built = True
@@ -63,72 +70,88 @@ class DFPBC(BaseDF):
         nkpts_ij = kpts_ij.shape[0]
         kpts_j = kpts_ij[..., 1, :]  # (nkpts_ij, ndim)
 
-        ######################## short-range integrals ########################
-        ############# 3-centre 2-electron integral #############
-        _basisw, _fusew = intor.LibcintWrapper.concatenate(self._wrapper, fuse_aux_wrapper)
-        # (nkpts_ij, nao, nao, nxao+nxcao)
-        j3c_short_f = intor.pbc_coul3c(_basisw, other2=_fusew, kpts_ij=kpts_ij,
-                                       options=self._lattsum_opt)
-        j3c_short = j3c_short_f[..., :nxao] - j3c_short_f[..., nxao:]  # (nkpts_ij, nao, nao, nxao)
+        def _calc_integrals():
+            ######################## short-range integrals ########################
+            ############# 3-centre 2-electron integral #############
+            _basisw, _fusew = intor.LibcintWrapper.concatenate(self._wrapper, fuse_aux_wrapper)
+            # (nkpts_ij, nao, nao, nxao+nxcao)
+            j3c_short_f = intor.pbc_coul3c(_basisw, other2=_fusew, kpts_ij=kpts_ij,
+                                           options=self._lattsum_opt)
+            j3c_short = j3c_short_f[..., :nxao] - j3c_short_f[..., nxao:]  # (nkpts_ij, nao, nao, nxao)
 
-        ############# 2-centre 2-electron integrals #############
-        # (nkpts_unique, nxao+nxcao, nxao+nxcao)
-        j2c_short_f = intor.pbc_coul2c(fuse_aux_wrapper, kpts=kpts_reduce,
-                                       options=self._lattsum_opt)
-        # j2c_short: (nkpts_unique, nxao, nxao)
-        j2c_short = j2c_short_f[..., :nxao, :nxao] + j2c_short_f[..., nxao:, nxao:] \
-            - j2c_short_f[..., :nxao, nxao:] - j2c_short_f[..., nxao:, :nxao]
+            ############# 2-centre 2-electron integrals #############
+            # (nkpts_unique, nxao+nxcao, nxao+nxcao)
+            j2c_short_f = intor.pbc_coul2c(fuse_aux_wrapper, kpts=kpts_reduce,
+                                           options=self._lattsum_opt)
+            # j2c_short: (nkpts_unique, nxao, nxao)
+            j2c_short = j2c_short_f[..., :nxao, :nxao] + j2c_short_f[..., nxao:, nxao:] \
+                - j2c_short_f[..., :nxao, nxao:] - j2c_short_f[..., nxao:, :nxao]
 
-        ######################## long-range integrals ########################
-        # only use the compensating wrapper as the gcut
-        gcut = get_gcut(self._lattsum_opt.precision, [aux_comp_wrapper])
-        # gvgrids: (ngv, ndim), gvweights: (ngv,)
-        gvgrids, gvweights = self._lattice.get_gvgrids(gcut)
-        ngv = gvgrids.shape[0]
-        gvk = gvgrids.unsqueeze(-2) + kpts_reduce  # (ngv, nkpts_ij, ndim)
-        gvk = gvk.view(-1, gvk.shape[-1])  # (ngv * nkpts_ij, ndim)
+            ######################## long-range integrals ########################
+            # only use the compensating wrapper as the gcut
+            gcut = get_gcut(self._lattsum_opt.precision, [aux_comp_wrapper])
+            # gvgrids: (ngv, ndim), gvweights: (ngv,)
+            gvgrids, gvweights = self._lattice.get_gvgrids(gcut)
+            ngv = gvgrids.shape[0]
+            gvk = gvgrids.unsqueeze(-2) + kpts_reduce  # (ngv, nkpts_ij, ndim)
+            gvk = gvk.view(-1, gvk.shape[-1])  # (ngv * nkpts_ij, ndim)
 
-        # get the fourier transform variables
-        # TODO: iterate over ngv axis
-        # ft of the compensating basis
-        comp_ft = intor.eval_gto_ft(aux_comp_wrapper, gvk)  # (nxcao, ngv * nkpts_ij)
-        comp_ft = comp_ft.view(-1, ngv, nkpts_ij)  # (nxcao, ngv, nkpts_ij)
-        # ft of the auxiliary basis
-        auxb_ft_c = intor.eval_gto_ft(aux_wrapper, gvk)  # (nxao, ngv * nkpts_ij)
-        auxb_ft_c = auxb_ft_c.view(-1, ngv, nkpts_ij)  # (nxao, ngv, nkpts_ij)
-        auxb_ft = auxb_ft_c - comp_ft  # (nxao, ngv, nkpts_ij)
-        # ft of the overlap integral of the basis (nkpts_ij, nao, nao, ngv)
-        aoao_ft = self._get_pbc_overlap_with_kpts_ij(gvgrids, kpts_reduce, kpts_j)
-        # ft of the coulomb kernel
-        coul_ft = unweighted_coul_ft(gvk)  # (ngv * nkpts_ij,)
-        coul_ft = coul_ft.to(comp_ft.dtype).view(ngv, nkpts_ij) * gvweights.unsqueeze(-1)  # (ngv, nkpts_ij)
+            # get the fourier transform variables
+            # TODO: iterate over ngv axis
+            # ft of the compensating basis
+            comp_ft = intor.eval_gto_ft(aux_comp_wrapper, gvk)  # (nxcao, ngv * nkpts_ij)
+            comp_ft = comp_ft.view(-1, ngv, nkpts_ij)  # (nxcao, ngv, nkpts_ij)
+            # ft of the auxiliary basis
+            auxb_ft_c = intor.eval_gto_ft(aux_wrapper, gvk)  # (nxao, ngv * nkpts_ij)
+            auxb_ft_c = auxb_ft_c.view(-1, ngv, nkpts_ij)  # (nxao, ngv, nkpts_ij)
+            auxb_ft = auxb_ft_c - comp_ft  # (nxao, ngv, nkpts_ij)
+            # ft of the overlap integral of the basis (nkpts_ij, nao, nao, ngv)
+            aoao_ft = self._get_pbc_overlap_with_kpts_ij(gvgrids, kpts_reduce, kpts_j)
+            # ft of the coulomb kernel
+            coul_ft = unweighted_coul_ft(gvk)  # (ngv * nkpts_ij,)
+            coul_ft = coul_ft.to(comp_ft.dtype).view(ngv, nkpts_ij) * gvweights.unsqueeze(-1)  # (ngv, nkpts_ij)
 
-        # 1: (nkpts_ij, nxao, nxao)
-        pattern = "gi,xgi,ygi->ixy"
-        j2c_long = torch.einsum(pattern, coul_ft, comp_ft.conj(), auxb_ft)
-        # 2: (nkpts_ij, nxao, nxao)
-        j2c_long += torch.einsum(pattern, coul_ft, auxb_ft.conj(), comp_ft)
-        # 3: (nkpts_ij, nxao, nxao)
-        j2c_long += torch.einsum(pattern, coul_ft, comp_ft.conj(), comp_ft)
+            # 1: (nkpts_ij, nxao, nxao)
+            pattern = "gi,xgi,ygi->ixy"
+            j2c_long = torch.einsum(pattern, coul_ft, comp_ft.conj(), auxb_ft)
+            # 2: (nkpts_ij, nxao, nxao)
+            j2c_long += torch.einsum(pattern, coul_ft, auxb_ft.conj(), comp_ft)
+            # 3: (nkpts_ij, nxao, nxao)
+            j2c_long += torch.einsum(pattern, coul_ft, comp_ft.conj(), comp_ft)
 
-        # calculate the j3c long-range
-        patternj3 = "gi,xgi,iyzg->iyzx"
-        # (nkpts_ij, nao, nao, nxao)
-        j3c_long = torch.einsum(patternj3, coul_ft, comp_ft.conj(), aoao_ft)
+            # calculate the j3c long-range
+            patternj3 = "gi,xgi,iyzg->iyzx"
+            # (nkpts_ij, nao, nao, nxao)
+            j3c_long = torch.einsum(patternj3, coul_ft, comp_ft.conj(), aoao_ft)
 
-        # get the average potential
-        auxbar_f = self._auxbar(kpts_reduce, fuse_aux_wrapper)  # (nkpts_ij, nxao + nxcao)
-        auxbar = auxbar_f[:, :nxao] - auxbar_f[:, nxao:]  # (nkpts_ij, nxao)
-        auxbar = auxbar.reshape(nkpts, nkpts, auxbar.shape[-1])  # (nkpts, nkpts, nxao)
-        olp_mat = intor.pbc_overlap(self._wrapper, kpts=self._kpts,
-                                    options=self._lattsum_opt)  # (nkpts, nao, nao)
-        j3c_bar = auxbar[:, :, None, None, :] * olp_mat[..., None]  # (nkpts, nkpts, nao, nao, nxao)
-        j3c_bar = j3c_bar.reshape(-1, *j3c_bar.shape[2:])  # (nkpts_ij, nao, nao, nxao)
+            # get the average potential
+            auxbar_f = self._auxbar(kpts_reduce, fuse_aux_wrapper)  # (nkpts_ij, nxao + nxcao)
+            auxbar = auxbar_f[:, :nxao] - auxbar_f[:, nxao:]  # (nkpts_ij, nxao)
+            auxbar = auxbar.reshape(nkpts, nkpts, auxbar.shape[-1])  # (nkpts, nkpts, nxao)
+            olp_mat = intor.pbc_overlap(self._wrapper, kpts=self._kpts,
+                                        options=self._lattsum_opt)  # (nkpts, nao, nao)
+            j3c_bar = auxbar[:, :, None, None, :] * olp_mat[..., None]  # (nkpts, nkpts, nao, nao, nxao)
+            j3c_bar = j3c_bar.reshape(-1, *j3c_bar.shape[2:])  # (nkpts_ij, nao, nao, nxao)
 
-        ######################## combining integrals ########################
-        j2c = j2c_short + j2c_long  # (nkpts_ij, nxao, nxao)
-        j3c = j3c_short + j3c_long - j3c_bar  # (nkpts_ij, nao, nao, nxao)
-        el_mat = torch.einsum("kxy,kaby->kabx", torch.inverse(j2c), j3c)  # (nkpts_ij, nao, nao, nxao)
+            ######################## combining integrals ########################
+            j2c = j2c_short + j2c_long  # (nkpts_ij, nxao, nxao)
+            j3c = j3c_short + j3c_long - j3c_bar  # (nkpts_ij, nao, nao, nxao)
+            el_mat = torch.einsum("kxy,kaby->kabx", torch.inverse(j2c), j3c)  # (nkpts_ij, nao, nao, nxao)
+            return j2c, j3c, el_mat
+
+        with self._cache.open():
+
+            # check the signature
+            self._cache.check_signature({
+                "dfinfo": self._dfinfo,
+                "kpts": self._kpts.detach(),
+                "wkpts": self._wkpts.detach(),
+                "atombases": self._wrapper.atombases,
+                "alattice": self._lattice.lattice_vectors().detach(),
+            })
+
+            j2c, j3c, el_mat = self._cache.cache_multi(
+                ["j2c", "j3c", "el_mat"], _calc_integrals)
 
         self._j2c = j2c
         self._j3c = j3c

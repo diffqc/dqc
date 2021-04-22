@@ -15,6 +15,7 @@ from dqc.utils.safeops import safe_cdist
 from dqc.utils.periodictable import get_atom_mass
 from dqc.hamilton.intor.lattice import Lattice
 from dqc.hamilton.intor.pbcintor import PBCIntOption
+from dqc.utils.cache import Cache
 
 class Sol(BaseSystem):
     """
@@ -90,6 +91,9 @@ class Sol(BaseSystem):
         _orb_weights, _orb_weights_u, _orb_weights_d = _get_orb_weights(
             nelecs, spin, frac_mode, dtype, device)
 
+        # initialize cache
+        self._cache = Cache()
+
         # save the system's properties
         self._spin = spin
         self._charge = charge
@@ -132,11 +136,31 @@ class Sol(BaseSystem):
         # change the hamiltonian to have density fit
         df = DensityFitInfo(method=method, auxbases=atomauxbases)
         self._hamilton = HamiltonCGTO_PBC(self._atombases, df=df, latt=self._lattice,
-                                          lattsum_opt=self._lattsum_opt)
+                                          lattsum_opt=self._lattsum_opt,
+                                          cache=self._cache.add_prefix("hamilton"))
         return self
 
     def get_hamiltonian(self) -> BaseHamilton:
         return self._hamilton
+
+    def set_cache(self, fname: str, paramnames: Optional[List[str]] = None) -> BaseSystem:
+        """
+        Setup the cache of some parameters specified by `paramnames` to be read/written
+        on a file.
+        If the file exists, then the parameters will not be recomputed, but just
+        loaded from the cache instead.
+        Cache is usually used for repeated calculations where the cached parameters
+        are not changed (e.g. running multiple systems with slightly different environment.)
+
+        Arguments
+        ---------
+        fname: str
+            The file to store the cache.
+        paramnames: Optional[List[str]]
+            List of parameter names to be read/write from the cache.
+        """
+        self._cache.set(fname, paramnames)
+        return self
 
     def get_orbweight(self, polarized: bool = False) -> Union[torch.Tensor, SpinParam[torch.Tensor]]:
         if not polarized:

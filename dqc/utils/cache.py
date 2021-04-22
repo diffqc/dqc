@@ -1,6 +1,6 @@
 from __future__ import annotations
 import contextlib
-from typing import Optional, List, Callable, Dict, Any
+from typing import Optional, List, Callable, Dict, Any, Tuple
 import warnings
 import torch
 import numpy as np
@@ -40,6 +40,32 @@ class Cache(object):
             res = fcn()
             self._save_dset(dset_name, file, res)
         return res
+
+    def cache_multi(self, pnames: List[str], fcn: Callable[[], Tuple[torch.Tensor, ...]]) \
+            -> Tuple[torch.Tensor, ...]:
+
+        if not self.isset():
+            return fcn()
+
+        # if any of the pnames not to be cached, then just calculate and return
+        if not all([self._pname_to_cache(pname) for pname in pnames]):
+            return fcn()
+
+        # get the dataset names
+        dset_names = [self._pname2dsetname(pname) for pname in pnames]
+
+        # get the file handler
+        file = self._get_file_handler()
+
+        # check if all the dataset is in the cache file, otherwise, just evaluate
+        all_dset_names_in_file = all([dset_name in file for dset_name in dset_names])
+        if all_dset_names_in_file:
+            all_res = tuple(self._load_dset(dset_name, file) for dset_name in dset_names)
+        else:
+            all_res = fcn()
+            for dset_name, res in zip(dset_names, all_res):
+                self._save_dset(dset_name, file, res)
+        return all_res
 
     @contextlib.contextmanager
     def open(self):
@@ -152,6 +178,11 @@ class _PrefixedCache(Cache):
     def cache(self, pname: str, fcn: Callable[[], torch.Tensor]) -> torch.Tensor:
         return self._obj.cache(self._prefixed(pname), fcn)
 
+    def cache_multi(self, pnames: List[str], fcn: Callable[[], Tuple[torch.Tensor, ...]]) \
+            -> Tuple[torch.Tensor, ...]:
+        ppnames = [self._prefixed(pname) for pname in pnames]
+        return self._obj.cache_multi(ppnames, fcn)
+
     @contextlib.contextmanager
     def open(self):
         with self._obj.open() as f:
@@ -202,6 +233,10 @@ class _DummyCache(Cache):
         pass
 
     def cache(self, pname: str, fcn: Callable[[], torch.Tensor]) -> torch.Tensor:
+        return fcn()
+
+    def cache_multi(self, pnames: List[str], fcn: Callable[[], Tuple[torch.Tensor, ...]]) \
+            -> Tuple[torch.Tensor, ...]:
         return fcn()
 
     @contextlib.contextmanager

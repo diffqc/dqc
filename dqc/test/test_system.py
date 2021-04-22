@@ -112,6 +112,47 @@ def test_mol_cache():
     olp1 = h1.get_overlap().fullmatrix()
     assert torch.allclose(olp, olp1)
 
+def test_sol_cache():
+
+    # test if cache is stored correctly
+    cache_fname = "_temp_cache_sol.h5"
+    # remove the cache if exists
+    if os.path.exists(cache_fname):
+        os.remove(cache_fname)
+
+    auxbasis = "def2-sv(p)-jkfit"
+    soldesc = "H 0 0 0"
+    a = torch.tensor([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]], dtype=dtype) * 3
+    sol = Sol(soldesc, alattice=a, basis="3-21G").set_cache(cache_fname)
+    sol.densityfit(method="gdf", auxbasis=auxbasis)
+
+    h = sol.get_hamiltonian()
+    h.build()
+
+    # read the stored file
+    with h5py.File(cache_fname, "r") as f:
+        j2c_cache = torch.as_tensor(f["hamilton/df/j2c"])
+
+    j2c = h.df.j2c
+    assert torch.allclose(j2c, j2c_cache)
+
+    # Try again with different atom, if cache is set, then it should be same
+    # as previous (although it is a wrong result)
+    # It must raise a warning for different system
+    with pytest.warns(UserWarning, match=r"Mismatch [ \w]*cached signature[ \w]*"):
+        soldesc1 = "Li 0 0 0"
+        sol1 = Sol(soldesc1, alattice=a, basis="3-21G").set_cache(cache_fname)
+        sol1.densityfit(method="gdf", auxbasis=auxbasis)
+        h1 = sol1.get_hamiltonian()
+        h1.build()
+
+    # remove the cache
+    if os.path.exists(cache_fname):
+        os.remove(cache_fname)
+
+    j2c1 = h1.df.j2c
+    assert torch.allclose(j2c, j2c1)
+
 ##################### pbc #####################
 def test_mol_pbc_nuclei_energy():
     # test the calculation of ion-ion interaction energy (+ gradients w.r.t. pos)
