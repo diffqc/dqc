@@ -1,6 +1,7 @@
 import torch
 import pytest
 from dqc.qccalc.ks import KS
+from dqc.qccalc.hf import HF
 from dqc.system.mol import Mol
 from dqc.xc.base_xc import BaseXC
 from dqc.utils.safeops import safepow
@@ -67,3 +68,22 @@ def test_ks_mols_mem_nn(atomzs, dist, spin):
         ene.backward()  # no create_graph here because of known pytorch's leak
 
     assert_no_memleak_tensor(_test_ks_mols)
+
+@pytest.mark.parametrize(
+    "atomzs,dist,spin",
+    ks_mols_dists_spins
+)
+def test_hf_mols_mem_nn(atomzs, dist, spin):
+    # test if there's a leak if using neural network xc
+    def _test_hf_mols():
+        poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist
+        poss = poss.requires_grad_()
+        mol = Mol((atomzs, poss), basis="6-311++G**", dtype=dtype, spin=spin)
+        qc = HF(mol).run()
+        ene = qc.energy()
+
+        # see if grad and backward create memleak
+        grads = torch.autograd.grad(ene, (poss,), create_graph=True)
+        ene.backward()  # no create_graph here because of known pytorch's leak
+
+    assert_no_memleak_tensor(_test_hf_mols)
