@@ -6,67 +6,29 @@ import psutil
 from dqc.api.properties import hessian_pos, vibration, edipole, equadrupole, \
                                ir_spectrum, raman_spectrum
 from dqc.system.mol import Mol
-from dqc.qccalc.ks import KS
+from dqc.qccalc.hf import HF
 from dqc.xc.base_xc import BaseXC
 from dqc.utils.safeops import safepow
 from dqc.utils.datastruct import ValGrad, SpinParam
 
 dtype = torch.float64
 
-# using pytorch-based lda because 4th derivative of lda is not available from
-# libxc
-class LDAX(BaseXC):
-    def __init__(self):
-        self.a = -0.7385587663820223
-        self.p = 4.0 / 3
-
-    @property
-    def family(self):
-        return 1
-
-    def get_edensityxc(self, densinfo: Union[ValGrad, SpinParam[ValGrad]]) -> torch.Tensor:
-        if isinstance(densinfo, ValGrad):
-            rho = densinfo.value.abs()  # safeguarding from nan
-            return self.a * safepow(rho, self.p)
-            # return self.a * rho ** self.p
-        else:
-            return 0.5 * (self.get_edensityxc(densinfo.u * 2) + self.get_edensityxc(densinfo.d * 2))
-
-    def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
-        return []
-
 @pytest.fixture
 def h2o_qc():
-    # run the self-consistent ks-dft iteration for h2o
+    # run the self-consistent HF iteration for h2o
     atomzs = torch.tensor([8, 1, 1], dtype=torch.int64)
+    # from CCCBDB (calculated geometry for H2O)
     atomposs = torch.tensor([
-        [0.0, 0.0, 0.2217],
-        [0.0, 1.4309, -0.8867],
-        [0.0, -1.4309, -0.8867],
+        [0.0, 0.0, 0.2156],
+        [0.0, 1.4749, -0.8625],
+        [0.0, -1.4749, -0.8625],
     ], dtype=dtype).requires_grad_()
     efield = torch.zeros(3, dtype=dtype).requires_grad_()
     grad_efield = torch.zeros((3, 3), dtype=dtype).requires_grad_()
 
     efields = (efield, grad_efield)
     mol = Mol(moldesc=(atomzs, atomposs), basis="3-21G", dtype=dtype, efield=efields)
-    qc = KS(mol, xc="lda_x+lda_c_pw").run()
-    return qc
-
-@pytest.fixture
-def h2o_qc_torch_lda():
-    # run the self-consistent ks-dft iteration for h2o
-    atomzs = torch.tensor([8, 1, 1], dtype=torch.int64)
-    atomposs = torch.tensor([
-        [0.0, 0.0, 0.2217],
-        [0.0, 1.4309, -0.8867],
-        [0.0, -1.4309, -0.8867],
-    ], dtype=dtype).requires_grad_()
-    efield = torch.zeros(3, dtype=dtype).requires_grad_()
-    grad_efield = torch.zeros((3, 3), dtype=dtype).requires_grad_()
-
-    efields = (efield, grad_efield)
-    mol = Mol(moldesc=(atomzs, atomposs), basis="3-21G", dtype=dtype, efield=efields)
-    qc = KS(mol, xc=LDAX()).run()
+    qc = HF(mol).run()
     return qc
 
 def test_hess(h2o_qc):
@@ -79,43 +41,20 @@ def test_vibration(h2o_qc):
 
     freq_cm1, normcoord = vibration(h2o_qc, freq_unit="cm^-1")
 
-    # pre-computed (the code to generate is below)
-    pyscf_freq_cm1 = torch.tensor([4074.51432922, 3915.25820884, 1501.856396], dtype=dtype)
+    # from CCCBDB (calculated frequencies for H2O)
+    calc_freq_cm1 = torch.tensor([3944., 3811., 1800.], dtype=dtype)
 
-    # # code to generate the frequencies above
-    # from pyscf import gto, dft
-    # from pyscf.prop.freq import rks
-    # mol = gto.M(atom='''
-    #             O 0 0 0.2217
-    #             H 0  1.4309 -0.8867
-    #             H 0 -1.4309 -0.8867''',
-    #             basis='321g', unit="Bohr")
-    # mf = dft.RKS(mol, xc="lda_x,lda_c_pw").run()
-    # w, modes = rks.Freq(mf).kernel()
-
-    # NOTE: rtol is a bit high, init?
-    assert torch.allclose(freq_cm1[:3], pyscf_freq_cm1, rtol=1e-2)
+    assert torch.allclose(freq_cm1[:3], calc_freq_cm1, rtol=1e-3)
 
 def test_edipole(h2o_qc):
     # test if the electric dipole of h2o similar to pyscf
 
     h2o_dip = edipole(h2o_qc, unit="debye")
 
-    # precomputed dipole moment from pyscf (code to generate is below)
-    pyscf_h2o_dip = torch.tensor([-7.35382039e-16, -9.80612124e-15, -2.31439912e+00], dtype=dtype)
+    # from cccbdb (calculated electric dipole moment for H2O)
+    pyscf_h2o_dip = torch.tensor([0, 0, -2.388e+00], dtype=dtype)
 
-    # # code to generate the dipole moment
-    # from pyscf import gto, dft
-    # from pyscf.prop.freq import rks
-    # mol = gto.M(atom='''
-    #             O 0 0 0.2217
-    #             H 0  1.4309 -0.8867
-    #             H 0 -1.4309 -0.8867''',
-    #             basis='321g', unit="Bohr")
-    # mf = dft.RKS(mol, xc="lda_x,lda_c_pw").run()
-    # mf.dip_moment()
-
-    assert torch.allclose(h2o_dip, pyscf_h2o_dip, rtol=3e-4)
+    assert torch.allclose(h2o_dip, pyscf_h2o_dip, rtol=2e-4)
 
 def test_equadrupole(h2o_qc):
     # test if the quadrupole properties close to cccbdb precomputed values
@@ -123,34 +62,31 @@ def test_equadrupole(h2o_qc):
     h2o_quad = equadrupole(h2o_qc, unit="debye*angst")
 
     cccbdb_h2o_quad = torch.tensor([
-        [-6.907, 0.0, 0.0],
-        [0.0, -4.222, 0.0],
-        [0.0, 0.0, -5.838],
+        [-6.838, 0.0, 0.0],
+        [0.0, -3.972, 0.0],
+        [0.0, 0.0, -5.882],
     ], dtype=dtype)
 
-    assert torch.allclose(h2o_quad, cccbdb_h2o_quad, rtol=2e-2)
+    assert torch.allclose(h2o_quad, cccbdb_h2o_quad, rtol=2e-4)
 
 def test_ir_spectrum(h2o_qc):
     freq, ir_ints = ir_spectrum(h2o_qc, freq_unit="cm^-1", ints_unit="km/mol")
 
-    # pre-computed (the code to generate is on test_vibration)
-    pyscf_freq_cm1 = torch.tensor([4074.51432922, 3915.25820884, 1501.856396], dtype=dtype)
-    # I can't find any IR intensities that are close to my calculation, so I'm assuming
-    # the calculation is correct
-    ir_ints1 = torch.tensor([4.4665e-01, 9.2419e+00, 4.5882e+01], dtype=dtype)
+    # from CCCBDB (calculated frequencies for H2O)
+    calc_freq_cm1 = torch.tensor([3944., 3811., 1800.], dtype=dtype)
+    # from CCCBDB (calculated vibrational properties for H2O)
+    ir_ints1 = torch.tensor([9.123e+00, 4.7e-02, 7.989e+01], dtype=dtype)
 
-    assert torch.allclose(freq[:3], pyscf_freq_cm1, rtol=1e-2)
+    assert torch.allclose(freq[:3], calc_freq_cm1, rtol=1e-3)
     assert torch.allclose(ir_ints[:3], ir_ints1, rtol=1e-2)
 
 # this test is memory extensive, so skip if there is no available memory
-@pytest.mark.skipif(psutil.virtual_memory().available < 15e9, reason="Not enough memory")
-def test_raman_spectrum(h2o_qc_torch_lda):
-    freq, raman_ints = raman_spectrum(h2o_qc_torch_lda, freq_unit="cm^-1", ints_unit="angst^4/amu")
+def test_raman_spectrum(h2o_qc):
+    freq, raman_ints = raman_spectrum(h2o_qc, freq_unit="cm^-1", ints_unit="angst^4/amu")
 
-    # I can't find any reference for Raman intensities, so assuming the calculation
-    # is correct
-    raman_ints1 = torch.tensor([3.6194e+01, 7.9613e+01, 1.3458e+01], dtype=dtype)
-    assert torch.allclose(raman_ints[:3], raman_ints1, rtol=1e-2)
+    # from CCCBDB (calculated vibrational properties for H2O)
+    calc_raman_ints1 = torch.tensor([44.12, 95.71, 11.5], dtype=dtype)
+    assert torch.allclose(raman_ints[:3], calc_raman_ints1, rtol=1e-3)
 
 @pytest.mark.parametrize(
     "check_type",
@@ -171,12 +107,11 @@ def test_properties_gradcheck(check_type):
     # test gradient on electric field
     efield = torch.zeros(3, dtype=dtype).requires_grad_()
     grad_efield = torch.zeros((3, 3), dtype=dtype).requires_grad_()
-    ldax = LDAX()
 
     def get_energy(atomposs, efield, grad_efield):
         efields = (efield, grad_efield)
         mol = Mol(moldesc=(atomzs, atomposs), basis="3-21G", dtype=dtype, efield=efields)
-        qc = KS(mol, xc=ldax).run()
+        qc = HF(mol).run()
         ene = qc.energy()
         return ene
 
@@ -194,10 +129,7 @@ def test_properties_gradcheck(check_type):
         return jac_ene
 
     if check_type == "jac_ene":
-        if psutil.virtual_memory().available < 15e9:
-            pytest.skip("Not enough memory")
-        else:
-            torch.autograd.gradcheck(get_jac_ene, (atomposs.detach(), efield, grad_efield.detach()))
-            # raman spectra intensities
-            torch.autograd.gradgradcheck(get_jac_ene, (atomposs.detach(), efield, grad_efield.detach()),
-                                         atol=3e-4)
+        torch.autograd.gradcheck(get_jac_ene, (atomposs.detach(), efield, grad_efield.detach()))
+        # raman spectra intensities
+        torch.autograd.gradgradcheck(get_jac_ene, (atomposs.detach(), efield, grad_efield.detach()),
+                                     atol=3e-4)
