@@ -423,7 +423,11 @@ def test_pbc_rks_energy(xc, atomzs, spin, alattice, energy_true, grid):
     ene = qc.energy()
     energy_true = ene * 0 + energy_true
 
-    # TODO: the rtol is a bit too high, investigate this!
+    # rtol is a bit too high. Investigation indicates that this might be due to
+    # the difference in grid (i.e. changing from sg2 to sg3 changes the values),
+    # not from the eta of the compensating charge (i.e. changing it does not
+    # change the value)
+    # TODO: make a better grid
     assert torch.allclose(ene, energy_true, rtol=1e-3)
 
 if __name__ == "__main__":
