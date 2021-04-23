@@ -115,7 +115,7 @@ class LibXCLDA(BaseXC):
         # potentialinfo.value: (*BD, nr)
         # potentialinfo.grad: (*BD, nr, ndim)
 
-        libxc_inps = _prepare_libxc_input(densinfo, xcfamily = self.family)
+        libxc_inps = _prepare_libxc_input(densinfo, xcfamily=self.family)
         flatten_inps = tuple(inp.reshape(-1) for inp in libxc_inps)
 
         # polarized case
@@ -139,7 +139,7 @@ class LibXCLDA(BaseXC):
         # densinfo.grad: (*BD, nr, ndim)
         # return: (*BD, nr)
 
-        libxc_inps = _prepare_libxc_input(densinfo, xcfamily = self.family)
+        libxc_inps = _prepare_libxc_input(densinfo, xcfamily=self.family)
         flatten_inps = tuple(inp.reshape(-1) for inp in libxc_inps)
 
         # polarized case
