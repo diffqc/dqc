@@ -105,16 +105,21 @@ class SpinParam(Generic[T]):
 
 @dataclass
 class ValGrad:
+    # data structure used as a umbrella class for density profiles and
+    # the derivative of the potential w.r.t. density profiles
+
     value: torch.Tensor  # torch.Tensor of the value in the grid
     grad: Optional[torch.Tensor] = None  # torch.Tensor representing (gradx, grady, gradz) with shape
     # ``(..., 3)``
     lapl: Optional[torch.Tensor] = None  # torch.Tensor of the laplace of the value
+    kin: Optional[torch.Tensor] = None  # torch.Tensor of the kinetic energy density
 
     def __add__(self, b: ValGrad) -> ValGrad:
         return ValGrad(
             value=self.value + b.value,
             grad=self.grad + b.grad if self.grad is not None else None,
             lapl=self.lapl + b.lapl if self.lapl is not None else None,
+            kin=self.kin + b.kin if self.kin is not None else None,
         )
 
     def __mul__(self, f: Union[float, int, torch.Tensor]) -> ValGrad:
@@ -125,4 +130,5 @@ class ValGrad:
             value=self.value * f,
             grad=self.grad * f if self.grad is not None else None,
             lapl=self.lapl * f if self.lapl is not None else None,
+            kin=self.kin * f if self.kin is not None else None,
         )

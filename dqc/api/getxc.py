@@ -1,7 +1,7 @@
 import re
 import pylibxc
 from dqc.xc.base_xc import BaseXC
-from dqc.xc.libxc import LibXCLDA, LibXCGGA
+from dqc.xc.libxc import LibXCLDA, LibXCGGA, LibXCMGGA
 
 __all__ = ["get_libxc", "get_xc"]
 
@@ -26,6 +26,8 @@ def get_libxc(name: str) -> BaseXC:
         return LibXCLDA(name)
     elif family == 2:  # GGA
         return LibXCGGA(name)
+    elif family == 4:  # MGGA
+        return LibXCMGGA(name)
     else:
         raise NotImplementedError("LibXC wrapper for family %d has not been implemented" % family)
 

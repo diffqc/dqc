@@ -3,7 +3,7 @@ import pylibxc
 from typing import List, Tuple, Union, overload, Optional
 from dqc.xc.base_xc import BaseXC
 from dqc.xc.libxc_wrapper import CalcLDALibXCPol, CalcLDALibXCUnpol, \
-    CalcGGALibXCPol, CalcGGALibXCUnpol
+    CalcGGALibXCPol, CalcGGALibXCUnpol, CalcMGGALibXCUnpol
 from dqc.utils.datastruct import ValGrad, SpinParam
 
 
@@ -179,6 +179,11 @@ class LibXCGGA(LibXCLDA):
     _family: int = 2
     _unpolfcn_wrapper = CalcGGALibXCUnpol
     _polfcn_wrapper = CalcGGALibXCPol
+
+class LibXCMGGA(LibXCLDA):
+    _family: int = 4
+    _unpolfcn_wrapper = CalcMGGALibXCUnpol
+    _polfcn_wrapper = CalcGGALibXCPol  # MGGA pol is not available
 
 def _all_same_shape(densinfo_u: ValGrad, densinfo_d: ValGrad) -> bool:
     # TODO: check the grad shape as well

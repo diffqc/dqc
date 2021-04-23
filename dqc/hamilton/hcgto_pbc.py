@@ -231,8 +231,8 @@ class HamiltonCGTO_PBC(HamiltonCGTO):
         mat = mat + mat.transpose(-2, -1).conj()  # +cc, so no * 0.5 in this case
         return xt.LinearOperator.m(mat, is_hermitian=True)
 
-    def get_lapl_vext(self, lapl_vext: torch.Tensor) -> xt.LinearOperator:
-        # get the linear operator for the laplacian part of the potential
+    def get_lapl_kin_vext(self, lapl_vext: torch.Tensor, kin_vext: torch.Tensor) -> xt.LinearOperator:
+        # get the linear operator for the laplacian and kinetic part of the potential
         # lapl_vext: (*BR, ngrid)
         # return: (*BR, nao, nao)
         # TODO: implement this!
@@ -271,8 +271,8 @@ class HamiltonCGTO_PBC(HamiltonCGTO):
             return [prefix + "basis_dvolume_conj", prefix + "basis"]
         elif methodname == "get_grad_vext":
             return [prefix + "basis_dvolume_conj", prefix + "grad_basis"]
-        elif methodname == "get_lapl_vext":
-            return [prefix + "basis_dvolume_conj", prefix + "lapl_basis"]
+        elif methodname == "get_lapl_kin_vext":
+            raise NotImplementedError()
         elif methodname == "get_vxc":
             return super().getparamnames("get_vxc", prefix=prefix)
         elif methodname == "_get_dens_at_grid":

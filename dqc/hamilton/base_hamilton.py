@@ -154,12 +154,24 @@ class BaseHamilton(xt.EditableModule):
         pass
 
     @abstractmethod
-    def get_lapl_vext(self, lapl_vext: torch.Tensor) -> xt.LinearOperator:
+    def get_lapl_kin_vext(self, lapl_vext: torch.Tensor, kin_vext: torch.Tensor) -> xt.LinearOperator:
         r"""
         Returns a LinearOperator of the external laplace potential in the grid.
 
-        .. math::
-            \mathbf{L}_{ij} = \int b_i(\mathbf{r}) L(\mathbf{r}) \cdot \nabla^2 b_j(\mathbf{r})\ d\mathbf{r}
+        Arguments
+        ---------
+        lapl_vext: torch.Tensor
+            Tensor with shape (..., ngrid) as the derivative of energy w.r.t.
+            the laplacian of density
+        kin_vext: torch.Tensor
+            Tensor with shape (..., ngrid) as the derivative of energy w.r.t.
+            the kinetic energy density (i.e. ``0.5 * sum(nabla(phi)^2)``)
+
+        Returns
+        -------
+        xt.LinearOperator
+            LinearOperator representing the potential energy from the laplacian
+            and the kinetic energy.
         """
         # lapl_vext: (*BR, ngrid)
         # return: (*BRH, nao, nao)

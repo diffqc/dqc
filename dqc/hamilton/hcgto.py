@@ -217,20 +217,25 @@ class HamiltonCGTO(BaseHamilton):
         mat = mat + mat.transpose(-2, -1)  # Martin, et. al., eq. (8.14)
         return xt.LinearOperator.m(mat, is_hermitian=True)
 
-    def get_lapl_vext(self, lapl_vext: torch.Tensor) -> xt.LinearOperator:
-        # get the linear operator for the laplacian part of the potential,
-        # usually it is the derivative of energy w.r.t. laplacian of the density
+    def get_lapl_kin_vext(self, lapl_vext: torch.Tensor, kin_vext: torch.Tensor) -> xt.LinearOperator:
+        # get the linear operator for the laplacian and kinetic parts of the potential,
+        # lapl_vext is the derivative of energy w.r.t. laplacian of the density
+        # kin_vext is the derivative of energy w.r.t. kinetic energy density
+        #     (i.e. 0.5 * sum((nabla phi)^2))
         # lapl_vext: (*BR, ngrid)
+        # kin_vext: (*BR, ngrid)
         # return: (*BR, nao, nao)
-        # TODO: implement this!
         if not self.is_lapl_ao_set:
             raise RuntimeError("Please call `setup_grid(grid, xc)` to call this function")
         # the equation below is obtained by calculating dExc/dD_ij where D_ij is
         # the density matrix
+        # the equation for kinetic derivative is from eq. (26) https://doi.org/10.1063/1.4811270
+
         lapl_dvol = lapl_vext * self.dvolume
+        lapl_kin_dvol = (2 * lapl_vext + kin_vext) * self.dvolume
         mat1 = torch.einsum("...r,br,cr->...bc", lapl_dvol, self.basis, self.lapl_basis)
         mat1 = mat1 + mat1.transpose(-2, -1)  # + c.c.
-        mat2 = 2 * torch.einsum("...r,dbr,dcr->...bc", lapl_dvol, self.grad_basis, self.grad_basis)
+        mat2 = torch.einsum("...r,dbr,dcr->...bc", lapl_kin_dvol, self.grad_basis, self.grad_basis)
         mat = mat1 + mat2
         return xt.LinearOperator.m(mat, is_hermitian=True)
 
@@ -258,7 +263,8 @@ class HamiltonCGTO(BaseHamilton):
                 vxc_linop = vxc_linop + self.get_grad_vext(potinfo.grad)
             if self.xcfamily >= 3:  # MGGA
                 assert potinfo.lapl is not None
-                vxc_linop = vxc_linop + self.get_lapl_vext(potinfo.lapl)
+                assert potinfo.kin is not None
+                vxc_linop = vxc_linop + self.get_lapl_kin_vext(potinfo.lapl, potinfo.kin)
 
             return vxc_linop
 
@@ -274,8 +280,10 @@ class HamiltonCGTO(BaseHamilton):
             if self.xcfamily >= 3:  # MGGA
                 assert potinfo.u.lapl is not None
                 assert potinfo.d.lapl is not None
-                vxc_linop_u = vxc_linop_u + self.get_lapl_vext(potinfo.u.lapl)
-                vxc_linop_d = vxc_linop_d + self.get_lapl_vext(potinfo.d.lapl)
+                assert potinfo.u.kin is not None
+                assert potinfo.d.kin is not None
+                vxc_linop_u = vxc_linop_u + self.get_lapl_kin_vext(potinfo.u.lapl, potinfo.u.kin)
+                vxc_linop_d = vxc_linop_d + self.get_lapl_kin_vext(potinfo.d.lapl, potinfo.d.kin)
 
             return SpinParam(u=vxc_linop_u, d=vxc_linop_d)
 
@@ -354,7 +362,7 @@ class HamiltonCGTO(BaseHamilton):
             return [prefix + "basis_dvolume", prefix + "basis"]
         elif methodname == "get_grad_vext":
             return [prefix + "basis_dvolume", prefix + "grad_basis"]
-        elif methodname == "get_lapl_vext":
+        elif methodname == "get_lapl_kin_vext":
             return [prefix + "dvolume", prefix + "basis", prefix + "grad_basis",
                     prefix + "lapl_basis"]
         elif methodname == "get_vxc":
@@ -365,7 +373,7 @@ class HamiltonCGTO(BaseHamilton):
             if self.xcfamily >= 2:
                 params += self.getparamnames("get_grad_vext", prefix=prefix)
             if self.xcfamily >= 3:
-                params += self.getparamnames("get_lapl_vext", prefix=prefix)
+                params += self.getparamnames("get_lapl_kin_vext", prefix=prefix)
             return params
         elif methodname == "_dm2densinfo":
             params = self.getparamnames("_get_dens_at_grid", prefix=prefix)
