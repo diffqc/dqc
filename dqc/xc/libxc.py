@@ -155,7 +155,7 @@ class LibXCLDA(BaseXC):
             edens = self._calc_unpol(flatten_inps, densinfo.value.shape, 0)[0]  # (*BD, nr)
             return edens
 
-    def _calc_pol(self, flatten_inps: Tuple[torch.Tensor], shape: Tuple[int], deriv: int) ->\
+    def _calc_pol(self, flatten_inps: Tuple[torch.Tensor, ...], shape: torch.Size, deriv: int) ->\
             Tuple[torch.Tensor, ...]:
 
         outs = self._polfcn_wrapper.apply(*flatten_inps, deriv, self.libxc_pol)
@@ -164,7 +164,7 @@ class LibXCLDA(BaseXC):
         # values from libxc
         return tuple(out.reshape(-1, *shape) for out in outs)
 
-    def _calc_unpol(self, flatten_inps: Tuple[torch.Tensor], shape: Tuple[int], deriv: int) ->\
+    def _calc_unpol(self, flatten_inps: Tuple[torch.Tensor, ...], shape: torch.Size, deriv: int) ->\
             Tuple[torch.Tensor, ...]:
 
         outs = self._unpolfcn_wrapper.apply(*flatten_inps, deriv, self.libxc_unpol)

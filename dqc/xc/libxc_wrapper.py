@@ -14,7 +14,7 @@ class CalcLDALibXCUnpol(torch.autograd.Function):
     @staticmethod
     def forward(ctx, rho: torch.Tensor, deriv: int,  # type: ignore
                 libxcfcn: pylibxc.functional.LibXCFunctional) -> \
-            torch.Tensor:  # type: ignore
+            Tuple[torch.Tensor, ...]:  # type: ignore
         # Calculates and returns the energy density or its derivative w.r.t.
         # density.
         # The result is a tensor with shape (ninps)
@@ -40,7 +40,7 @@ class CalcLDALibXCUnpol(torch.autograd.Function):
 class CalcLDALibXCPol(torch.autograd.Function):
     @staticmethod
     def forward(ctx, rho_u: torch.Tensor, rho_d: torch.Tensor, deriv: int,  # type: ignore
-                libxcfcn: pylibxc.functional.LibXCFunctional) -> torch.Tensor:  # type: ignore
+                libxcfcn: pylibxc.functional.LibXCFunctional) -> Tuple[torch.Tensor, ...]:
         # Calculates and returns the energy density or its derivative w.r.t.
         # density.
         # The result is a tensor with shape (nderiv, ninps) where the first
@@ -339,7 +339,7 @@ MGGA_KEYS = [['zk'],
               'v4lapl4', 'v4lapl3tau', 'v4lapl2tau2', 'v4lapltau3', 'v4tau4']]
 
 def _extract_returns(ret: Mapping[str, np.ndarray], deriv: int, family: int) -> \
-        Tuple[torch.Tensor]:
+        Tuple[torch.Tensor, ...]:
     # compile the returns from pylibxc into a tuple of tensors with order given
     # by the keys
     a = lambda v: torch.as_tensor(v.T)
@@ -353,10 +353,10 @@ def _extract_returns(ret: Mapping[str, np.ndarray], deriv: int, family: int) -> 
         raise RuntimeError("Unknown libxc family %d" % family)
     return tuple(a(ret[key]) for key in keys[deriv])
 
-def _get_grad_inps(grad_res: Tuple[torch.Tensor], inps: Tuple[torch.Tensor],
-                   derivs: Tuple[torch.Tensor],
+def _get_grad_inps(grad_res: Tuple[torch.Tensor, ...], inps: Tuple[torch.Tensor, ...],
+                   derivs: Tuple[torch.Tensor, ...],
                    needs_input_grad: List[bool],
-                   deriv_idxs: List[List[int]]) -> Tuple[Optional[torch.Tensor]]:
+                   deriv_idxs: List[List[int]]) -> Tuple[Optional[torch.Tensor], ...]:
     # calculate the grad_inp from grad_res and given deriv_idxs
     # each row indicates the input, while the column indicates the index in out
     # deriv_idxs[i][j] means that grad_inp[i] += grad_res[j] * derivs[deriv_idxs[i][j]]
