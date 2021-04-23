@@ -185,7 +185,8 @@ class HamiltonCGTO(BaseHamilton):
         # setup the basis as a spatial function
         self.is_ao_set = True
         self.basis = intor.eval_gto(self.libcint_wrapper, self.rgrid)  # (nao, ngrid)
-        self.basis_dvolume = self.basis * self.grid.get_dvolume()  # (nao, ngrid)
+        self.dvolume = self.grid.get_dvolume()
+        self.basis_dvolume = self.basis * self.dvolume  # (nao, ngrid)
 
         if self.xcfamily == 1:  # LDA
             return
@@ -217,11 +218,21 @@ class HamiltonCGTO(BaseHamilton):
         return xt.LinearOperator.m(mat, is_hermitian=True)
 
     def get_lapl_vext(self, lapl_vext: torch.Tensor) -> xt.LinearOperator:
-        # get the linear operator for the laplacian part of the potential
+        # get the linear operator for the laplacian part of the potential,
+        # usually it is the derivative of energy w.r.t. laplacian of the density
         # lapl_vext: (*BR, ngrid)
         # return: (*BR, nao, nao)
         # TODO: implement this!
-        pass
+        if not self.is_lapl_ao_set:
+            raise RuntimeError("Please call `setup_grid(grid, xc)` to call this function")
+        # the equation below is obtained by calculating dExc/dD_ij where D_ij is
+        # the density matrix
+        lapl_dvol = lapl_vext * self.dvolume
+        mat1 = torch.einsum("...r,br,cr->...bc", lapl_dvol, self.basis, self.lapl_basis)
+        mat1 = mat1 + mat1.transpose(-2, -1)  # + c.c.
+        mat2 = 2 * torch.einsum("...r,dbr,dcr->...bc", lapl_dvol, self.grad_basis, self.grad_basis)
+        mat = mat1 + mat2
+        return xt.LinearOperator.m(mat, is_hermitian=True)
 
     ################ xc-related ################
     @overload
@@ -344,7 +355,8 @@ class HamiltonCGTO(BaseHamilton):
         elif methodname == "get_grad_vext":
             return [prefix + "basis_dvolume", prefix + "grad_basis"]
         elif methodname == "get_lapl_vext":
-            return [prefix + "basis_dvolume", prefix + "lapl_basis"]
+            return [prefix + "dvolume", prefix + "basis", prefix + "grad_basis",
+                    prefix + "lapl_basis"]
         elif methodname == "get_vxc":
             assert self.xc is not None
             params = self.getparamnames("_dm2densinfo", prefix=prefix) + \
