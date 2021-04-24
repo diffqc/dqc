@@ -134,10 +134,10 @@ def test_libxc_mgga_gradcheck():
     torch.autograd.gradgradcheck(get_edens_unpol, param_unpol)
     torch.autograd.gradgradcheck(get_vxc_unpol, param_unpol)
 
-    # torch.autograd.gradcheck(get_edens_pol, param_pol)
-    # torch.autograd.gradcheck(get_vxc_pol, param_pol)
-    # torch.autograd.gradgradcheck(get_edens_pol, param_pol)
-    # torch.autograd.gradgradcheck(get_vxc_pol, param_pol)
+    torch.autograd.gradcheck(get_edens_pol, param_pol)
+    torch.autograd.gradcheck(get_vxc_pol, param_pol)
+    torch.autograd.gradgradcheck(get_edens_pol, param_pol)
+    torch.autograd.gradgradcheck(get_vxc_pol, param_pol)
 
 def test_libxc_lda_value():
     # check if the value is consistent
@@ -238,10 +238,10 @@ def test_libxc_mgga_value():
     edens_unpol_true = scan_e_true(rho_tot, gradn_tot, lapl_tot, kin_tot)
     assert torch.allclose(edens_unpol, edens_unpol_true)
 
-    # edens_pol = xc.get_edensityxc(densinfo)
-    # edens_pol_true = 0.5 * (scan_e_true(2 * rho_u, 2 * gradn_u, 2 * lapl_u, 2 * kin_u) + \
-    #     scan_e_true(2 * rho_d, 2 * gradn_d, 2 * lapl_d, 2 * kin_d))
-    # assert torch.allclose(edens_pol, edens_pol_true)
+    edens_pol = xc.get_edensityxc(densinfo)
+    edens_pol_true = 0.5 * (scan_e_true(2 * rho_u, 2 * gradn_u, 2 * lapl_u, 2 * kin_u) + \
+        scan_e_true(2 * rho_d, 2 * gradn_d, 2 * lapl_d, 2 * kin_d))
+    assert torch.allclose(edens_pol, edens_pol_true)
 
 class PseudoLDA(BaseXC):
     @property
