@@ -6,7 +6,7 @@ from dqc.grid.lebedev_grid import LebedevGrid
 from dqc.grid.becke_grid import BeckeGrid, PBCBeckeGrid
 from dqc.grid.predefined_grid import SG2, SG3
 from dqc.hamilton.intor.lattice import Lattice
-from dqc.utils.periodictable import atom_bragg_radii
+from dqc.utils.periodictable import atom_bragg_radii, atom_expected_radii
 
 __all__ = ["get_grid", "get_atomic_grid"]
 
@@ -36,10 +36,13 @@ def get_grid(grid_inp: Union[int, str], atomzs: Union[List[int], torch.Tensor], 
     else:
         atomzs_list = list(atomzs)
 
+    # atom_radii_list = atom_bragg_radii
+    atom_radii_list = atom_expected_radii
     if isinstance(grid_inp, int) or isinstance(grid_inp, str):
-        sphgrids = [get_atomic_grid(grid_inp, atomz, dtype=dtype, device=device)
+        sphgrids = [get_atomic_grid(grid_inp, atomz, ratom=atom_radii_list[atomz],
+                                    dtype=dtype, device=device)
                     for atomz in atomzs_list]
-        atomradii = torch.tensor([atom_bragg_radii[atomz] for atomz in atomzs_list],
+        atomradii = torch.tensor([atom_radii_list[atomz] for atomz in atomzs_list],
                                  dtype=dtype, device=device)
         if lattice is None:
             return BeckeGrid(sphgrids, atompos, atomradii=atomradii)
@@ -48,7 +51,7 @@ def get_grid(grid_inp: Union[int, str], atomzs: Union[List[int], torch.Tensor], 
     else:
         raise TypeError("Unknown type of grid_inp: %s" % type(grid_inp))
 
-def get_atomic_grid(grid_inp: Union[int, str], atomz: int,
+def get_atomic_grid(grid_inp: Union[int, str], atomz: int, ratom: float,
                     dtype: torch.dtype = _dtype,
                     device: torch.device = _device) -> BaseGrid:
     """
@@ -66,7 +69,7 @@ def get_atomic_grid(grid_inp: Union[int, str], atomz: int,
     elif isinstance(grid_inp, str):
         grid_str = grid_inp.lower().replace("-", "")
         grid_cls = _get_grid_cls(grid_str)
-        return grid_cls(atomz, dtype=dtype, device=device)
+        return grid_cls(atomz, ratom=ratom, dtype=dtype, device=device)
     else:
         raise TypeError("Unknown type of grid_inp: %s" % type(grid_inp))
 

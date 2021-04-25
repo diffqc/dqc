@@ -60,7 +60,7 @@ def test_lebedev_grid_dvol(rgrid_integrator, rgrid_transform):
 )
 def test_predefined_grid_dvol(grid_inp):
     dtype = torch.float64
-    sphgrid = get_atomic_grid(grid_inp, 1, dtype=dtype)
+    sphgrid = get_atomic_grid(grid_inp, 1, ratom=1.0, dtype=dtype)
 
     dvol = sphgrid.get_dvolume()  # (ngrid,)
     rgrid = sphgrid.get_rgrid()  # (ngrid, ndim)

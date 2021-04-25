@@ -11,66 +11,6 @@ __all__ = ["SG2", "SG3"]
 _dtype = torch.double
 _device = torch.device("cpu")
 
-_ATOM_RADIUS = {
-    1: 1.0,
-    2: 0.927272,
-    3: 3.873661,
-    4: 2.849396,
-    5: 2.204757,
-    6: 1.714495,
-    7: 1.409631,
-    8: 1.232198,
-    9: 1.084786,
-    10: 0.965273,
-    11: 4.208762,
-    12: 3.252938,
-    13: 3.433889,
-    14: 2.752216,
-    15: 2.322712,
-    16: 2.060717,
-    17: 1.842024,
-    18: 1.662954,
-    19: 5.243652,
-    20: 4.218469,
-    21: 3.959716,
-    22: 3.778855,
-    23: 3.626288,
-    24: 3.675012,
-    25: 3.381917,
-    26: 3.258487,
-    27: 3.153572,
-    28: 3.059109,
-    29: 3.330979,
-    30: 2.897648,
-    31: 3.424103,
-    32: 2.866859,
-    33: 2.512233,
-    34: 2.299617,
-    35: 2.111601,
-    36: 1.951590,
-    37: 5.631401,
-    38: 4.632850,
-    39: 4.299870,
-    40: 4.091705,
-    41: 3.985219,
-    42: 3.841740,
-    43: 3.684647,
-    44: 3.735235,
-    45: 3.702057,
-    46: 1.533028,
-    47: 3.655961,
-    48: 3.237216,
-    49: 3.777242,
-    50: 3.248093,
-    51: 2.901067,
-    52: 2.691328,
-    53: 2.501704,
-    54: 2.337950,
-}
-def get_atomic_radius(atomz: int) -> float:
-    # returns the atomic radius for the given atomz
-    return _ATOM_RADIUS[atomz]
-
 class SG2(TruncatedLebedevGrid):
     """
     SG2 grid from https://onlinelibrary.wiley.com/doi/epdf/10.1002/jcc.24761
@@ -130,10 +70,9 @@ class SG2(TruncatedLebedevGrid):
         17: [3, 17, 29, 17, 11],
     }
 
-    def __init__(self, atomz: int, dtype: torch.dtype = _dtype,
+    def __init__(self, atomz: int, ratom: float, dtype: torch.dtype = _dtype,
                  device: torch.device = _device):
         # prepare the whole radial grid
-        ratom = get_atomic_radius(atomz)
         grid_transform = DE2Transformation(
             alpha=self.de2_alphas.get(atomz, 1.0),
             rmin=1e-7, rmax=15 * ratom)
