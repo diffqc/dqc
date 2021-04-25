@@ -6,6 +6,7 @@ from dqc.grid.lebedev_grid import LebedevGrid
 from dqc.grid.becke_grid import BeckeGrid, PBCBeckeGrid
 from dqc.grid.predefined_grid import SG2, SG3
 from dqc.hamilton.intor.lattice import Lattice
+from dqc.utils.periodictable import atom_bragg_radii
 
 __all__ = ["get_grid", "get_atomic_grid"]
 
@@ -38,8 +39,10 @@ def get_grid(grid_inp: Union[int, str], atomzs: Union[List[int], torch.Tensor], 
     if isinstance(grid_inp, int) or isinstance(grid_inp, str):
         sphgrids = [get_atomic_grid(grid_inp, atomz, dtype=dtype, device=device)
                     for atomz in atomzs_list]
+        atomradii = torch.tensor([atom_bragg_radii[atomz] for atomz in atomzs_list],
+                                 dtype=dtype, device=device)
         if lattice is None:
-            return BeckeGrid(sphgrids, atompos)
+            return BeckeGrid(sphgrids, atompos, atomradii=atomradii)
         else:
             return PBCBeckeGrid(sphgrids, atompos, lattice=lattice)
     else:

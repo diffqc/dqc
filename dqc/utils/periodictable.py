@@ -1,5 +1,6 @@
 from typing import Union
 import torch
+import numpy as np
 from dqc.utils.datastruct import ZType
 
 periodic_table_atomz = {
@@ -116,6 +117,34 @@ atom_masses = {  # isotope-averaged atom masses in a.m.u.
     52: 127.60,
     54: 131.30,
 }
+
+# JCP 41, 3199 (1964); DOI:10.1063/1.1725697
+# taken from PySCF:
+# https://github.com/pyscf/pyscf/blob/45582e915e91890722fcae2bc30fb04867d5c95f/pyscf/data/radii.py#L23
+# I don't know why H has 0.35 while in the reference it is 0.
+# They are in angstrom, so we need to convert it to Bohr
+atom_bragg_radii = np.array([2.0,  # Ghost atom
+        0.35,                                     1.40,             # 1s
+        1.45, 1.05, 0.85, 0.70, 0.65, 0.60, 0.50, 1.50,             # 2s2p
+        1.80, 1.50, 1.25, 1.10, 1.00, 1.00, 1.00, 1.80,             # 3s3p
+        2.20, 1.80,                                                 # 4s
+        1.60, 1.40, 1.35, 1.40, 1.40, 1.40, 1.35, 1.35, 1.35, 1.35, # 3d
+                    1.30, 1.25, 1.15, 1.15, 1.15, 1.90,             # 4p
+        2.35, 2.00,                                                 # 5s
+        1.80, 1.55, 1.45, 1.45, 1.35, 1.30, 1.35, 1.40, 1.60, 1.55, # 4d
+                    1.55, 1.45, 1.45, 1.40, 1.40, 2.10,             # 5p
+        2.60, 2.15,                                                 # 6s
+        1.95, 1.85, 1.85, 1.85, 1.85, 1.85, 1.85,                   # La, Ce-Eu
+        1.80, 1.75, 1.75, 1.75, 1.75, 1.75, 1.75, 1.75,             # Gd, Tb-Lu
+              1.55, 1.45, 1.35, 1.35, 1.30, 1.35, 1.35, 1.35, 1.50, # 5d
+                    1.90, 1.80, 1.60, 1.90, 1.45, 2.10,             # 6p
+        1.80, 2.15,                                                 # 7s
+        1.95, 1.80, 1.80, 1.75, 1.75, 1.75, 1.75,
+        1.75, 1.75, 1.75, 1.75, 1.75, 1.75, 1.75,
+        1.75, 1.75, 1.75, 1.75, 1.75, 1.75, 1.75, 1.75, 1.75, 1.75,
+                    1.75, 1.75, 1.75, 1.75, 1.75, 1.75,
+        1.75, 1.75,
+        1.75, 1.75, 1.75, 1.75, 1.75, 1.75, 1.75, 1.75, 1.75, 1.75]) / 0.52917721092
 
 def get_atomz(elmt: Union[str, ZType]) -> ZType:
     # returns the atomic number from the given element

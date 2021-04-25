@@ -11,7 +11,8 @@ class BeckeGrid(BaseGrid):
     centered on each atom
     """
 
-    def __init__(self, atomgrid: List[LebedevGrid], atompos: torch.Tensor) -> None:
+    def __init__(self, atomgrid: List[LebedevGrid], atompos: torch.Tensor,
+                 atomradii: Optional[torch.Tensor] = None) -> None:
         # atomgrid: list with length (natoms)
         # atompos: (natoms, ndim)
 
@@ -25,7 +26,7 @@ class BeckeGrid(BaseGrid):
         rgrids, self._rgrid, dvol_atoms = _construct_rgrids(atomgrid, atompos)
 
         # calculate the integration weights
-        weights_atoms = _get_atom_weights(rgrids, atompos)  # (ngrid,)
+        weights_atoms = _get_atom_weights(rgrids, atompos, atomradii=atomradii)  # (ngrid,)
         self._dvolume = dvol_atoms * weights_atoms
 
     @property
@@ -167,10 +168,10 @@ def _construct_rgrids(atomgrid: List[LebedevGrid], atompos: torch.Tensor) \
     return allpos_lst, rgrid, dvol_atoms
 
 def _get_atom_weights(rgrids: List[torch.Tensor], atompos: torch.Tensor,
-                      atomradius: Optional[torch.Tensor] = None) -> torch.Tensor:
+                      atomradii: Optional[torch.Tensor] = None) -> torch.Tensor:
     # rgrids: list of (natgrid, ndim) with length natoms consisting of absolute position of the grids
     # atompos: (natoms, ndim)
-    # atomradius: (natoms,) or None
+    # atomradii: (natoms,) or None
     # returns: (ngrid,)
     assert len(rgrids) == atompos.shape[0]
     dtype = atompos.dtype
@@ -185,10 +186,10 @@ def _get_atom_weights(rgrids: List[torch.Tensor], atompos: torch.Tensor,
 
     # calculate the distortion due to heterogeneity
     # (Appendix in Becke's https://doi.org/10.1063/1.454033)
-    if atomradius is not None:
-        chiij = atomradius / atomradius.unsqueeze(1)  # (natoms, natoms)
-        uij = (atomradius - atomradius.unsqueeze(1)) / \
-              (atomradius + atomradius.unsqueeze(1))
+    if atomradii is not None:
+        chiij = atomradii / atomradii.unsqueeze(1)  # (natoms, natoms)
+        uij = (atomradii - atomradii.unsqueeze(1)) / \
+              (atomradii + atomradii.unsqueeze(1))
         aij = torch.clamp(uij / (uij * uij - 1), min=-0.45, max=0.45)  # (natoms, natoms)
         aij = aij.unsqueeze(-1)  # (natoms, natoms, 1)
 
@@ -200,8 +201,13 @@ def _get_atom_weights(rgrids: List[torch.Tensor], atompos: torch.Tensor,
     mu_ij = (rgatoms - rgatoms.unsqueeze(1))  # (natoms, natoms, ngrid)
     mu_ij /= ratoms.unsqueeze(-1)  # (natoms, natoms, ngrid)
 
-    if atomradius is not None:
-        mu_ij += aij * (1 - mu_ij * mu_ij)
+    if atomradii is not None:
+        # mu_ij += aij * (1 - mu_ij * mu_ij)
+        mu_ij2 = mu_ij * mu_ij
+        mu_ij2 -= 1
+        mu_ij2 *= (-aij)
+        mu_ij2 += mu_ij
+        mu_ij = mu_ij2
 
     # making mu_ij sparse for efficiency
     # threshold: mu_ij < 0.65 (s > 1e-3), mu_ij < 0.74 (s > 1e-4)
