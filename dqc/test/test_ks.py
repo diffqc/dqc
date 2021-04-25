@@ -51,7 +51,7 @@ energies = {
         -112.75427978513514,
     ],
     "mgga_x_scan": [
-        -1.0991889808183757,  # from psi4
+        -1.0991889808183757,  # from psi4, but it doesn't converge either
         -14.8687604,
         -109.055091,
         -198.898047,
@@ -88,13 +88,16 @@ def test_rks_energy(xc, atomzs, dist, energy_true, grid):
     # test to see if the energy calculated by DQC agrees with PySCF
     # for this test only we test for different types of grids to see if any error is raised
     if xc == "mgga_x_scan":
-        if atomzs in ([1, 1], [7, 7], [6, 8]):
+        if atomzs == [1, 1]:
+            pytest.xfail("Psi4 and PySCF don't converge")
+        if atomzs in ([7, 7], [6, 8]):
             pytest.xfail("I'm working on it")
     poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist
     mol = Mol((atomzs, poss), basis="6-311++G**", dtype=dtype, grid=grid)
     qc = KS(mol, xc=xc, restricted=True).run()
     ene = qc.energy()
-    assert torch.allclose(ene, ene * 0 + energy_true)
+    # < 1 kcal/mol
+    assert torch.allclose(ene, ene * 0 + energy_true, atol=1e-3, rtol=0)
 
 @pytest.mark.parametrize(
     "xc,atomzs,dist,grad2",
@@ -250,6 +253,9 @@ u_mols_energies = {
     ],
     "gga_x_pbe": [
         -149.64097658035521,
+    ],
+    "mgga_x_scan": [
+        -149.737038,
     ]
 }
 u_mols_energies_df = {
@@ -301,7 +307,9 @@ def test_uks_energy_atoms(xc, atomz, spin, energy_true):
     [("lda_x", atomzs, dist, spin, energy) for ((atomzs, dist, spin), energy)
         in zip(u_mols_dists_spins, u_mols_energies["lda_x"])] + \
     [("gga_x_pbe", atomzs, dist, spin, energy) for ((atomzs, dist, spin), energy)
-        in zip(u_mols_dists_spins, u_mols_energies["gga_x_pbe"])]
+        in zip(u_mols_dists_spins, u_mols_energies["gga_x_pbe"])] + \
+    [("mgga_x_scan", atomzs, dist, spin, energy) for ((atomzs, dist, spin), energy)
+        in zip(u_mols_dists_spins, u_mols_energies["mgga_x_scan"])]
 )
 def test_uks_energy_mols(xc, atomzs, dist, spin, energy_true):
     # check the energy of molecules with non-0 spins
@@ -309,7 +317,8 @@ def test_uks_energy_mols(xc, atomzs, dist, spin, energy_true):
     mol = Mol((atomzs, poss), basis="6-311++G**", grid=3, dtype=dtype, spin=spin)
     qc = KS(mol, xc=xc, restricted=False).run()
     ene = qc.energy()
-    assert torch.allclose(ene, ene * 0 + energy_true, rtol=1e-6, atol=0.0)
+    # < 1 kcal/mol
+    assert torch.allclose(ene, ene * 0 + energy_true, atol=1e-3, rtol=0.0)
 
 @pytest.mark.parametrize(
     "xccls,xcparams,atomz",
