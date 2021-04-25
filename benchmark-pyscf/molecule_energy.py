@@ -23,9 +23,9 @@ def get_molecule(molname):
     mol = gto.M(atom=atom_desc, basis=basis, unit="Bohr", spin=spin)
     return mol
 
-def get_atom(atom):
+def get_atom(atom, spin=0):
     basis = "6311++g**"
-    mol = gto.M(atom="%s 0 0 0"%atom, basis=basis, unit="Bohr")
+    mol = gto.M(atom="%s 0 0 0"%atom, spin=spin, basis=basis, unit="Bohr")
     return mol
 
 def get_molecules_energy(xc="lda", with_df=False):
@@ -44,12 +44,13 @@ def get_molecules_energy(xc="lda", with_df=False):
         print("Molecule %s: %.8e (%.3e)" % (molname, energy, t1-t0))
 
 def get_atoms_energy():
-    atoms = ["He", "Be", "Ne"]
-    for atomname in atoms:
+    atoms = ["H", "Li", "B", "O"]
+    spins = [1, 1, 1, 2]
+    for (atomname, spin) in zip(atoms, spins):
         t0 = time.time()
-        atom = get_atom(atomname)
-        mf = dft.RKS(atom)
-        mf.xc = "lda"
+        atom = get_atom(atomname, spin)
+        mf = dft.UKS(atom)
+        mf.xc = "mgga_x_scan"
         mf.grids.level = 4
         energy = mf.kernel()
         t1 = time.time()
@@ -61,5 +62,5 @@ if __name__ == "__main__":
     # mf.xc = "lda"
     # mf.grids.level = 4
     # print(mf.kernel())
-    get_molecules_energy(xc="mgga_x_scan", with_df=True)
+    # get_molecules_energy(xc="mgga_x_scan", with_df=True)
     get_atoms_energy()

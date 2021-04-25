@@ -51,7 +51,7 @@ energies = {
         -112.75427978513514,
     ],
     "mgga_x_scan": [
-        -1.068217310366847,
+        -1.0991889808183757,  # from psi4
         -14.8687604,
         -109.055091,
         -198.898047,
@@ -231,6 +231,12 @@ u_atom_energies = {
         -7.408839641982052,
         -24.496384193684193,
         -74.77107826628823,
+    ],
+    "mgga_x_scan": [
+        -4.99993311e-01,
+        -7.408839641982052,  # no benchmark converges
+        -2.45243036e+01,
+        -74.8282243091453,
     ]
 }
 u_mols_dists_spins = [
@@ -273,15 +279,22 @@ def test_uks_energy_same_as_rks(xc, atomzs, dist, energy_true):
     "xc,atomz,spin,energy_true",
     [("lda_x", atomz, spin, energy) for ((atomz, spin), energy) in zip(u_atomzs_spins, u_atom_energies["lda_x"])] + \
     [("gga_x_pbe", atomz, spin, energy) for ((atomz, spin), energy)
-        in zip(u_atomzs_spins, u_atom_energies["gga_x_pbe"])]
+        in zip(u_atomzs_spins, u_atom_energies["gga_x_pbe"])] + \
+    [("mgga_x_scan", atomz, spin, energy) for ((atomz, spin), energy)
+        in zip(u_atomzs_spins, u_atom_energies["mgga_x_scan"])]
 )
 def test_uks_energy_atoms(xc, atomz, spin, energy_true):
     # check the energy of atoms with non-0 spins
+    if xc == "mgga_x_scan":
+        if atomz == 3:
+            pytest.xfail("No benchmark converges")
+
     poss = torch.tensor([[0.0, 0.0, 0.0]], dtype=dtype)
-    mol = Mol(([atomz], poss), basis="6-311++G**", grid=4, dtype=dtype, spin=spin)
+    mol = Mol(([atomz], poss), basis="6-311++G**", grid="sg3", dtype=dtype, spin=spin)
     qc = KS(mol, xc=xc, restricted=False).run()
     ene = qc.energy()
-    assert torch.allclose(ene, ene * 0 + energy_true, atol=0.0, rtol=1e-6)
+    # < 1 kcal/mol
+    assert torch.allclose(ene, ene * 0 + energy_true, atol=1e-3, rtol=0)
 
 @pytest.mark.parametrize(
     "xc,atomzs,dist,spin,energy_true",
