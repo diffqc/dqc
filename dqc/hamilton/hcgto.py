@@ -262,7 +262,7 @@ class HamiltonCGTO(BaseHamilton):
             if self.xcfamily >= 2:  # GGA or MGGA
                 assert potinfo.grad is not None
                 vxc_linop = vxc_linop + self.get_grad_vext(potinfo.grad)
-            if self.xcfamily >= 3:  # MGGA
+            if self.xcfamily >= 4:  # MGGA
                 assert potinfo.lapl is not None
                 assert potinfo.kin is not None
                 vxc_linop = vxc_linop + self.get_lapl_kin_vext(potinfo.lapl, potinfo.kin)
@@ -278,7 +278,7 @@ class HamiltonCGTO(BaseHamilton):
                 assert potinfo.d.grad is not None
                 vxc_linop_u = vxc_linop_u + self.get_grad_vext(potinfo.u.grad)
                 vxc_linop_d = vxc_linop_d + self.get_grad_vext(potinfo.d.grad)
-            if self.xcfamily >= 3:  # MGGA
+            if self.xcfamily >= 4:  # MGGA
                 assert potinfo.u.lapl is not None
                 assert potinfo.d.lapl is not None
                 assert potinfo.u.kin is not None
