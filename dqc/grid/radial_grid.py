@@ -98,6 +98,8 @@ def get_xw_integration(n: int, s0: str) -> Tuple[np.ndarray, np.ndarray]:
     elif s == "uniform":
         x = np.linspace(-1, 1, n)
         w = np.ones(n) * (x[1] - x[0])
+        w[0] *= 0.5
+        w[-1] *= 0.5
         return x, w
     else:
         raise RuntimeError("Unknown grid_integrator: %s" % s0)
