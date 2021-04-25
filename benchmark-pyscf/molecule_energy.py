@@ -61,5 +61,5 @@ if __name__ == "__main__":
     # mf.xc = "lda"
     # mf.grids.level = 4
     # print(mf.kernel())
-    get_molecules_energy(xc="gga_x_pbe", with_df=True)
+    get_molecules_energy(xc="mgga_x_scan", with_df=True)
     get_atoms_energy()

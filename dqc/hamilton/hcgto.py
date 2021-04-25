@@ -230,9 +230,10 @@ class HamiltonCGTO(BaseHamilton):
         # the equation below is obtained by calculating dExc/dD_ij where D_ij is
         # the density matrix
         # the equation for kinetic derivative is from eq. (26) https://doi.org/10.1063/1.4811270
+        # but there is a missing factor half in it, see eq. (26) https://doi.org/10.1063/1.4967960
 
         lapl_dvol = lapl_vext * self.dvolume
-        lapl_kin_dvol = (2 * lapl_vext + kin_vext) * self.dvolume
+        lapl_kin_dvol = (2 * lapl_vext + 0.5 * kin_vext) * self.dvolume
         mat1 = torch.einsum("...r,br,cr->...bc", lapl_dvol, self.basis, self.lapl_basis)
         mat1 = mat1 + mat1.transpose(-2, -1)  # + c.c.
         mat2 = torch.einsum("...r,dbr,dcr->...bc", lapl_kin_dvol, self.grad_basis, self.grad_basis)
@@ -323,11 +324,14 @@ class HamiltonCGTO(BaseHamilton):
                 # d.n(r) = sum (D_ij * d.phi_i * phi_j + D_ij * phi_i * d.phi_j)
                 gdens = self._get_grad_dens_at_grid(dm)
 
-            # TODO: implement the density laplacian
+            glapl: Optional[torch.Tensor] = None
+            gkin: Optional[torch.Tensor] = None
+            if family >= 4:
+                glapl, gkin = self._get_lapl_kin_dens_at_grid(dm)
 
             # dens: (*BD, ngrid)
             # gdens: (*BD, ngrid, ndim)
-            res = ValGrad(value=dens, grad=gdens)
+            res = ValGrad(value=dens, grad=gdens, lapl=glapl, kin=gkin)
             return res
 
     def _get_dens_at_grid(self, dm: torch.Tensor) -> torch.Tensor:
@@ -341,6 +345,17 @@ class HamiltonCGTO(BaseHamilton):
         # dm is multiplied by 2 because n(r) = sum (D_ij * phi_i * phi_j), thus
         # d.n(r) = sum (D_ij * d.phi_i * phi_j + D_ij * phi_i * d.phi_j)
         return torch.einsum("...ij,dir,jr->...rd", 2 * dm, self.grad_basis, self.basis)
+
+    def _get_lapl_kin_dens_at_grid(self, dm: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        # calculate the laplacian of the density and kinetic energy density at the grid
+        if not self.is_lapl_ao_set:
+            raise RuntimeError("Please call `setup_grid(grid, gradlevel>=1)` to calculate the density gradient")
+        dmt = dm.transpose(-2, -1)
+        lapl_basis = torch.einsum("...ij,ir,jr->...r", (dm + dmt), self.lapl_basis, self.basis)
+        grad_grad = torch.einsum("...ij,dir,djr->...r", dm, self.grad_basis, self.grad_basis)
+        lapl = lapl_basis + 2 * grad_grad
+        kin = grad_grad * 0.5
+        return lapl, kin
 
     def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
         if methodname == "get_kinnucl":
@@ -372,22 +387,22 @@ class HamiltonCGTO(BaseHamilton):
                 self.xc.getparamnames("get_vxc", prefix=prefix + "xc.")
             if self.xcfamily >= 2:
                 params += self.getparamnames("get_grad_vext", prefix=prefix)
-            if self.xcfamily >= 3:
+            if self.xcfamily >= 4:
                 params += self.getparamnames("get_lapl_kin_vext", prefix=prefix)
             return params
         elif methodname == "_dm2densinfo":
             params = self.getparamnames("_get_dens_at_grid", prefix=prefix)
             if self.xcfamily >= 2:
                 params += self.getparamnames("_get_grad_dens_at_grid", prefix=prefix)
-            if self.xcfamily >= 3:
-                params += self.getparamnames("_get_lapl_dens_at_grid", prefix=prefix)
+            if self.xcfamily >= 4:
+                params += self.getparamnames("_get_lapl_kin_dens_at_grid", prefix=prefix)
             return params
         elif methodname == "_get_dens_at_grid":
             return [prefix + "basis"]
         elif methodname == "_get_grad_dens_at_grid":
             return [prefix + "basis", prefix + "grad_basis"]
-        elif methodname == "_get_lapl_dens_at_grid":
-            return [prefix + "basis", prefix + "lapl_basis"]
+        elif methodname == "_get_lapl_kin_dens_at_grid":
+            return [prefix + "basis", prefix + "grad_basis", prefix + "lapl_basis"]
         else:
             raise KeyError("getparamnames has no %s method" % methodname)
         # TODO: complete this

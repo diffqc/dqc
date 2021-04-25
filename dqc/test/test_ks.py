@@ -49,6 +49,13 @@ energies = {
         -108.98020015083173,
         -198.77297153659887,
         -112.75427978513514,
+    ],
+    "mgga_x_scan": [
+        -1.068217310366847,
+        -14.8687604,
+        -109.055091,
+        -198.898047,
+        -112.836274,
     ]
 }
 energies_df = {
@@ -74,11 +81,15 @@ energies_df = {
     [("lda_x", *atomz_pos, energy, 3) for (atomz_pos, energy) in zip(atomzs_poss, energies["lda_x"])] + \
     [("lda_x", *atomz_pos, energy, "sg2") for (atomz_pos, energy) in zip(atomzs_poss, energies["lda_x"])] + \
     [("gga_x_pbe", *atomz_pos, energy, 3) for (atomz_pos, energy) in zip(atomzs_poss, energies["gga_x_pbe"])] + \
-    [("gga_x_pbe", *atomz_pos, energy, "sg2") for (atomz_pos, energy) in zip(atomzs_poss, energies["gga_x_pbe"])]
+    [("gga_x_pbe", *atomz_pos, energy, "sg2") for (atomz_pos, energy) in zip(atomzs_poss, energies["gga_x_pbe"])] + \
+    [("mgga_x_scan", *atzpos, ene, "sg3") for (atzpos, ene) in zip(atomzs_poss, energies["mgga_x_scan"])]
 )
 def test_rks_energy(xc, atomzs, dist, energy_true, grid):
     # test to see if the energy calculated by DQC agrees with PySCF
     # for this test only we test for different types of grids to see if any error is raised
+    if xc == "mgga_x_scan":
+        if atomzs in ([1, 1], [7, 7], [6, 8]):
+            pytest.xfail("I'm working on it")
     poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist
     mol = Mol((atomzs, poss), basis="6-311++G**", dtype=dtype, grid=grid)
     qc = KS(mol, xc=xc, restricted=True).run()
