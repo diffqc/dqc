@@ -464,7 +464,7 @@ def test_integral_subset_grad_basis(intc_type, allsubsets):
 
 @pytest.mark.parametrize(
     "eval_type",
-    ["", "grad"]
+    ["", "grad", "lapl"]
 )
 def test_eval_gto_vs_pyscf(eval_type):
     # check if our eval_gto produces the same results as pyscf
@@ -484,6 +484,9 @@ def test_eval_gto_vs_pyscf(eval_type):
     elif eval_type == "grad":
         ao_value = intor.eval_gradgto(wrapper, rgrid)
         ao_value1 = intor.eval_gradgto(wrapper1, rgrid)
+    elif eval_type == "lapl":
+        ao_value = intor.eval_laplgto(wrapper, rgrid)
+        ao_value1 = intor.eval_laplgto(wrapper1, rgrid)
 
     # check the partial eval_gto
     assert torch.allclose(ao_value[..., :len(wrapper1), :], ao_value1)
@@ -496,9 +499,12 @@ def test_eval_gto_vs_pyscf(eval_type):
         ao_value_scf = mol.eval_gto("GTOval_sph", coords_np)
     elif eval_type == "grad":
         ao_value_scf = mol.eval_gto("GTOval_ip_sph", coords_np)
+    elif eval_type == "lapl":
+        ao_deriv2 = mol.eval_gto("GTOval_sph_deriv2", coords_np)
+        ao_value_scf = ao_deriv2[4] + ao_deriv2[7] + ao_deriv2[9]  # 4: xx, 7: yy, 9: zz
     ao_value_scf = torch.as_tensor(ao_value_scf).transpose(-2, -1)
 
-    assert torch.allclose(ao_value, ao_value_scf)
+    assert torch.allclose(ao_value, ao_value_scf, atol=2e-7)
 
 @pytest.mark.parametrize(
     "eval_type,partial",
