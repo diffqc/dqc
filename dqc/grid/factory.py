@@ -203,11 +203,15 @@ def get_grid(atomzs: Union[List[int], torch.Tensor], atompos: torch.Tensor,
     if lattice is None:
         multiatoms_options: Mapping[str, Callable[[], BaseGrid]] = {
             "becke": lambda: BeckeGrid(sphgrids, atompos, atomradii=atomradii),
+            "treutler": lambda: BeckeGrid(sphgrids, atompos, atomradii=atomradii,
+                                          ratom_adjust="treutler"),
         }
     else:
         assert isinstance(lattice, Lattice)
         multiatoms_options = {
             "becke": lambda: PBCBeckeGrid(sphgrids, atompos, lattice=lattice),  # type: ignore
+            "treutler": lambda: PBCBeckeGrid(sphgrids, atompos, lattice=lattice,  # type: ignore
+                                             ratom_adjust="treutler"),
         }
     grid = get_option("multiatoms scheme", multiatoms_scheme, multiatoms_options)()
     return grid
@@ -226,6 +230,7 @@ def get_predefined_grid(grid_inp: Union[int, str], atomzs: Union[List[int], torc
                             nr=75, nang=302,
                             radgrid_generator="uniform",
                             radgrid_transform="sg2-dasgupta",
+                            # using expected from de2 ref: DOI 10.1007/s00214-012-1169-z
                             atom_radii="expected",
                             multiatoms_scheme="becke",
                             truncate="dasgupta",
@@ -235,6 +240,7 @@ def get_predefined_grid(grid_inp: Union[int, str], atomzs: Union[List[int], torc
                             nr=99, nang=590,
                             radgrid_generator="uniform",
                             radgrid_transform="sg3-dasgupta",
+                            # using expected from de2 ref: DOI 10.1007/s00214-012-1169-z
                             atom_radii="expected",
                             multiatoms_scheme="becke",
                             truncate="dasgupta",
@@ -242,7 +248,6 @@ def get_predefined_grid(grid_inp: Union[int, str], atomzs: Union[List[int], torc
         else:
             raise ValueError(f"Unknown grid name: {grid_inp}")
     elif isinstance(grid_inp, int):
-        # grid_inp as an int is deprecated (TODO: put a warning here)
         #        0,   1,   2,   3,   4,    5
         nr   = [20,  40,  60,  75,  99,  125][grid_inp]
         nang = [74, 110, 170, 302, 590, 1202][grid_inp]
@@ -251,8 +256,8 @@ def get_predefined_grid(grid_inp: Union[int, str], atomzs: Union[List[int], torc
                         radgrid_generator="chebyshev",
                         radgrid_transform="treutlerm4",
                         atom_radii="bragg",
-                        multiatoms_scheme="becke",
-                        truncate=None,
+                        multiatoms_scheme="treutler",
+                        truncate="dasgupta",
                         dtype=dtype, device=device)
     else:
         raise TypeError("Unknown type of grid_inp: %s" % type(grid_inp))

@@ -12,7 +12,8 @@ class BeckeGrid(BaseGrid):
     """
 
     def __init__(self, atomgrid: List[LebedevGrid], atompos: torch.Tensor,
-                 atomradii: Optional[torch.Tensor] = None) -> None:
+                 atomradii: Optional[torch.Tensor] = None,
+                 ratom_adjust: str = "becke") -> None:
         # atomgrid: list with length (natoms)
         # atompos: (natoms, ndim)
 
@@ -26,7 +27,8 @@ class BeckeGrid(BaseGrid):
         rgrids, self._rgrid, dvol_atoms = _construct_rgrids(atomgrid, atompos)
 
         # calculate the integration weights
-        weights_atoms = _get_atom_weights(rgrids, atompos, atomradii=atomradii)  # (ngrid,)
+        weights_atoms = _get_atom_weights(rgrids, atompos, atomradii=atomradii,
+                                          ratom_adjust=ratom_adjust)  # (ngrid,)
         self._dvolume = dvol_atoms * weights_atoms
 
     @property
@@ -62,7 +64,8 @@ class PBCBeckeGrid(BaseGrid):
     are considered, and atoms corresponds to each grid points are involved in
     calculating the weights.
     """
-    def __init__(self, atomgrid: List[LebedevGrid], atompos: torch.Tensor, lattice: Lattice):
+    def __init__(self, atomgrid: List[LebedevGrid], atompos: torch.Tensor, lattice: Lattice,
+                 ratom_adjust: str = "becke"):
         # atomgrid: list with length (natoms)
         # atompos: (natoms, ndim)
 
@@ -123,7 +126,7 @@ class PBCBeckeGrid(BaseGrid):
         self._rgrid = torch.cat(new_rgrids, dim=0)  # (ngrid, ndim)
         dvol_atoms = torch.cat(new_dvols, dim=0)  # (ngrid)
         new_atompos = torch.cat(new_atompos_lst, dim=0)  # (nnewatoms, ndim)
-        watoms = _get_atom_weights(new_rgrids, new_atompos)  # (ngrid,)
+        watoms = _get_atom_weights(new_rgrids, new_atompos, ratom_adjust=ratom_adjust)  # (ngrid,)
         self._dvolume = dvol_atoms * watoms
 
     @property
@@ -168,7 +171,8 @@ def _construct_rgrids(atomgrid: List[LebedevGrid], atompos: torch.Tensor) \
     return allpos_lst, rgrid, dvol_atoms
 
 def _get_atom_weights(rgrids: List[torch.Tensor], atompos: torch.Tensor,
-                      atomradii: Optional[torch.Tensor] = None) -> torch.Tensor:
+                      atomradii: Optional[torch.Tensor] = None,
+                      ratom_adjust: str = "becke") -> torch.Tensor:
     # rgrids: list of (natgrid, ndim) with length natoms consisting of absolute position of the grids
     # atompos: (natoms, ndim)
     # atomradii: (natoms,) or None
@@ -187,9 +191,17 @@ def _get_atom_weights(rgrids: List[torch.Tensor], atompos: torch.Tensor,
     # calculate the distortion due to heterogeneity
     # (Appendix in Becke's https://doi.org/10.1063/1.454033)
     if atomradii is not None:
-        chiij = atomradii / atomradii.unsqueeze(1)  # (natoms, natoms)
-        uij = (atomradii - atomradii.unsqueeze(1)) / \
-              (atomradii + atomradii.unsqueeze(1))
+        if ratom_adjust == "becke":
+            rad = atomradii
+        elif ratom_adjust == "treutler":
+            # https://aip.scitation.org/doi/pdf/10.1063/1.469408 eq (13)
+            rad = atomradii ** 0.5
+        else:
+            msg = "Unknown atom adjustment: %s. Available: ['becke', 'treutler']" % ratom_adjust
+            raise ValueError(msg)
+        chiij = rad / rad.unsqueeze(1)  # (natoms, natoms)
+        uij = (rad - rad.unsqueeze(1)) / \
+              (rad + rad.unsqueeze(1))
         aij = torch.clamp(uij / (uij * uij - 1), min=-0.45, max=0.45)  # (natoms, natoms)
         aij = aij.unsqueeze(-1)  # (natoms, natoms, 1)
 

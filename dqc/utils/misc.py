@@ -29,7 +29,7 @@ def get_option(name: str, s: K, options: Mapping[K, T]) -> T:
     if s in options:
         return options[s]
     else:
-        raise ValueError(f"Unknown {name}: {s}. The available options are: {str(options)}")
+        raise ValueError(f"Unknown {name}: {s}. The available options are: {str(list(options.keys()))}")
 
 @overload
 def gaussian_int(n: int, alpha: float) -> float:
