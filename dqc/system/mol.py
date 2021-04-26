@@ -5,7 +5,7 @@ from dqc.hamilton.base_hamilton import BaseHamilton
 from dqc.hamilton.hcgto import HamiltonCGTO
 from dqc.system.base_system import BaseSystem
 from dqc.grid.base_grid import BaseGrid
-from dqc.grid.factory import get_grid
+from dqc.grid.factory import get_predefined_grid
 from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, SpinParam, ZType, \
                                  is_z_float, BasisInpType, DensityFitInfo
 from dqc.utils.periodictable import get_atomz, get_atom_mass
@@ -224,8 +224,8 @@ class Mol(BaseSystem):
 
     def setup_grid(self) -> None:
         grid_inp = self._grid_inp
-        self._grid = get_grid(self._grid_inp, self._atomzs_int, self._atompos,
-                              dtype=self._dtype, device=self._device)
+        self._grid = get_predefined_grid(self._grid_inp, self._atomzs_int, self._atompos,
+                                         dtype=self._dtype, device=self._device)
 
         # #        0,  1,  2,  3,  4,  5
         # nr   = [20, 40, 60, 75, 100, 125][grid_inp]

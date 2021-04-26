@@ -4,7 +4,7 @@ import pytest
 from dqc.grid.radial_grid import RadialGrid
 from dqc.grid.lebedev_grid import LebedevGrid
 from dqc.grid.multiatoms_grid import BeckeGrid, PBCBeckeGrid
-from dqc.grid.factory import get_atomic_grid
+from dqc.grid.factory import get_predefined_grid
 from dqc.hamilton.intor.lattice import Lattice
 
 rgrid_combinations = [
@@ -60,7 +60,9 @@ def test_lebedev_grid_dvol(rgrid_integrator, rgrid_transform):
 )
 def test_predefined_grid_dvol(grid_inp):
     dtype = torch.float64
-    sphgrid = get_atomic_grid(grid_inp, 1, ratom=1.0, dtype=dtype)
+    atomzs = [1]
+    atomposs = torch.zeros((1, 3), dtype=dtype)
+    sphgrid = get_predefined_grid(grid_inp, atomzs, atomposs, dtype=dtype)
 
     dvol = sphgrid.get_dvolume()  # (ngrid,)
     rgrid = sphgrid.get_rgrid()  # (ngrid, ndim)

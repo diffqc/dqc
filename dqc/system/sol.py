@@ -6,7 +6,7 @@ from dqc.hamilton.base_hamilton import BaseHamilton
 from dqc.hamilton.hcgto_pbc import HamiltonCGTO_PBC
 from dqc.system.base_system import BaseSystem
 from dqc.grid.base_grid import BaseGrid
-from dqc.grid.factory import get_grid
+from dqc.grid.factory import get_predefined_grid
 from dqc.system.mol import _parse_moldesc, _parse_basis, _get_nelecs_spin, \
                            _get_orb_weights, AtomZsType, AtomPosType
 from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, ZType, BasisInpType, \
@@ -223,9 +223,9 @@ class Sol(BaseSystem):
         return eii * 0.5
 
     def setup_grid(self) -> None:
-        self._grid = get_grid(self._grid_inp, self._atomzs, self._atompos,
-                              lattice=self._lattice,
-                              dtype=self._dtype, device=self._device)
+        self._grid = get_predefined_grid(self._grid_inp, self._atomzs, self._atompos,
+                                         lattice=self._lattice,
+                                         dtype=self._dtype, device=self._device)
 
     def get_grid(self) -> BaseGrid:
         if self._grid is None:

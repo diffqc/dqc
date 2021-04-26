@@ -314,7 +314,8 @@ def test_uks_energy_atoms(xc, atomz, spin, energy_true):
 def test_uks_energy_mols(xc, atomzs, dist, spin, energy_true):
     # check the energy of molecules with non-0 spins
     poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist
-    mol = Mol((atomzs, poss), basis="6-311++G**", grid=3, dtype=dtype, spin=spin)
+    grid = 3 if xc != "mgga_x_scan" else "sg3"
+    mol = Mol((atomzs, poss), basis="6-311++G**", grid=grid, dtype=dtype, spin=spin)
     qc = KS(mol, xc=xc, restricted=False).run()
     ene = qc.energy()
     # < 1 kcal/mol
