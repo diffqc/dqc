@@ -85,7 +85,7 @@ def get_xw_integration(n: int, s0: str) -> Tuple[np.ndarray, np.ndarray]:
 
     s = s0.lower()
     if s == "chebyshev":
-        # generate the x and w from chebyshev polynomial
+        # generate the x and w from chebyshev polynomial of the 2nd kind
         np1 = n + 1.
         icount = np.arange(n, 0, -1)
         ipn1 = icount * np.pi / np1
@@ -159,6 +159,27 @@ class LogM3Transformation(BaseGridTransform):
     def get_drdx(self, x: torch.Tensor) -> torch.Tensor:
         return self.ra / self.ln2 / (1 - x + self.eps)
 
+class TreutlerM4Transformation(BaseGridTransform):
+    # eq (19) in https://doi.org/10.1063/1.469408
+    def __init__(self, xi: float = 1.0, alpha: float = 0.6, eps: float = 1e-15):
+        self._xi = xi
+        self._alpha = alpha
+        self._ln2 = np.log(2.0 + eps)
+        self._eps = eps
+
+    def x2r(self, x: torch.Tensor) -> torch.Tensor:
+        a = 1.0 + self._eps
+        r = self._xi / self._ln2 * (a + x) ** self._alpha * \
+            (self._ln2 - torch.log1p(-x + self._eps))
+        return r
+
+    def get_drdx(self, x: torch.Tensor) -> torch.Tensor:
+        a = 1.0 + self._eps
+        fac = self._xi / self._ln2 * (a + x) ** self._alpha
+        r1 = fac / (1 - x + self._eps)
+        r2 = fac * self._alpha / (a + x) * (self._ln2 - torch.log1p(-x + self._eps))
+        return r2 + r1
+
 def get_grid_transform(s0: Union[str, BaseGridTransform]) -> BaseGridTransform:
     # return the grid transformation object from the input
     if isinstance(s0, BaseGridTransform):
@@ -169,5 +190,7 @@ def get_grid_transform(s0: Union[str, BaseGridTransform]) -> BaseGridTransform:
             return LogM3Transformation()
         elif s == "de2":
             return DE2Transformation()
+        elif s == "treutlerm4":
+            return TreutlerM4Transformation()
         else:
             raise RuntimeError("Unknown grid transformation: %s" % s0)

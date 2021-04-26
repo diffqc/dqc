@@ -2,7 +2,8 @@ from collections import defaultdict
 from typing import Union, List, Optional, Mapping, Callable
 import torch
 from dqc.grid.base_grid import BaseGrid
-from dqc.grid.radial_grid import RadialGrid, LogM3Transformation, DE2Transformation
+from dqc.grid.radial_grid import RadialGrid, LogM3Transformation, \
+                                 TreutlerM4Transformation, DE2Transformation
 from dqc.grid.lebedev_grid import LebedevGrid, TruncatedLebedevGrid
 from dqc.grid.multiatoms_grid import BeckeGrid, PBCBeckeGrid
 from dqc.grid.truncation_rules import DasguptaTrunc, NoTrunc
@@ -46,6 +47,47 @@ __sg3_dasgupta_alphas = defaultdict(lambda: 1.0, {
     15: 2.4,
     16: 2.4,
     17: 2.6,
+})
+
+# list of optimized xi for M4 transformation from Treutler Table I
+# https://doi.org/10.1063/1.469408
+__treutler_xi = defaultdict(lambda: 1.0, {
+    1: 0.8,
+    2: 0.9,
+    3: 1.8,
+    4: 1.4,
+    5: 1.3,
+    6: 1.1,
+    7: 0.9,
+    8: 0.9,
+    9: 0.9,
+    10: 0.9,
+    11: 1.4,
+    12: 1.3,
+    13: 1.3,
+    14: 1.2,
+    15: 1.1,
+    16: 1.0,
+    17: 1.0,
+    18: 1.0,
+    19: 1.5,
+    20: 1.4,
+    21: 1.3,
+    22: 1.2,
+    23: 1.2,
+    24: 1.2,
+    25: 1.2,
+    26: 1.2,
+    27: 1.2,
+    28: 1.1,
+    29: 1.1,
+    30: 1.1,
+    31: 1.1,
+    32: 1.0,
+    33: 0.9,
+    34: 0.9,
+    35: 0.9,
+    36: 0.9,
 })
 
 # number of angular points to precision
@@ -129,6 +171,8 @@ def get_grid(atomzs: Union[List[int], torch.Tensor], atompos: torch.Tensor,
                 alpha=__sg3_dasgupta_alphas[atz], rmin=1e-7, rmax=15 * atom_radii_list[atz]),
         "logm3":
             lambda atz: LogM3Transformation(ra=atom_radii_list[atz]),
+        "treutlerm4":
+            lambda atz: TreutlerM4Transformation(xi=__treutler_xi[atz], alpha=0.6),
     }
     radgrid_tf = get_option("radial grid transformation", radgrid_transform, radgrid_tf_options)
 
@@ -205,8 +249,8 @@ def get_predefined_grid(grid_inp: Union[int, str], atomzs: Union[List[int], torc
         return get_grid(atomzs, atompos, lattice=lattice,
                         nr=nr, nang=nang,
                         radgrid_generator="chebyshev",
-                        radgrid_transform="logm3",
-                        atom_radii="expected",
+                        radgrid_transform="treutlerm4",
+                        atom_radii="bragg",
                         multiatoms_scheme="becke",
                         truncate=None,
                         dtype=dtype, device=device)

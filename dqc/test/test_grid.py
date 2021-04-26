@@ -10,6 +10,7 @@ from dqc.hamilton.intor.lattice import Lattice
 rgrid_combinations = [
     ("chebyshev", "logm3"),
     ("uniform", "de2"),
+    ("chebyshev", "treutlerm4"),
 ]
 
 @pytest.mark.parametrize(
