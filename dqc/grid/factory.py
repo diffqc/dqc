@@ -253,7 +253,7 @@ def get_predefined_grid(grid_inp: Union[int, str], atomzs: Union[List[int], torc
         nang = [74, 110, 170, 302, 590, 1202][grid_inp]
         return get_grid(atomzs, atompos, lattice=lattice,
                         nr=nr, nang=nang,
-                        radgrid_generator="chebyshev",
+                        radgrid_generator="chebyshev2",
                         radgrid_transform="treutlerm4",
                         atom_radii="bragg",
                         multiatoms_scheme="treutler",

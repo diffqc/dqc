@@ -85,7 +85,8 @@ def get_xw_integration(n: int, s0: str) -> Tuple[np.ndarray, np.ndarray]:
 
     s = s0.lower()
     if s == "chebyshev":
-        # generate the x and w from chebyshev polynomial of the 2nd kind
+        # generate the x and w from chebyshev polynomial
+        # https://doi.org/10.1063/1.475719 eq (9) & (10)
         np1 = n + 1.
         icount = np.arange(n, 0, -1)
         ipn1 = icount * np.pi / np1
@@ -95,6 +96,19 @@ def get_xw_integration(n: int, s0: str) -> Tuple[np.ndarray, np.ndarray]:
                 (1 + 2. / 3 * sin_ipn1 * sin_ipn1) * np.cos(ipn1) * sin_ipn1
         wcheb = 16. / (3 * np1) * sin_ipn1_2 * sin_ipn1_2
         return xcheb, wcheb
+
+    elif s == "chebyshev2":
+        # generate the x and w from chebyshev polynomial of the 2nd order
+        # from Handbook of Mathematical Functions (Abramowitz & Stegun) p. 889
+        # note that wcheb should not have sin^2, but only sin
+        np1 = n + 1.0
+        icount = np.arange(n, 0, -1)
+        ipn1 = icount * np.pi / np1
+        sin_ipn1 = np.sin(ipn1)
+        xcheb = np.cos(ipn1)
+        wcheb = np.pi / np1 * sin_ipn1
+        return xcheb, wcheb
+
     elif s == "uniform":
         x = np.linspace(-1, 1, n)
         w = np.ones(n) * (x[1] - x[0])
@@ -102,7 +116,8 @@ def get_xw_integration(n: int, s0: str) -> Tuple[np.ndarray, np.ndarray]:
         w[-1] *= 0.5
         return x, w
     else:
-        raise RuntimeError("Unknown grid_integrator: %s" % s0)
+        avail = ["chebyshev", "chebyshev2", "uniform"]
+        raise RuntimeError("Unknown grid_integrator: %s. Available: %s" % (s0, avail))
 
 class SlicedRadialGrid(RadialGrid):
     # Internal class to represent the sliced radial grid
