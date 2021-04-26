@@ -82,7 +82,7 @@ energies_df = {
     [("lda_x", *atomz_pos, energy, "sg2") for (atomz_pos, energy) in zip(atomzs_poss, energies["lda_x"])] + \
     [("gga_x_pbe", *atomz_pos, energy, 3) for (atomz_pos, energy) in zip(atomzs_poss, energies["gga_x_pbe"])] + \
     [("gga_x_pbe", *atomz_pos, energy, "sg2") for (atomz_pos, energy) in zip(atomzs_poss, energies["gga_x_pbe"])] + \
-    [("mgga_x_scan", *atzpos, ene, "sg3") for (atzpos, ene) in zip(atomzs_poss, energies["mgga_x_scan"])]
+    [("mgga_x_scan", *atzpos, ene, 4) for (atzpos, ene) in zip(atomzs_poss, energies["mgga_x_scan"])]
 )
 def test_rks_energy(xc, atomzs, dist, energy_true, grid):
     # test to see if the energy calculated by DQC agrees with PySCF
@@ -90,8 +90,8 @@ def test_rks_energy(xc, atomzs, dist, energy_true, grid):
     if xc == "mgga_x_scan":
         if atomzs == [1, 1]:
             pytest.xfail("Psi4 and PySCF don't converge")
-        if atomzs in ([7, 7], [6, 8]):
-            pytest.xfail("I'm working on it")
+        elif atomzs == [3, 3]:
+            pytest.xfail("DQC doesn't converge")
     poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist
     mol = Mol((atomzs, poss), basis="6-311++G**", dtype=dtype, grid=grid)
     qc = KS(mol, xc=xc, restricted=True).run()
@@ -314,7 +314,7 @@ def test_uks_energy_atoms(xc, atomz, spin, energy_true):
 def test_uks_energy_mols(xc, atomzs, dist, spin, energy_true):
     # check the energy of molecules with non-0 spins
     poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist
-    grid = 3 if xc != "mgga_x_scan" else "sg3"
+    grid = 3 if xc != "mgga_x_scan" else 4
     mol = Mol((atomzs, poss), basis="6-311++G**", grid=grid, dtype=dtype, spin=spin)
     qc = KS(mol, xc=xc, restricted=False).run()
     ene = qc.energy()

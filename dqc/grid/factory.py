@@ -6,7 +6,7 @@ from dqc.grid.radial_grid import RadialGrid, LogM3Transformation, \
                                  TreutlerM4Transformation, DE2Transformation
 from dqc.grid.lebedev_grid import LebedevGrid, TruncatedLebedevGrid
 from dqc.grid.multiatoms_grid import BeckeGrid, PBCBeckeGrid
-from dqc.grid.truncation_rules import DasguptaTrunc, NoTrunc
+from dqc.grid.truncation_rules import DasguptaTrunc, NWChemTrunc, NoTrunc
 from dqc.hamilton.intor.lattice import Lattice
 from dqc.utils.periodictable import atom_bragg_radii, atom_expected_radii
 from dqc.utils.misc import get_option
@@ -176,23 +176,27 @@ def get_grid(atomzs: Union[List[int], torch.Tensor], atompos: torch.Tensor,
     }
     radgrid_tf = get_option("radial grid transformation", radgrid_transform, radgrid_tf_options)
 
+    # get the precisions
+    prec = get_option("number of angular points", nang, __nang2prec)
+
     # get the truncation rule as a function to avoid unnecessary evaluation
     trunc_options = {
         "dasgupta": lambda: DasguptaTrunc(nr),
+        "nwchem": lambda: NWChemTrunc(atom_radii_list, prec, list(__nang2prec.values()),
+                                      dtype=dtype, device=device),
         "no": lambda: NoTrunc(),
     }
     truncate_str = truncate if truncate is not None else "no"
     trunc = get_option("truncation rule", truncate_str, trunc_options)()
 
-    prec = get_option("number of angular points", nang, __nang2prec)
     sphgrids: List[BaseGrid] = []
     for (atz, atpos) in zip(atomzs_list, atompos):
         radgrid = RadialGrid(nr, grid_integrator=radgrid_generator,
                              grid_transform=radgrid_tf(atz), dtype=dtype, device=device)
         if trunc.to_truncate(atz):
-            rad_slices = trunc.rad_slices(atz)
+            rad_slices = trunc.rad_slices(atz, radgrid)
             radgrids: List[BaseGrid] = [radgrid[sl] for sl in rad_slices]
-            precs = trunc.precs(atz)
+            precs = trunc.precs(atz, radgrid)
             sphgrid = TruncatedLebedevGrid(radgrids, precs)
         else:
             sphgrid = LebedevGrid(radgrid, prec=prec)
@@ -257,7 +261,7 @@ def get_predefined_grid(grid_inp: Union[int, str], atomzs: Union[List[int], torc
                         radgrid_transform="treutlerm4",
                         atom_radii="bragg",
                         multiatoms_scheme="treutler",
-                        truncate="dasgupta",
+                        truncate="nwchem",
                         dtype=dtype, device=device)
     else:
         raise TypeError("Unknown type of grid_inp: %s" % type(grid_inp))

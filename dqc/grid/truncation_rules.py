@@ -1,28 +1,27 @@
+from abc import abstractmethod
 from typing import Mapping, List
+import torch
+from dqc.grid.radial_grid import RadialGrid
 
 class BaseTruncationRules(object):
     """
     Base class to store the truncation rules of an individual atomic grid.
     """
-    def __init__(self, truncate_idxs: Mapping[int, List[int]],
-                 truncate_precs: Mapping[int, List[int]]):
-        # keys to those mappings are the atom z
-        self._truncate_idxs = truncate_idxs
-        self._truncate_precs = truncate_precs
-
+    @abstractmethod
     def to_truncate(self, atz: int) -> bool:
         # decide whether to truncate the atom's grid
-        return atz in self._truncate_idxs
+        pass
 
-    def rad_slices(self, atz: int) -> List[slice]:
+    @abstractmethod
+    def rad_slices(self, atz: int, radgrid: RadialGrid) -> List[slice]:
         # get the list of slices of radial grid
-        idxs = self._truncate_idxs[atz]
-        return [slice(idxs[i], idxs[i + 1], None) for i in range(len(idxs) - 1)]
+        pass
 
-    def precs(self, atz: int) -> List[int]:
+    @abstractmethod
+    def precs(self, atz: int, radgrid: RadialGrid) -> List[int]:
         # get the list of precisions of angular grid for each slice in the
         # sliced radial grids
-        return self._truncate_precs[atz]
+        pass
 
 class NoTrunc(BaseTruncationRules):
     def __init__(self):
@@ -116,4 +115,79 @@ class DasguptaTrunc(BaseTruncationRules):
             msg = ("Dasgupta truncation can only accept radial grid with number of points in %s" %
                    (str([75, 99])))
             raise ValueError(msg)
-        super().__init__(truncate_idxs, truncate_precs)
+        self._truncate_idxs = truncate_idxs
+        self._truncate_precs = truncate_precs
+
+    def to_truncate(self, atz: int) -> bool:
+        # decide whether to truncate the atom's grid
+        return atz in self._truncate_idxs
+
+    def rad_slices(self, atz: int, radgrid: RadialGrid) -> List[slice]:
+        # get the list of slices of radial grid
+        idxs = self._truncate_idxs[atz]
+        return [slice(idxs[i], idxs[i + 1], None) for i in range(len(idxs) - 1)]
+
+    def precs(self, atz: int, radgrid: RadialGrid) -> List[int]:
+        # get the list of precisions of angular grid for each slice in the
+        # sliced radial grids
+        return self._truncate_precs[atz]
+
+class NWChemTrunc(BaseTruncationRules):
+    """
+    NWChem truncation rules.
+    From https://github.com/pyscf/pyscf/blob/18030c75a5c69c1da84574d111693074a622de56/pyscf/dft/gen_grid.py#L122
+    """
+    def __init__(self, radii_list: List[float],
+                 prec: int,
+                 precs_list: List[int],
+                 dtype: torch.dtype,
+                 device: torch.device):
+        self._radii_list = radii_list
+        self._alphas = torch.tensor([
+            [  0.25, 0.5, 1.0, 4.5],
+            [0.1667, 0.5, 0.9, 3.5],
+            [   0.1, 0.4, 0.8, 2.5],
+        ], dtype=dtype, device=device)
+        self._prec = prec
+        precs_list = precs_list[4:]
+
+        if prec == 13:
+            precs_idxs = [1, 2, 2, 2, 1]
+            self._precs = [precs_list[ii] for ii in precs_idxs]
+        elif prec >= 13:
+            idx: int = precs_list.index(prec)
+            precs_idxs = [1, 3, idx - 1, idx, idx - 1]
+            self._precs = [precs_list[ii] for ii in precs_idxs]
+
+    def to_truncate(self, atz: int) -> bool:
+        if self._prec < 13:
+            return False
+        return True
+
+    def rad_slices(self, atz: int, radgrid: RadialGrid) -> List[slice]:
+        ratom = self._radii_list[atz]
+        ralphas = self._alphas * ratom
+        rgrid = radgrid.get_rgrid().reshape(-1, 1)  # (nr, 1)
+        if atz <= 2:  # H & He
+            ralphas_i = ralphas[0]
+        elif atz <= 10:
+            ralphas_i = ralphas[1]
+        else:
+            ralphas_i = ralphas[2]
+        # place has value from 0 to 4 (inclusive)
+        place = torch.sum(rgrid > ralphas_i, dim=-1)  # (nr,)
+
+        # convert it to slice
+        pl, counts = torch.unique_consecutive(place, return_counts=True)
+        idx = 0
+        res: List[slice] = []
+        for i in range(len(self._precs)):
+            c = int(counts[i])
+            res.append(slice(idx, idx + c, None))
+            idx += c
+        return res
+
+    def precs(self, atz: int, radgrid: RadialGrid) -> List[int]:
+        # get the list of precisions of angular grid for each slice in the
+        # sliced radial grids
+        return self._precs
