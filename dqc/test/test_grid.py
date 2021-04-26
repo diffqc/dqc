@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 from dqc.grid.radial_grid import RadialGrid
 from dqc.grid.lebedev_grid import LebedevGrid
-from dqc.grid.becke_grid import BeckeGrid, PBCBeckeGrid
+from dqc.grid.multiatoms_grid import BeckeGrid, PBCBeckeGrid
 from dqc.grid.factory import get_atomic_grid
 from dqc.hamilton.intor.lattice import Lattice
 
@@ -78,7 +78,7 @@ def test_predefined_grid_dvol(grid_inp):
     "rgrid_integrator,rgrid_transform",
     rgrid_combinations
 )
-def test_becke_grid_dvol(rgrid_integrator, rgrid_transform):
+def test_multiatoms_grid_dvol(rgrid_integrator, rgrid_transform):
     dtype = torch.float64
     nr = 40
     prec = 7
@@ -104,7 +104,7 @@ def test_becke_grid_dvol(rgrid_integrator, rgrid_transform):
     "rgrid_integrator,rgrid_transform",
     rgrid_combinations
 )
-def test_pbc_becke_grid_dvol(rgrid_integrator, rgrid_transform):
+def test_pbc_multiatoms_grid_dvol(rgrid_integrator, rgrid_transform):
     dtype = torch.float64
     nr = 40
     prec = 7

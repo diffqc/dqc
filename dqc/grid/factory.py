@@ -3,7 +3,7 @@ import torch
 from dqc.grid.base_grid import BaseGrid
 from dqc.grid.radial_grid import RadialGrid
 from dqc.grid.lebedev_grid import LebedevGrid
-from dqc.grid.becke_grid import BeckeGrid, PBCBeckeGrid
+from dqc.grid.multiatoms_grid import BeckeGrid, PBCBeckeGrid
 from dqc.grid.predefined_grid import SG2, SG3
 from dqc.hamilton.intor.lattice import Lattice
 from dqc.utils.periodictable import atom_bragg_radii, atom_expected_radii
