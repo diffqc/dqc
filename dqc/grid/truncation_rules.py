@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Mapping, List
+from typing import List
 import torch
 from dqc.grid.radial_grid import RadialGrid
 
@@ -30,10 +30,10 @@ class NoTrunc(BaseTruncationRules):
     def to_truncate(self, atz: int) -> bool:
         return False
 
-    def rad_slices(self, atz: int) -> List[slice]:
+    def rad_slices(self, atz: int, radgrid: RadialGrid) -> List[slice]:
         raise RuntimeError("This shouldn't be called. Report to Github")
 
-    def precs(self, atz: int) -> List[int]:
+    def precs(self, atz: int, radgrid: RadialGrid) -> List[int]:
         raise RuntimeError("This shouldn't be called. Report to Github")
 
 class DasguptaTrunc(BaseTruncationRules):
@@ -144,9 +144,9 @@ class NWChemTrunc(BaseTruncationRules):
                  device: torch.device):
         self._radii_list = radii_list
         self._alphas = torch.tensor([
-            [  0.25, 0.5, 1.0, 4.5],
+            [0.25, 0.5, 1.0, 4.5],
             [0.1667, 0.5, 0.9, 3.5],
-            [   0.1, 0.4, 0.8, 2.5],
+            [0.1, 0.4, 0.8, 2.5],
         ], dtype=dtype, device=device)
         self._prec = prec
         precs_list = precs_list[4:]
