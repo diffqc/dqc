@@ -227,7 +227,10 @@ class HamiltonCGTO_PBC(HamiltonCGTO):
         # return: (*BR, nkpts, nao, nao)
         if not self.is_grad_ao_set:
             raise RuntimeError("Please call `setup_grid(grid, xc)` to call this function")
-        mat = torch.einsum("...dr,kbr,dkcr->...kbc", grad_vext, self.basis_dvolume_conj, self.grad_basis)
+        # mat = torch.einsum("...dr,kbr,dkcr->...kbc", grad_vext, self.basis_dvolume_conj, self.grad_basis)
+        mat = torch.einsum("...r,kbr,kcr->...kbc", grad_vext[..., 0, :], self.basis_dvolume_conj, self.grad_basis[0])
+        mat += torch.einsum("...r,kbr,kcr->...kbc", grad_vext[..., 1, :], self.basis_dvolume_conj, self.grad_basis[1])
+        mat += torch.einsum("...r,kbr,kcr->...kbc", grad_vext[..., 2, :], self.basis_dvolume_conj, self.grad_basis[2])
         mat = mat + mat.transpose(-2, -1).conj()  # +cc, so no * 0.5 in this case
         return xt.LinearOperator.m(mat, is_hermitian=True)
 
@@ -380,5 +383,10 @@ class HamiltonCGTO_PBC(HamiltonCGTO):
         # get the gradient of density at the grid
         if not self.is_grad_ao_set:
             raise RuntimeError("Please call `setup_grid(grid, gradlevel>=1)` to calculate the density gradient")
-        gdens = torch.einsum("...kij,dkir,kjr->...dr", dm, self.grad_basis, self.basis.conj())
+        # gdens = torch.einsum("...kij,dkir,kjr->...dr", dm, self.grad_basis, self.basis.conj())
+        gdens = torch.zeros((*dm.shape[:-3], 3, self.basis.shape[-1]), dtype=self.dtype, device=self.device)
+        basis_conj = self.basis.conj()
+        gdens[..., 0, :] = torch.einsum("...kij,kir,kjr->...r", dm, self.grad_basis[0], basis_conj)
+        gdens[..., 1, :] = torch.einsum("...kij,kir,kjr->...r", dm, self.grad_basis[1], basis_conj)
+        gdens[..., 2, :] = torch.einsum("...kij,kir,kjr->...r", dm, self.grad_basis[2], basis_conj)
         return gdens + gdens.conj()  # + complex conjugate
