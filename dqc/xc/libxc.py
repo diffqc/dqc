@@ -121,7 +121,7 @@ def _prepare_libxc_input(densinfo: Union[SpinParam[ValGrad], ValGrad], xcfamily:
     # convert the densinfo into tuple of tensors for libxc inputs
     # the elements in the tuple is arranged according to libxc manual
 
-    sigma_einsum = "...d,...d->..."
+    sigma_einsum = "...dr,...dr->...r"
     # polarized case
     if isinstance(densinfo, SpinParam):
         rho_u = densinfo.u.value  # (*nrho)
@@ -188,6 +188,8 @@ def _postproc_libxc_voutput(densinfo: Union[SpinParam[ValGrad], ValGrad],
                             vkin: Optional[torch.Tensor] = None) -> Union[SpinParam[ValGrad], ValGrad]:
     # postprocess the output from libxc's 1st derivative into derivative
     # suitable for valgrad
+    # densinfo.value: (..., nr)
+    # densinfo.grad: (..., ndim, nr)
 
     # polarized case
     if isinstance(densinfo, SpinParam):
@@ -203,10 +205,10 @@ def _postproc_libxc_voutput(densinfo: Union[SpinParam[ValGrad], ValGrad],
         vgrad_d: Optional[torch.Tensor] = None
         if vsigma is not None:
             # calculate the grad_vxc
-            vgrad_u = 2 * vsigma[0].unsqueeze(-1) * densinfo.u.grad + \
-                vsigma[1].unsqueeze(-1) * densinfo.d.grad  # (..., 3)
-            vgrad_d = 2 * vsigma[2].unsqueeze(-1) * densinfo.d.grad + \
-                vsigma[1].unsqueeze(-1) * densinfo.u.grad
+            vgrad_u = 2 * vsigma[0].unsqueeze(-2) * densinfo.u.grad + \
+                vsigma[1].unsqueeze(-2) * densinfo.d.grad  # (..., 3)
+            vgrad_d = 2 * vsigma[2].unsqueeze(-2) * densinfo.d.grad + \
+                vsigma[1].unsqueeze(-2) * densinfo.u.grad
 
         vlapl_u: Optional[torch.Tensor] = None
         vlapl_d: Optional[torch.Tensor] = None
@@ -230,7 +232,7 @@ def _postproc_libxc_voutput(densinfo: Union[SpinParam[ValGrad], ValGrad],
 
         # calculate the gradient potential
         if vsigma is not None:
-            vsigma = 2 * vsigma.unsqueeze(-1) * densinfo.grad  # (*BD, nr, ndim)
+            vsigma = 2 * vsigma.unsqueeze(-2) * densinfo.grad  # (*BD, ndim, nr)
 
         potinfo = ValGrad(value=vrho, grad=vsigma, lapl=vlapl, kin=vkin)
         return potinfo

@@ -24,7 +24,7 @@ class BaseXC(xt.EditableModule):
         Returns the xc energy density (energy per unit volume)
         """
         # densinfo.value & lapl: (*BD, nr)
-        # densinfo.grad: (*BD, nr, ndim)
+        # densinfo.grad: (*BD, ndim, nr)
         # return: (*BD, nr)
         pass
 
@@ -45,10 +45,10 @@ class BaseXC(xt.EditableModule):
         # in the specific class of XC.
 
         # densinfo.value & lapl: (*BD, nr)
-        # densinfo.grad: (*BD, nr, ndim)
+        # densinfo.grad: (*BD, ndim, nr)
         # return:
         # potentialinfo.value & lapl: (*BD, nr)
-        # potentialinfo.grad: (*BD, nr, ndim)
+        # potentialinfo.grad: (*BD, ndim, nr)
 
         # mark the densinfo components as requiring grads
         with self._enable_grad_densinfo(densinfo):

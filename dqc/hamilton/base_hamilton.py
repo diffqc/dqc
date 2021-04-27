@@ -149,7 +149,7 @@ class BaseHamilton(xt.EditableModule):
         .. math::
             \mathbf{G}_{ij} = \int b_i(\mathbf{r}) \mathbf{G}(\mathbf{r}) \cdot \nabla b_j(\mathbf{r})\ d\mathbf{r}
         """
-        # grad_vext: (*BR, ngrid, ndim)
+        # grad_vext: (*BR, ndim, ngrid)
         # return: (*BRH, nao, nao)
         pass
 

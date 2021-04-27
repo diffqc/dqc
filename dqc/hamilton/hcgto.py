@@ -210,10 +210,15 @@ class HamiltonCGTO(BaseHamilton):
         return xt.LinearOperator.m(mat, is_hermitian=True)
 
     def get_grad_vext(self, grad_vext: torch.Tensor) -> xt.LinearOperator:
-        # grad_vext: (*BR, ngrid, ndim)
+        # grad_vext: (*BR, ndim, ngrid)
         if not self.is_grad_ao_set:
             raise RuntimeError("Please call `setup_grid(grid, xc)` to call this function")
-        mat = torch.einsum("...rd,br,dcr->...bc", grad_vext, self.basis_dvolume, self.grad_basis)
+        # mat = torch.einsum("...dr,br,dcr->...bc", grad_vext, self.basis_dvolume, self.grad_basis)
+        # performing 3 times for more efficient operations
+        mat = torch.einsum("...r,br,cr->...bc", grad_vext[..., 0, :], self.basis_dvolume, self.grad_basis[0])
+        mat += torch.einsum("...r,br,cr->...bc", grad_vext[..., 1, :], self.basis_dvolume, self.grad_basis[1])
+        mat += torch.einsum("...r,br,cr->...bc", grad_vext[..., 2, :], self.basis_dvolume, self.grad_basis[2])
+
         mat = mat + mat.transpose(-2, -1)  # Martin, et. al., eq. (8.14)
         return xt.LinearOperator.m(mat, is_hermitian=True)
 
@@ -236,7 +241,11 @@ class HamiltonCGTO(BaseHamilton):
         lapl_kin_dvol = (2 * lapl_vext + 0.5 * kin_vext) * self.dvolume
         mat1 = torch.einsum("...r,br,cr->...bc", lapl_dvol, self.basis, self.lapl_basis)
         mat1 = mat1 + mat1.transpose(-2, -1)  # + c.c.
-        mat2 = torch.einsum("...r,dbr,dcr->...bc", lapl_kin_dvol, self.grad_basis, self.grad_basis)
+        # mat2 = torch.einsum("...r,dbr,dcr->...bc", lapl_kin_dvol, self.grad_basis, self.grad_basis)
+        # doing it 3 times like below is much quicker
+        mat2 = torch.einsum("...r,br,cr->...bc", lapl_kin_dvol, self.grad_basis[0], self.grad_basis[0])
+        mat2 += torch.einsum("...r,br,cr->...bc", lapl_kin_dvol, self.grad_basis[1], self.grad_basis[1])
+        mat2 += torch.einsum("...r,br,cr->...bc", lapl_kin_dvol, self.grad_basis[2], self.grad_basis[2])
         mat = mat1 + mat2
         return xt.LinearOperator.m(mat, is_hermitian=True)
 
@@ -319,7 +328,7 @@ class HamiltonCGTO(BaseHamilton):
             # calculate the density gradient
             gdens = None
             if family >= 2:  # requires gradient
-                # (*BD, ngrid, ndim)
+                # (*BD, ndim, ngrid)
                 # dm is multiplied by 2 because n(r) = sum (D_ij * phi_i * phi_j), thus
                 # d.n(r) = sum (D_ij * d.phi_i * phi_j + D_ij * phi_i * d.phi_j)
                 gdens = self._get_grad_dens_at_grid(dm)
@@ -330,7 +339,7 @@ class HamiltonCGTO(BaseHamilton):
                 glapl, gkin = self._get_lapl_kin_dens_at_grid(dm)
 
             # dens: (*BD, ngrid)
-            # gdens: (*BD, ngrid, ndim)
+            # gdens: (*BD, ndim, ngrid)
             res = ValGrad(value=dens, grad=gdens, lapl=glapl, kin=gkin)
             return res
 
@@ -344,7 +353,14 @@ class HamiltonCGTO(BaseHamilton):
             raise RuntimeError("Please call `setup_grid(grid, gradlevel>=1)` to calculate the density gradient")
         # dm is multiplied by 2 because n(r) = sum (D_ij * phi_i * phi_j), thus
         # d.n(r) = sum (D_ij * d.phi_i * phi_j + D_ij * phi_i * d.phi_j)
-        return torch.einsum("...ij,dir,jr->...rd", 2 * dm, self.grad_basis, self.basis)
+        # res = torch.einsum("...ij,dir,jr->...dr", 2 * dm, self.grad_basis, self.basis)
+        dm2 = 2 * dm
+        res = torch.zeros((*dm.shape[:-2], 3, self.basis.shape[-1]),
+                          dtype=self.dtype, device=self.device)  # (..., ndim, ngrid)
+        res[..., 0, :] = torch.einsum("...ij,ir,jr->...r", dm2, self.grad_basis[0], self.basis)
+        res[..., 1, :] = torch.einsum("...ij,ir,jr->...r", dm2, self.grad_basis[1], self.basis)
+        res[..., 2, :] = torch.einsum("...ij,ir,jr->...r", dm2, self.grad_basis[2], self.basis)
+        return res
 
     def _get_lapl_kin_dens_at_grid(self, dm: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         # calculate the laplacian of the density and kinetic energy density at the grid
@@ -352,7 +368,11 @@ class HamiltonCGTO(BaseHamilton):
             raise RuntimeError("Please call `setup_grid(grid, gradlevel>=1)` to calculate the density gradient")
         dmt = dm.transpose(-2, -1)
         lapl_basis = torch.einsum("...ij,ir,jr->...r", (dm + dmt), self.lapl_basis, self.basis)
-        grad_grad = torch.einsum("...ij,dir,djr->...r", dm, self.grad_basis, self.grad_basis)
+        # grad_grad = torch.einsum("...ij,dir,djr->...r", dm, self.grad_basis, self.grad_basis)
+        # it is much quicker to do it 3 times rather than doing it once as above
+        grad_grad = torch.einsum("...ij,ir,jr->...r", dm, self.grad_basis[0], self.grad_basis[0])
+        grad_grad += torch.einsum("...ij,ir,jr->...r", dm, self.grad_basis[1], self.grad_basis[1])
+        grad_grad += torch.einsum("...ij,ir,jr->...r", dm, self.grad_basis[2], self.grad_basis[2])
         lapl = lapl_basis + 2 * grad_grad
         kin = grad_grad * 0.5
         return lapl, kin

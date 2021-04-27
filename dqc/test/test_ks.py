@@ -181,7 +181,7 @@ class PseudoPBE(BaseXC):
             rho = densinfo.value.abs()
             kf_rho = (3 * np.pi * np.pi) ** (1.0 / 3) * safepow(rho, 4.0 / 3)
             e_unif = -3.0 / (4 * np.pi) * kf_rho
-            norm_grad = safenorm(densinfo.grad, dim=-1)
+            norm_grad = safenorm(densinfo.grad, dim=-2)
             s = norm_grad / (2 * kf_rho)
             fx = 1 + self.kappa - self.kappa / (1 + self.mu * s * s / self.kappa)
             return fx * e_unif

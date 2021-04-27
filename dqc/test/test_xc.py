@@ -55,8 +55,8 @@ def test_libxc_gga_gradcheck():
     n = 2
     rho_u = torch.rand((n,), dtype=torch.float64).requires_grad_()
     rho_d = torch.rand((n,), dtype=torch.float64).requires_grad_()
-    grad_u = torch.rand((n, 3), dtype=torch.float64).requires_grad_()
-    grad_d = torch.rand((n, 3), dtype=torch.float64).requires_grad_()
+    grad_u = torch.rand((3, n), dtype=torch.float64).requires_grad_()
+    grad_d = torch.rand((3, n), dtype=torch.float64).requires_grad_()
 
     def get_edens_unpol(xc, rho, grad):
         densinfo = ValGrad(value=rho, grad=grad)
@@ -98,12 +98,12 @@ def test_libxc_mgga_gradcheck():
     n = 2
     rho_u = torch.rand((n,), dtype=torch.float64).requires_grad_()
     rho_d = torch.rand((n,), dtype=torch.float64).requires_grad_()
-    grad_u = torch.rand((n, 3), dtype=torch.float64).requires_grad_()
-    grad_d = torch.rand((n, 3), dtype=torch.float64).requires_grad_()
+    grad_u = torch.rand((3, n), dtype=torch.float64).requires_grad_()
+    grad_d = torch.rand((3, n), dtype=torch.float64).requires_grad_()
     lapl_u = torch.rand((n,), dtype=torch.float64).requires_grad_()
     lapl_d = torch.rand((n,), dtype=torch.float64).requires_grad_()
-    tau_w_u = (torch.norm(grad_u, dim=-1) ** 2 / (8 * rho_u)).detach()
-    tau_w_d = (torch.norm(grad_d, dim=-1) ** 2 / (8 * rho_d)).detach()
+    tau_w_u = (torch.norm(grad_u, dim=-2) ** 2 / (8 * rho_u)).detach()
+    tau_w_d = (torch.norm(grad_d, dim=-2) ** 2 / (8 * rho_d)).detach()
     kin_u = (torch.rand((n,), dtype=torch.float64) + tau_w_u).requires_grad_()
     kin_d = (torch.rand((n,), dtype=torch.float64) + tau_w_d).requires_grad_()
 
@@ -186,8 +186,8 @@ def test_libxc_gga_value():
     rho_u = torch.rand((n,), dtype=dtype)
     rho_d = torch.rand((n,), dtype=dtype)
     rho_tot = rho_u + rho_d
-    gradn_u = torch.rand((n, 3), dtype=dtype) * 0
-    gradn_d = torch.rand((n, 3), dtype=dtype) * 0
+    gradn_u = torch.rand((3, n), dtype=dtype) * 0
+    gradn_d = torch.rand((3, n), dtype=dtype) * 0
     gradn_tot = gradn_u + gradn_d
 
     densinfo_u = ValGrad(value=rho_u, grad=gradn_u)
@@ -215,15 +215,15 @@ def test_libxc_mgga_value():
     rho_u = torch.rand((n,), dtype=dtype)
     rho_d = torch.rand((n,), dtype=dtype)
     rho_tot = rho_u + rho_d
-    gradn_u = torch.rand((n, 3), dtype=dtype) * 0
-    gradn_d = torch.rand((n, 3), dtype=dtype) * 0
+    gradn_u = torch.rand((3, n), dtype=dtype) * 0
+    gradn_d = torch.rand((3, n), dtype=dtype) * 0
     gradn_tot = gradn_u + gradn_d
 
     lapl_u = torch.rand((n,), dtype=torch.float64)
     lapl_d = torch.rand((n,), dtype=torch.float64)
     lapl_tot = lapl_u + lapl_d
-    tau_w_u = (torch.norm(gradn_u, dim=-1) ** 2 / (8 * rho_u))
-    tau_w_d = (torch.norm(gradn_d, dim=-1) ** 2 / (8 * rho_d))
+    tau_w_u = (torch.norm(gradn_u, dim=-2) ** 2 / (8 * rho_u))
+    tau_w_d = (torch.norm(gradn_d, dim=-2) ** 2 / (8 * rho_d))
     kin_u = torch.rand((n,), dtype=torch.float64) + tau_w_u
     kin_d = torch.rand((n,), dtype=torch.float64) + tau_w_d
     kin_tot = kin_u + kin_d
@@ -271,7 +271,7 @@ class PseudoPBE(BaseXC):
             rho = densinfo.value.abs()
             kf_rho = (3 * np.pi * np.pi) ** (1.0 / 3) * safepow(rho, 4.0 / 3)
             e_unif = -3.0 / (4 * np.pi) * kf_rho
-            norm_grad = safenorm(densinfo.grad, dim=-1)
+            norm_grad = safenorm(densinfo.grad, dim=-2)
             s = norm_grad / (2 * kf_rho)
             fx = 1 + kappa - kappa / (1 + mu * s * s / kappa)
             return fx * e_unif
@@ -299,8 +299,8 @@ def test_xc_default_vxc(xccls, libxcname):
     rho_u = torch.rand((n,), dtype=dtype)
     rho_d = torch.rand((n,), dtype=dtype)
     rho_tot = rho_u + rho_d
-    gradn_u = torch.rand((n, 3), dtype=dtype) * 0
-    gradn_d = torch.rand((n, 3), dtype=dtype) * 0
+    gradn_u = torch.rand((3, n), dtype=dtype) * 0
+    gradn_d = torch.rand((3, n), dtype=dtype) * 0
     gradn_tot = gradn_u + gradn_d
 
     densinfo_u = ValGrad(value=rho_u, grad=gradn_u)
@@ -345,7 +345,7 @@ def lda_v_true(rho):
 
 def pbe_e_true(rho, gradn):
     kf = (3 * np.pi * np.pi * rho) ** (1. / 3)
-    s = torch.norm(gradn, dim=-1) / (2 * rho * kf)
+    s = torch.norm(gradn, dim=-2) / (2 * rho * kf)
     kappa = 0.804
     mu = 0.21951
     fxs = (1 + kappa - kappa / (1 + mu * s * s / kappa))
@@ -353,7 +353,7 @@ def pbe_e_true(rho, gradn):
 
 def scan_e_true(rho, gradn, lapl, tau):
     kf = (3 * np.pi * np.pi * rho) ** (1. / 3)
-    norm_gradn = torch.norm(gradn, dim=-1)
+    norm_gradn = torch.norm(gradn, dim=-2)
     s = norm_gradn / (2 * rho * kf)
     tau_w = norm_gradn ** 2 / (8 * rho)
     tau_unif = 0.3 * kf ** 2 * rho
