@@ -52,10 +52,10 @@ energies = {
     ],
     "mgga_x_scan": [
         -1.0991889808183757,  # from psi4, but it doesn't converge either
-        -14.8687604,
-        -109.055091,
-        -198.898047,
-        -112.836274,
+        -14.8687500,
+        -109.055074,
+        -198.897987,
+        -112.836255,
     ]
 }
 energies_df = {
@@ -73,6 +73,13 @@ energies_df = {
         -1.08980217e+02,
         -1.98773033e+02,
         -1.12754299e+02,
+    ],
+    "mgga_x_scan": [
+        -1.0991889808183757,  # from psi4, but it doesn't converge either
+        -14.8687604,
+        -109.055091,
+        -198.898047,
+        -112.836274,
     ]
 }
 
@@ -344,18 +351,23 @@ def test_uks_grad_vxc(xccls, xcparams, atomz):
 ############## density fit ##############
 @pytest.mark.parametrize(
     "xc,atomzs,dist,energy_true,grid",
-    [("lda_x", *atomz_pos, energy, "sg2") for (atomz_pos, energy) in zip(atomzs_poss, energies_df["lda_x"])] + \
-    [("gga_x_pbe", *atomz_pos, energy, "sg2") for (atomz_pos, energy) in zip(atomzs_poss, energies_df["gga_x_pbe"])]
+    [("lda_x", *atzpos, energy, "sg2") for (atzpos, energy) in zip(atomzs_poss, energies_df["lda_x"])] + \
+    [("gga_x_pbe", *atzpos, energy, "sg2") for (atzpos, energy) in zip(atomzs_poss, energies_df["gga_x_pbe"])] + \
+    [("mgga_x_scan", *atzpos, energy, 4) for (atzpos, energy) in zip(atomzs_poss, energies_df["mgga_x_scan"])]
 )
 def test_rks_energy_df(xc, atomzs, dist, energy_true, grid):
     # test to see if the energy calculated by DQC agrees with PySCF using
     # density fitting
+    if xc == "mgga_x_scan":
+        if atomzs == [1, 1]:
+            pytest.xfail("Psi4 and PySCF don't converge")
     poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist
     mol = Mol((atomzs, poss), basis="6-311++G**", dtype=dtype, grid=grid)
     mol.densityfit(method="coulomb", auxbasis="def2-sv(p)-jkfit")
     qc = KS(mol, xc=xc, restricted=True).run()
     ene = qc.energy()
-    assert torch.allclose(ene, ene * 0 + energy_true)
+    # error to be < 1 kcal/mol
+    assert torch.allclose(ene, ene * 0 + energy_true, atol=1.1e-3, rtol=0)
 
 @pytest.mark.parametrize(
     "xc,atomzs,dist,spin,energy_true",
