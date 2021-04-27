@@ -90,8 +90,6 @@ def test_rks_energy(xc, atomzs, dist, energy_true, grid):
     if xc == "mgga_x_scan":
         if atomzs == [1, 1]:
             pytest.xfail("Psi4 and PySCF don't converge")
-        elif atomzs == [3, 3]:
-            pytest.xfail("DQC doesn't converge")
     poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist
     mol = Mol((atomzs, poss), basis="6-311++G**", dtype=dtype, grid=grid)
     qc = KS(mol, xc=xc, restricted=True).run()
