@@ -209,46 +209,6 @@ class HamiltonCGTO(BaseHamilton):
         mat = (mat + mat.transpose(-2, -1)) * 0.5  # ensure the symmetricity and reduce numerical instability
         return xt.LinearOperator.m(mat, is_hermitian=True)
 
-    def get_grad_vext(self, grad_vext: torch.Tensor) -> xt.LinearOperator:
-        # grad_vext: (*BR, ndim, ngrid)
-        if not self.is_grad_ao_set:
-            raise RuntimeError("Please call `setup_grid(grid, xc)` to call this function")
-        # mat = torch.einsum("...dr,br,dcr->...bc", grad_vext, self.basis_dvolume, self.grad_basis)
-        # performing 3 times for more efficient operations
-        mat = torch.einsum("...r,br,cr->...bc", grad_vext[..., 0, :], self.basis_dvolume, self.grad_basis[0])
-        mat += torch.einsum("...r,br,cr->...bc", grad_vext[..., 1, :], self.basis_dvolume, self.grad_basis[1])
-        mat += torch.einsum("...r,br,cr->...bc", grad_vext[..., 2, :], self.basis_dvolume, self.grad_basis[2])
-
-        mat = mat + mat.transpose(-2, -1)  # Martin, et. al., eq. (8.14)
-        return xt.LinearOperator.m(mat, is_hermitian=True)
-
-    def get_lapl_kin_vext(self, lapl_vext: torch.Tensor, kin_vext: torch.Tensor) -> xt.LinearOperator:
-        # get the linear operator for the laplacian and kinetic parts of the potential,
-        # lapl_vext is the derivative of energy w.r.t. laplacian of the density
-        # kin_vext is the derivative of energy w.r.t. kinetic energy density
-        #     (i.e. 0.5 * sum((nabla phi)^2))
-        # lapl_vext: (*BR, ngrid)
-        # kin_vext: (*BR, ngrid)
-        # return: (*BR, nao, nao)
-        if not self.is_lapl_ao_set:
-            raise RuntimeError("Please call `setup_grid(grid, xc)` to call this function")
-        # the equation below is obtained by calculating dExc/dD_ij where D_ij is
-        # the density matrix
-        # the equation for kinetic derivative is from eq. (26) https://doi.org/10.1063/1.4811270
-        # but there is a missing factor half in it, see eq. (26) https://doi.org/10.1063/1.4967960
-
-        lapl_dvol = lapl_vext * self.dvolume
-        lapl_kin_dvol = (2 * lapl_vext + 0.5 * kin_vext) * self.dvolume
-        mat1 = torch.einsum("...r,br,cr->...bc", lapl_dvol, self.basis, self.lapl_basis)
-        mat1 = mat1 + mat1.transpose(-2, -1)  # + c.c.
-        # mat2 = torch.einsum("...r,dbr,dcr->...bc", lapl_kin_dvol, self.grad_basis, self.grad_basis)
-        # doing it 3 times like below is much quicker
-        mat2 = torch.einsum("...r,br,cr->...bc", lapl_kin_dvol, self.grad_basis[0], self.grad_basis[0])
-        mat2 += torch.einsum("...r,br,cr->...bc", lapl_kin_dvol, self.grad_basis[1], self.grad_basis[1])
-        mat2 += torch.einsum("...r,br,cr->...bc", lapl_kin_dvol, self.grad_basis[2], self.grad_basis[2])
-        mat = mat1 + mat2
-        return xt.LinearOperator.m(mat, is_hermitian=True)
-
     ################ xc-related ################
     @overload
     def get_vxc(self, dm: SpinParam[torch.Tensor]) -> SpinParam[xt.LinearOperator]:
@@ -262,120 +222,98 @@ class HamiltonCGTO(BaseHamilton):
         # dm: (*BD, nao, nao)
         assert self.xc is not None, "Please call .setup_grid with the xc object"
 
-        densinfo = self._dm2densinfo(dm, self.xc.family)  # value: (*BD, nr)
+        densinfo = SpinParam.apply_fcn(
+            lambda dm_: self._dm2densinfo(dm_), dm)  # value: (*BD, nr)
         potinfo = self.xc.get_vxc(densinfo)  # value: (*BD, nr)
-
-        if isinstance(dm, torch.Tensor):  # unpolarized case
-            # get the linear operator from the potential
-            vxc_linop = self.get_vext(potinfo.value)
-            if self.xcfamily >= 2:  # GGA or MGGA
-                assert potinfo.grad is not None
-                vxc_linop = vxc_linop + self.get_grad_vext(potinfo.grad)
-            if self.xcfamily >= 4:  # MGGA
-                assert potinfo.lapl is not None
-                assert potinfo.kin is not None
-                vxc_linop = vxc_linop + self.get_lapl_kin_vext(potinfo.lapl, potinfo.kin)
-
-            return vxc_linop
-
-        else:  # polarized case
-            # get the linear operator from the potential
-            vxc_linop_u = self.get_vext(potinfo.u.value)
-            vxc_linop_d = self.get_vext(potinfo.d.value)
-            if self.xcfamily >= 2:  # GGA or MGGA
-                assert potinfo.u.grad is not None
-                assert potinfo.d.grad is not None
-                vxc_linop_u = vxc_linop_u + self.get_grad_vext(potinfo.u.grad)
-                vxc_linop_d = vxc_linop_d + self.get_grad_vext(potinfo.d.grad)
-            if self.xcfamily >= 4:  # MGGA
-                assert potinfo.u.lapl is not None
-                assert potinfo.d.lapl is not None
-                assert potinfo.u.kin is not None
-                assert potinfo.d.kin is not None
-                vxc_linop_u = vxc_linop_u + self.get_lapl_kin_vext(potinfo.u.lapl, potinfo.u.kin)
-                vxc_linop_d = vxc_linop_d + self.get_lapl_kin_vext(potinfo.d.lapl, potinfo.d.kin)
-
-            return SpinParam(u=vxc_linop_u, d=vxc_linop_d)
+        vxc_linop = SpinParam.apply_fcn(
+            lambda potinfo_: self._get_vxc_from_potinfo(potinfo_), potinfo)
+        return vxc_linop
 
     def get_exc(self, dm: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
         assert self.xc is not None, "Please call .setup_grid with the xc object"
 
         # obtain the energy density per unit volume
-        densinfo = self._dm2densinfo(dm, self.xc.family)  # (spin) value: (*BD, nr)
+        densinfo = SpinParam.apply_fcn(
+            lambda dm_: self._dm2densinfo(dm_), dm)  # (spin) value: (*BD, nr)
         edens = self.xc.get_edensityxc(densinfo)  # (*BD, nr)
 
         return torch.sum(self.grid.get_dvolume() * edens, dim=-1)
 
-    @overload
-    def _dm2densinfo(self, dm: torch.Tensor, family: int) -> ValGrad:
-        ...
-
-    @overload
-    def _dm2densinfo(self, dm: SpinParam[torch.Tensor], family: int) -> SpinParam[ValGrad]:
-        ...
-
-    def _dm2densinfo(self, dm, family):
-        # dm: (*BD, nao, nao)
+    def _dm2densinfo(self, dm: torch.Tensor) -> ValGrad:
+        # dm: (*BD, nao, nao), Hermitian
         # family: 1 for LDA, 2 for GGA, 3 for MGGA
         # self.basis: (nao, ngrid)
-        if isinstance(dm, SpinParam):
-            res_u = self._dm2densinfo(dm.u, family)
-            res_d = self._dm2densinfo(dm.d, family)
-            return SpinParam(u=res_u, d=res_d)
-        else:
-            dens = self._get_dens_at_grid(dm)
 
-            # calculate the density gradient
-            gdens = None
-            if family >= 2:  # requires gradient
-                # (*BD, ndim, ngrid)
-                # dm is multiplied by 2 because n(r) = sum (D_ij * phi_i * phi_j), thus
-                # d.n(r) = sum (D_ij * d.phi_i * phi_j + D_ij * phi_i * d.phi_j)
-                gdens = self._get_grad_dens_at_grid(dm)
+        # dm @ ao will be used in every case
+        dmdmt = (dm + dm.transpose(-2, -1)) * 0.5  # (*BD, nao, nao)
+        dmao = torch.matmul(dmdmt, self.basis)  # (*BD, nao, nr)
+        dmao2 = 2 * dmao
 
-            glapl: Optional[torch.Tensor] = None
-            gkin: Optional[torch.Tensor] = None
-            if family >= 4:
-                glapl, gkin = self._get_lapl_kin_dens_at_grid(dm)
+        # calculate the density
+        dens = torch.einsum("...ir,ir->...r", dmao, self.basis)
 
-            # dens: (*BD, ngrid)
-            # gdens: (*BD, ndim, ngrid)
-            res = ValGrad(value=dens, grad=gdens, lapl=glapl, kin=gkin)
-            return res
+        # calculate the density gradient
+        gdens: Optional[torch.Tensor] = None
+        if self.xcfamily == 2 or self.xcfamily == 4:  # GGA or MGGA
+            if not self.is_grad_ao_set:
+                msg = "Please call `setup_grid(grid, gradlevel>=1)` to calculate the density gradient"
+                raise RuntimeError(msg)
 
-    def _get_dens_at_grid(self, dm: torch.Tensor) -> torch.Tensor:
-        # get the density at the grid
-        return torch.einsum("...ij,ir,jr->...r", dm, self.basis, self.basis)
+            gdens = torch.zeros((*dm.shape[:-2], 3, self.basis.shape[-1]),
+                                 dtype=self.dtype, device=self.device)  # (..., ndim, ngrid)
+            gdens[..., 0, :] = torch.einsum("...ir,ir->...r", dmao2, self.grad_basis[0])
+            gdens[..., 1, :] = torch.einsum("...ir,ir->...r", dmao2, self.grad_basis[1])
+            gdens[..., 2, :] = torch.einsum("...ir,ir->...r", dmao2, self.grad_basis[2])
 
-    def _get_grad_dens_at_grid(self, dm: torch.Tensor) -> torch.Tensor:
-        # get the gradient of density at the grid
-        if not self.is_grad_ao_set:
-            raise RuntimeError("Please call `setup_grid(grid, gradlevel>=1)` to calculate the density gradient")
-        # dm is multiplied by 2 because n(r) = sum (D_ij * phi_i * phi_j), thus
-        # d.n(r) = sum (D_ij * d.phi_i * phi_j + D_ij * phi_i * d.phi_j)
-        # res = torch.einsum("...ij,dir,jr->...dr", 2 * dm, self.grad_basis, self.basis)
-        dm2 = 2 * dm
-        res = torch.zeros((*dm.shape[:-2], 3, self.basis.shape[-1]),
-                          dtype=self.dtype, device=self.device)  # (..., ndim, ngrid)
-        res[..., 0, :] = torch.einsum("...ij,ir,jr->...r", dm2, self.grad_basis[0], self.basis)
-        res[..., 1, :] = torch.einsum("...ij,ir,jr->...r", dm2, self.grad_basis[1], self.basis)
-        res[..., 2, :] = torch.einsum("...ij,ir,jr->...r", dm2, self.grad_basis[2], self.basis)
+        lapldens: Optional[torch.Tensor] = None
+        kindens: Optional[torch.Tensor] = None
+        if self.xcfamily == 4:
+            # calculate the laplacian of the density and kinetic energy density at the grid
+            if not self.is_lapl_ao_set:
+                msg = "Please call `setup_grid(grid, gradlevel>=2)` to calculate the density gradient"
+                raise RuntimeError(msg)
+            lapl_basis = torch.einsum("...ir,ir->...r", dmao2, self.lapl_basis)
+            grad_grad = torch.einsum("...ij,ir,jr->...r", dmdmt, self.grad_basis[0], self.grad_basis[0])
+            grad_grad += torch.einsum("...ij,ir,jr->...r", dmdmt, self.grad_basis[1], self.grad_basis[1])
+            grad_grad += torch.einsum("...ij,ir,jr->...r", dmdmt, self.grad_basis[2], self.grad_basis[2])
+            lapldens = lapl_basis + 2 * grad_grad
+            kindens = grad_grad * 0.5
+
+        # dens: (*BD, ngrid)
+        # gdens: (*BD, ndim, ngrid)
+        res = ValGrad(value=dens, grad=gdens, lapl=lapldens, kin=kindens)
         return res
 
-    def _get_lapl_kin_dens_at_grid(self, dm: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        # calculate the laplacian of the density and kinetic energy density at the grid
-        if not self.is_lapl_ao_set:
-            raise RuntimeError("Please call `setup_grid(grid, gradlevel>=1)` to calculate the density gradient")
-        dmt = dm.transpose(-2, -1)
-        lapl_basis = torch.einsum("...ij,ir,jr->...r", (dm + dmt), self.lapl_basis, self.basis)
-        # grad_grad = torch.einsum("...ij,dir,djr->...r", dm, self.grad_basis, self.grad_basis)
-        # it is much quicker to do it 3 times rather than doing it once as above
-        grad_grad = torch.einsum("...ij,ir,jr->...r", dm, self.grad_basis[0], self.grad_basis[0])
-        grad_grad += torch.einsum("...ij,ir,jr->...r", dm, self.grad_basis[1], self.grad_basis[1])
-        grad_grad += torch.einsum("...ij,ir,jr->...r", dm, self.grad_basis[2], self.grad_basis[2])
-        lapl = lapl_basis + 2 * grad_grad
-        kin = grad_grad * 0.5
-        return lapl, kin
+    def _get_vxc_from_potinfo(self, potinfo: ValGrad) -> xt.LinearOperator:
+        # obtain the vxc operator from the potential information
+
+        vb = potinfo.value.unsqueeze(-2) * self.basis
+        if self.xcfamily in [2, 4]:  # GGA or MGGA
+            assert potinfo.grad is not None  # (..., ndim, nrgrid)
+            vgrad = potinfo.grad * 2
+            vb += torch.einsum("...r,ar->...ar", vgrad[..., 0, :], self.grad_basis[0])
+            vb += torch.einsum("...r,ar->...ar", vgrad[..., 1, :], self.grad_basis[1])
+            vb += torch.einsum("...r,ar->...ar", vgrad[..., 2, :], self.grad_basis[2])
+        if self.xcfamily == 4:  # MGGA
+            assert potinfo.lapl is not None  # (..., nrgrid)
+            assert potinfo.kin is not None
+            vb += 2 * potinfo.lapl.unsqueeze(-2) * self.lapl_basis
+
+        # calculating the matrix from multiplication with the basis
+        mat = torch.matmul(vb, self.basis_dvolume.transpose(-2, -1))
+
+        if self.xcfamily == 4:  # MGGA
+            assert potinfo.lapl is not None  # (..., nrgrid)
+            assert potinfo.kin is not None
+            lapl_kin_dvol = (2 * potinfo.lapl + 0.5 * potinfo.kin) * self.dvolume
+            mat += torch.einsum("...r,br,cr->...bc", lapl_kin_dvol, self.grad_basis[0], self.grad_basis[0])
+            mat += torch.einsum("...r,br,cr->...bc", lapl_kin_dvol, self.grad_basis[1], self.grad_basis[1])
+            mat += torch.einsum("...r,br,cr->...bc", lapl_kin_dvol, self.grad_basis[2], self.grad_basis[2])
+
+        # construct the Hermitian linear operator
+        mat = (mat + mat.transpose(-2, -1)) * 0.5
+        vxc_linop = xt.LinearOperator.m(mat, is_hermitian=True)
+        return vxc_linop
 
     def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
         if methodname == "get_kinnucl":
@@ -402,27 +340,23 @@ class HamiltonCGTO(BaseHamilton):
                     prefix + "lapl_basis"]
         elif methodname == "get_vxc":
             assert self.xc is not None
-            params = self.getparamnames("_dm2densinfo", prefix=prefix) + \
-                self.getparamnames("get_vext", prefix=prefix) + \
+            return self.getparamnames("_dm2densinfo", prefix=prefix) + \
+                self.getparamnames("_get_vxc_from_potinfo", prefix=prefix) + \
                 self.xc.getparamnames("get_vxc", prefix=prefix + "xc.")
-            if self.xcfamily >= 2:
-                params += self.getparamnames("get_grad_vext", prefix=prefix)
-            if self.xcfamily >= 4:
-                params += self.getparamnames("get_lapl_kin_vext", prefix=prefix)
-            return params
         elif methodname == "_dm2densinfo":
-            params = self.getparamnames("_get_dens_at_grid", prefix=prefix)
-            if self.xcfamily >= 2:
-                params += self.getparamnames("_get_grad_dens_at_grid", prefix=prefix)
-            if self.xcfamily >= 4:
-                params += self.getparamnames("_get_lapl_kin_dens_at_grid", prefix=prefix)
+            params = [prefix + "basis"]
+            if self.xcfamily == 2 or self.xcfamily == 4:
+                params += [prefix + "grad_basis"]
+            if self.xcfamily == 4:
+                params += [prefix + "lapl_basis"]
             return params
-        elif methodname == "_get_dens_at_grid":
-            return [prefix + "basis"]
-        elif methodname == "_get_grad_dens_at_grid":
-            return [prefix + "basis", prefix + "grad_basis"]
-        elif methodname == "_get_lapl_kin_dens_at_grid":
-            return [prefix + "basis", prefix + "grad_basis", prefix + "lapl_basis"]
+        elif methodname == "_get_vxc_from_potinfo":
+            params = [prefix + "basis", prefix + "basis_dvolume"]
+            if self.xcfamily in [2, 4]:
+                params += [prefix + "grad_basis"]
+            if self.xcfamily == 4:
+                params += [prefix + "lapl_basis", prefix + "dvolume"]
+            return params
         else:
             raise KeyError("getparamnames has no %s method" % methodname)
         # TODO: complete this

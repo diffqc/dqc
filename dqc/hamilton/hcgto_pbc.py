@@ -7,7 +7,9 @@ from dqc.hamilton.base_hamilton import BaseHamilton
 from dqc.hamilton.hcgto import HamiltonCGTO
 from dqc.df.base_df import BaseDF
 from dqc.df.dfpbc import DFPBC
-from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, SpinParam, DensityFitInfo
+from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, SpinParam, DensityFitInfo, \
+                                 ValGrad
+from dqc.utils.types import get_complex_dtype
 from dqc.utils.pbc import unweighted_coul_ft, get_gcut
 from dqc.grid.base_grid import BaseGrid
 from dqc.xc.base_xc import BaseXC
@@ -44,6 +46,7 @@ class HamiltonCGTO_PBC(HamiltonCGTO):
         self._basiswrapper = intor.LibcintWrapper(
             atombases, spherical=spherical, lattice=latt)
         self.dtype = self._basiswrapper.dtype
+        self.cdtype = get_complex_dtype(self.dtype)
         self.device = self._basiswrapper.device
 
         # set the default k-points and their weights
@@ -222,25 +225,6 @@ class HamiltonCGTO_PBC(HamiltonCGTO):
         mat = (mat + mat.transpose(-2, -1).conj()) * 0.5  # ensure the hermitianness and reduce numerical instability
         return xt.LinearOperator.m(mat, is_hermitian=True)
 
-    def get_grad_vext(self, grad_vext: torch.Tensor) -> xt.LinearOperator:
-        # grad_vext: (*BR, ngrid, ndim)
-        # return: (*BR, nkpts, nao, nao)
-        if not self.is_grad_ao_set:
-            raise RuntimeError("Please call `setup_grid(grid, xc)` to call this function")
-        # mat = torch.einsum("...dr,kbr,dkcr->...kbc", grad_vext, self.basis_dvolume_conj, self.grad_basis)
-        mat = torch.einsum("...r,kbr,kcr->...kbc", grad_vext[..., 0, :], self.basis_dvolume_conj, self.grad_basis[0])
-        mat += torch.einsum("...r,kbr,kcr->...kbc", grad_vext[..., 1, :], self.basis_dvolume_conj, self.grad_basis[1])
-        mat += torch.einsum("...r,kbr,kcr->...kbc", grad_vext[..., 2, :], self.basis_dvolume_conj, self.grad_basis[2])
-        mat = mat + mat.transpose(-2, -1).conj()  # +cc, so no * 0.5 in this case
-        return xt.LinearOperator.m(mat, is_hermitian=True)
-
-    def get_lapl_kin_vext(self, lapl_vext: torch.Tensor, kin_vext: torch.Tensor) -> xt.LinearOperator:
-        # get the linear operator for the laplacian and kinetic part of the potential
-        # lapl_vext: (*BR, ngrid)
-        # return: (*BR, nao, nao)
-        # TODO: implement this!
-        pass
-
     ################ xc-related ################
     @overload
     def get_vxc(self, dm: SpinParam[torch.Tensor]) -> SpinParam[xt.LinearOperator]:
@@ -278,6 +262,13 @@ class HamiltonCGTO_PBC(HamiltonCGTO):
             raise NotImplementedError()
         elif methodname == "get_vxc":
             return super().getparamnames("get_vxc", prefix=prefix)
+        elif methodname == "_get_vxc_from_potinfo":
+            params = [prefix + "basis", prefix + "basis_dvolume_conj"]
+            if self.xcfamily in [2, 4]:
+                params += [prefix + "grad_basis"]
+            if self.xcfamily == 4:
+                params += [prefix + "lapl_basis", prefix + "dvolume"]
+            return params
         elif methodname == "_get_dens_at_grid":
             return [prefix + "basis"]
         elif methodname == "_get_grad_dens_at_grid":
@@ -375,6 +366,83 @@ class HamiltonCGTO_PBC(HamiltonCGTO):
             res.append(AtomCGTOBasis(atomz=0, bases=[basis], pos=atb.pos))
         return res
 
+    def _get_vxc_from_potinfo(self, potinfo: ValGrad) -> xt.LinearOperator:
+        # overloading from hcgto
+
+        vext = potinfo.value
+        vb = potinfo.value * self.basis
+
+        if self.xcfamily in [2, 4]:  # GGA or MGGA
+            assert potinfo.grad is not None  # (..., ndim, nrgrid)
+            vgrad = potinfo.grad * 2
+            vb += torch.einsum("...r,kar->...kar", vgrad[..., 0, :], self.grad_basis[0])
+            vb += torch.einsum("...r,kar->...kar", vgrad[..., 1, :], self.grad_basis[1])
+            vb += torch.einsum("...r,kar->...kar", vgrad[..., 2, :], self.grad_basis[2])
+        if self.xcfamily == 4:  # MGGA
+            assert potinfo.lapl is not None  # (..., nrgrid)
+            assert potinfo.kin is not None
+            vb += 2 * potinfo.lapl.unsqueeze(-2).unsqueeze(-2) * self.lapl_basis
+
+        # calculating the matrix from multiplication with the basis
+        mat = torch.matmul(vb, self.basis_dvolume_conj.transpose(-2, -1))
+
+        if self.xcfamily == 4:  # MGGA
+            assert potinfo.lapl is not None  # (..., nrgrid)
+            assert potinfo.kin is not None
+            lapl_kin_dvol = (2 * potinfo.lapl + 0.5 * potinfo.kin) * self.dvolume
+            mat += torch.einsum("...r,kbr,kcr->...kbc", lapl_kin_dvol, self.grad_basis[0], self.grad_basis[0])
+            mat += torch.einsum("...r,kbr,kcr->...kbc", lapl_kin_dvol, self.grad_basis[1], self.grad_basis[1])
+            mat += torch.einsum("...r,kbr,kcr->...kbc", lapl_kin_dvol, self.grad_basis[2], self.grad_basis[2])
+
+        mat = (mat + mat.transpose(-2, -1).conj()) * 0.5
+        return xt.LinearOperator.m(mat, is_hermitian=True)
+
+    def _dm2densinfo(self, dm: torch.Tensor) -> ValGrad:
+        # overloading from hcgto
+        # dm: (*BD, nkpts, nao, nao), Hermitian
+        # family: 1 for LDA, 2 for GGA, 3 for MGGA
+        # self.basis: (nkpts, nao, ngrid)
+
+        # dm @ ao will be used in every case
+        dmdmh = (dm + dm.transpose(-2, -1).conj()) * 0.5  # (*BD, nao, nao)
+        dmao = torch.matmul(dmdmh, self.basis.conj())  # (*BD, nao, nr)
+        dmao2 = 2 * dmao
+
+        # calculate the density
+        dens = torch.einsum("...kir,kir->...r", dmao, self.basis)
+
+        # calculate the density gradient
+        gdens: Optional[torch.Tensor] = None
+        if self.xcfamily == 2 or self.xcfamily == 4:  # GGA or MGGA
+            if not self.is_grad_ao_set:
+                msg = "Please call `setup_grid(grid, gradlevel>=1)` to calculate the density gradient"
+                raise RuntimeError(msg)
+
+            gdens = torch.zeros((*dm.shape[:-3], 3, self.basis.shape[-1]),
+                                 dtype=dm.dtype, device=dm.device)  # (..., ndim, ngrid)
+            gdens[..., 0, :] = torch.einsum("...kir,kir->...r", dmao2, self.grad_basis[0])
+            gdens[..., 1, :] = torch.einsum("...kir,kir->...r", dmao2, self.grad_basis[1])
+            gdens[..., 2, :] = torch.einsum("...kir,kir->...r", dmao2, self.grad_basis[2])
+
+        lapldens: Optional[torch.Tensor] = None
+        kindens: Optional[torch.Tensor] = None
+        # if self.xcfamily == 4:  # TODO: to be completed
+        #     # calculate the laplacian of the density and kinetic energy density at the grid
+        #     if not self.is_lapl_ao_set:
+        #         msg = "Please call `setup_grid(grid, gradlevel>=2)` to calculate the density gradient"
+        #         raise RuntimeError(msg)
+        #     lapl_basis = torch.einsum("...kir,kir->...r", dmao2, self.lapl_basis)
+        #     grad_grad = torch.einsum("...kij,kir,kjr->...r", dmdmt, self.grad_basis[0], self.grad_basis[0].conj())
+        #     grad_grad += torch.einsum("...kij,kir,kjr->...r", dmdmt, self.grad_basis[1], self.grad_basis[1].conj())
+        #     grad_grad += torch.einsum("...kij,kir,kjr->...r", dmdmt, self.grad_basis[2], self.grad_basis[2].conj())
+        #     lapldens = lapl_basis + 2 * grad_grad
+        #     kindens = grad_grad * 0.5
+
+        # dens: (*BD, ngrid)
+        # gdens: (*BD, ndim, ngrid)
+        res = ValGrad(value=dens, grad=gdens, lapl=lapldens, kin=kindens)
+        return res
+
     def _get_dens_at_grid(self, dm: torch.Tensor) -> torch.Tensor:
         # get the density at the grid
         return torch.einsum("...kij,kir,kjr->...r", dm, self.basis, self.basis.conj())
@@ -384,7 +452,8 @@ class HamiltonCGTO_PBC(HamiltonCGTO):
         if not self.is_grad_ao_set:
             raise RuntimeError("Please call `setup_grid(grid, gradlevel>=1)` to calculate the density gradient")
         # gdens = torch.einsum("...kij,dkir,kjr->...dr", dm, self.grad_basis, self.basis.conj())
-        gdens = torch.zeros((*dm.shape[:-3], 3, self.basis.shape[-1]), dtype=self.dtype, device=self.device)
+        gdens = torch.zeros((*dm.shape[:-3], 3, self.basis.shape[-1]), device=self.device,
+                            dtype=self.cdtype)
         basis_conj = self.basis.conj()
         gdens[..., 0, :] = torch.einsum("...kij,kir,kjr->...r", dm, self.grad_basis[0], basis_conj)
         gdens[..., 1, :] = torch.einsum("...kij,kir,kjr->...r", dm, self.grad_basis[1], basis_conj)
