@@ -133,7 +133,10 @@ class HamiltonCGTO(BaseHamilton):
         if self._df is not None:
             raise RuntimeError("Exact exchange cannot be computed with density fitting")
         elif isinstance(dm, torch.Tensor):
-            mat = -0.5 * torch.einsum("...jk,ijkl->...il", dm, self.el_mat)
+            # the einsum form below is to hack PyTorch's bug #57121
+            # mat = -0.5 * torch.einsum("...jk,ijkl->...il", dm, self.el_mat)  # slower
+            mat = -0.5 * torch.einsum("...il,ijkl->...ijk", dm, self.el_mat).sum(dim=-3)  # faster
+
             mat = (mat + mat.transpose(-2, -1)) * 0.5  # reduce numerical instability
             return xt.LinearOperator.m(mat, is_hermitian=True)
         else:  # dm is SpinParam
