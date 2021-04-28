@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import List, Callable, Union, Mapping
+from typing import List, Callable, Union
 import torch
 from dqc.grid.radial_grid import RadialGrid
 
@@ -165,6 +165,7 @@ class NWChemTrunc(BaseTruncationRules):
         if prec_val == 13:
             precs_idxs = [5, 6, 6, 6, 5]
             res = [self._precs_list[ii] for ii in precs_idxs]
+            return res
         elif prec_val >= 13:
             idx: int = self._precs_list.index(prec_val)
             precs_idxs = [5, 7, idx - 1, idx, idx - 1]

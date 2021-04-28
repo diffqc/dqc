@@ -6,7 +6,7 @@ exclude =
   dist
   test
 max-line-length = 120
-ignore = E302,E731,W391,E221,E266,F841,E305,E126,W504,E241
+ignore = E302,E731,W391,E221,E266,F841,E305,E126,W504,E241,E201
 per-file-ignores =
   __init__.py: F401,F403
   dqc/utils/periodictable.py: E128,E131

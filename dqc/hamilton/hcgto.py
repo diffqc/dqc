@@ -260,7 +260,7 @@ class HamiltonCGTO(BaseHamilton):
                 raise RuntimeError(msg)
 
             gdens = torch.zeros((*dm.shape[:-2], 3, self.basis.shape[-1]),
-                                 dtype=self.dtype, device=self.device)  # (..., ndim, ngrid)
+                                dtype=self.dtype, device=self.device)  # (..., ndim, ngrid)
             gdens[..., 0, :] = torch.einsum("...ir,ir->...r", dmao2, self.grad_basis[0])
             gdens[..., 1, :] = torch.einsum("...ir,ir->...r", dmao2, self.grad_basis[1])
             gdens[..., 2, :] = torch.einsum("...ir,ir->...r", dmao2, self.grad_basis[2])
