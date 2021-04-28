@@ -8,7 +8,7 @@ from dqc.grid.lebedev_grid import LebedevGrid, TruncatedLebedevGrid
 from dqc.grid.multiatoms_grid import BeckeGrid, PBCBeckeGrid
 from dqc.grid.truncation_rules import DasguptaTrunc, NWChemTrunc, NoTrunc
 from dqc.hamilton.intor.lattice import Lattice
-from dqc.utils.periodictable import atom_bragg_radii, atom_expected_radii
+from dqc.utils.periodictable import atom_bragg_radii, atom_expected_radii, get_period
 from dqc.utils.misc import get_option
 
 __all__ = ["get_grid", "get_predefined_grid"]
@@ -132,8 +132,8 @@ _device = torch.device("cpu")
 def get_grid(atomzs: Union[List[int], torch.Tensor], atompos: torch.Tensor,
              *,
              lattice: Optional[Lattice] = None,
-             nr: int = 99,
-             nang: int = 590,
+             nr: Union[int, Callable[[int], int]] = 99,
+             nang: Union[int, Callable[[int], int]] = 590,
              radgrid_generator: str = "uniform",
              radgrid_transform: str = "sg2-dasgupta",
              atom_radii: str = "expected",
@@ -177,7 +177,20 @@ def get_grid(atomzs: Union[List[int], torch.Tensor], atompos: torch.Tensor,
     radgrid_tf = get_option("radial grid transformation", radgrid_transform, radgrid_tf_options)
 
     # get the precisions
-    prec = get_option("number of angular points", nang, __nang2prec)
+    if isinstance(nang, int):
+        prec: Union[int, Callable[[int], int]] = get_option("number of angular points", nang, __nang2prec)
+    else:
+        def _prec_fcn(atz: int) -> int:
+            assert callable(nang)
+            return get_option("number of angular points", nang(atz), __nang2prec)
+        prec = _prec_fcn
+
+    # wrap up a function to get the nr
+    def _get_nr(nr: Union[int, Callable[[int], int]], atz: int):
+        if isinstance(nr, int):
+            return nr
+        else:
+            return nr(atz)
 
     # get the truncation rule as a function to avoid unnecessary evaluation
     trunc_options = {
@@ -191,7 +204,8 @@ def get_grid(atomzs: Union[List[int], torch.Tensor], atompos: torch.Tensor,
 
     sphgrids: List[BaseGrid] = []
     for (atz, atpos) in zip(atomzs_list, atompos):
-        radgrid = RadialGrid(nr, grid_integrator=radgrid_generator,
+        nr_value = _get_nr(nr, atz)
+        radgrid = RadialGrid(nr_value, grid_integrator=radgrid_generator,
                              grid_transform=radgrid_tf(atz), dtype=dtype, device=device)
         if trunc.to_truncate(atz):
             rad_slices = trunc.rad_slices(atz, radgrid)
@@ -199,7 +213,7 @@ def get_grid(atomzs: Union[List[int], torch.Tensor], atompos: torch.Tensor,
             precs = trunc.precs(atz, radgrid)
             sphgrid = TruncatedLebedevGrid(radgrids, precs)
         else:
-            sphgrid = LebedevGrid(radgrid, prec=prec)
+            sphgrid = LebedevGrid(radgrid, prec=_get_nr(prec, atz))
         sphgrids.append(sphgrid)
 
     # get the multi atoms grid
@@ -252,11 +266,45 @@ def get_predefined_grid(grid_inp: Union[int, str], atomzs: Union[List[int], torc
         else:
             raise ValueError(f"Unknown grid name: {grid_inp}")
     elif isinstance(grid_inp, int):
-        #        0,   1,   2,   3,   4,    5
-        nr   = [20,  40,  60,  75,  99,  125][grid_inp]
-        nang = [74, 110, 170, 302, 590, 1202][grid_inp]
+        # the numbers are taken from pyscf
+        # https://github.com/pyscf/pyscf/blob/21a0b8d19ec58d8e70901c77783fa72ac47c1745/pyscf/dft/gen_grid.py#L596
+        # period:     1,   2,   3,   4,   5,   6,   7    # level
+        nr_list = (( 10,  15,  20,  30,  35,  40,  50),   # 0
+                   ( 30,  40,  50,  60,  65,  70,  75),   # 1
+                   ( 40,  60,  65,  75,  80,  85,  90),   # 2
+                   ( 50,  75,  80,  90,  95, 100, 105),   # 3
+                   ( 60,  90,  95, 105, 110, 115, 120),   # 4
+                   ( 70, 105, 110, 120, 125, 130, 135),   # 5
+                   ( 80, 120, 125, 135, 140, 145, 150),   # 6
+                   ( 90, 135, 140, 150, 155, 160, 165),   # 7
+                   (100, 150, 155, 165, 170, 175, 180),   # 8
+                   (200, 200, 200, 200, 200, 200, 200),)  # 9
+
+        # period:        1,    2,    3,    4,    5,    6,    7    # level
+        nang_list = [[  50,   86,  110,  110,  110,  110,  110],  # 0
+                     [ 110,  194,  194,  194,  194,  194,  194],  # 1
+                     [ 194,  302,  302,  302,  302,  302,  302],  # 2
+                     [ 302,  302,  434,  434,  434,  434,  434],  # 3
+                     [ 434,  590,  590,  590,  590,  590,  590],  # 4
+                     [ 590,  770,  770,  770,  770,  770,  770],  # 5
+                     [ 770,  974,  974,  974,  974,  974,  974],  # 6
+                     [ 974, 1202, 1202, 1202, 1202, 1202, 1202],  # 7
+                     [1202, 1202, 1202, 1202, 1202, 1202, 1202],  # 8
+                     [1454, 1454, 1454, 1454, 1454, 1454, 1454]]  # 9
+
+        nr_list2 = nr_list[grid_inp]
+        nang_list2 = nang_list[grid_inp]
+
+        def get_nr(atz: int) -> int:
+            period = get_period(atz)
+            return nr_list2[period - 1]
+
+        def get_nang(atz: int) -> int:
+            period = get_period(atz)
+            return nang_list2[period - 1]
+
         return get_grid(atomzs, atompos, lattice=lattice,
-                        nr=nr, nang=nang,
+                        nr=get_nr, nang=get_nang,
                         radgrid_generator="chebyshev2",
                         radgrid_transform="treutlerm4",
                         atom_radii="bragg",

@@ -216,3 +216,22 @@ def get_atomz(elmt: Union[str, ZType]) -> ZType:
 def get_atom_mass(atomz: int) -> float:
     # returns the atomic mass in atomic unit
     return atom_masses[atomz] * 1822.888486209
+
+def get_period(atz: int) -> int:
+    # get the period of the given atom z
+    if atz <= 2:
+        return 1
+    elif atz <= 10:
+        return 2
+    elif atz <= 18:
+        return 3
+    elif atz <= 36:
+        return 4
+    elif atz <= 54:
+        return 5
+    elif atz <=86:
+        return 6
+    elif atz <= 118:
+        return 7
+    else:
+        raise RuntimeError("Unimplemented atomz: %d" % atz)

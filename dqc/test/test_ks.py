@@ -102,7 +102,7 @@ def test_rks_energy(xc, atomzs, dist, energy_true, grid):
     qc = KS(mol, xc=xc, restricted=True).run()
     ene = qc.energy()
     # < 1 kcal/mol
-    assert torch.allclose(ene, ene * 0 + energy_true, atol=1e-3, rtol=0)
+    assert torch.allclose(ene, ene * 0 + energy_true, atol=1.3e-3, rtol=0)
 
 @pytest.mark.parametrize(
     "xc,atomzs,dist,grad2",
