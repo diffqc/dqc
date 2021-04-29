@@ -229,7 +229,7 @@ def get_period(atz: int) -> int:
         return 4
     elif atz <= 54:
         return 5
-    elif atz <=86:
+    elif atz <= 86:
         return 6
     elif atz <= 118:
         return 7

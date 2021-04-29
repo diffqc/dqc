@@ -1,8 +1,9 @@
 from __future__ import annotations
 from collections import defaultdict
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Sequence
 import re
 import copy
+from dqc.hamilton.intor.symmetry import BaseSymmetry, S1Symmetry, S4Symmetry
 
 # name manager of the integrals
 
@@ -111,6 +112,15 @@ class IntorNameManager(object):
             self.rawop_comp[self._rawop] + \
             sum([self.op_comp[op] for op in ops_flat_r], ())
         return comp_shape
+
+    def get_intgl_symmetry(self, unique: Sequence[int]) -> BaseSymmetry:
+        # get the symmetry of the integral
+        all_same = all([u == 0 for u in unique])
+        if all_same:
+            if self._int_type == "int2e":
+                if self._shortname == "ar12b":
+                    return S4Symmetry()
+        return S1Symmetry()
 
     def get_transpose_path_to(self, other: IntorNameManager) -> Optional[List[Tuple[int, int]]]:
         # check if the integration `other` can be achieved by transposing `self`

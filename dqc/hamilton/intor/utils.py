@@ -6,7 +6,7 @@ import numpy as np
 # dqc.hamilton.intor files (no dependance on other files in dqc.hamilton.intor
 # is required)
 
-__all__ = ["NDIM", "CINT", "CGTO", "CPBC", "c_null_ptr", "np2ctypes", "int2ctypes"]
+__all__ = ["NDIM", "CINT", "CGTO", "CPBC", "CSYMM", "c_null_ptr", "np2ctypes", "int2ctypes"]
 
 # CONSTANTS
 NDIM = 3
@@ -16,9 +16,13 @@ _curpath = os.path.dirname(os.path.abspath(__file__))
 _libcint_path = os.path.join(_curpath, "../../../lib/libcint/build/libcint.so")
 _libcgto_path = os.path.join(_curpath, "../../../lib/libcgto.so")
 _libcpbc_path = os.path.join(_curpath, "../../../lib/libpbc.so")
+# _libcvhf_path = os.path.join(_curpath, "../../../lib/libcvhf.so")
+_libcsymm_path = os.path.join(_curpath, "../../../lib/libsymm.so")
 CINT = ctypes.cdll.LoadLibrary(_libcint_path)
 CGTO = ctypes.cdll.LoadLibrary(_libcgto_path)
 CPBC = ctypes.cdll.LoadLibrary(_libcpbc_path)
+# CVHF = ctypes.cdll.LoadLibrary(_libcvhf_path)
+CSYMM = ctypes.cdll.LoadLibrary(_libcsymm_path)
 
 c_null_ptr = ctypes.POINTER(ctypes.c_void_p)
 

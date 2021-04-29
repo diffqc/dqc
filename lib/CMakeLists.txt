@@ -136,6 +136,7 @@ add_subdirectory(vhf)
 ##add_subdirectory(localizer)
 #add_subdirectory(hci)
 add_subdirectory(pbc)
+add_subdirectory(symm)
 #add_subdirectory(extras/mbd)
 #add_subdirectory(semiempirical)
 

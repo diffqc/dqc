@@ -1,4 +1,4 @@
-from typing import Optional, List, Tuple, Callable
+from typing import Optional, List, Tuple, Callable, Dict
 import ctypes
 import copy
 import operator
@@ -594,6 +594,8 @@ class Intor(object):
         self.int_type = int_nmgr.int_type
         self.atm, self.bas, self.env = wrapper0.atm_bas_env
         self.wrapper0 = wrapper0
+        self.int_nmgr = int_nmgr
+        self.wrapper_uniqueness = _get_uniqueness([id(w) for w in wrappers])
 
         # get the operator
         opname = int_nmgr.get_intgl_name(wrapper0.spherical)
@@ -664,9 +666,13 @@ class Intor(object):
 
     def _int4c(self) -> torch.Tensor:
         # performing 4-centre integrals with libcint
-        out = np.empty(self.outshape, dtype=np.float64)
+        symm = self.int_nmgr.get_intgl_symmetry(self.wrapper_uniqueness)
+        outshape = symm.get_reduced_shape(self.outshape)
+
+        out = np.empty(outshape, dtype=np.float64)
+
         drv = CGTO.GTOnr2e_fill_drv
-        fill = CGTO.GTOnr2e_fill_s1
+        fill = getattr(CGTO, "GTOnr2e_fill_%s" % symm.code)
         prescreen = ctypes.POINTER(ctypes.c_void_p)()
         drv(self.op, fill, prescreen,
             out.ctypes.data_as(ctypes.c_void_p),
@@ -678,6 +684,7 @@ class Intor(object):
             np2ctypes(self.bas), int2ctypes(self.bas.shape[0]),
             np2ctypes(self.env))
 
+        out = symm.reconstruct_array(out, self.outshape)
         return self._to_tensor(out)
 
     def _to_tensor(self, out: np.ndarray) -> torch.Tensor:
@@ -800,3 +807,18 @@ def _gather_at_dims(inp: torch.Tensor, mapidxs: List[torch.Tensor],
         map2 = map2.expand(*out.shape[:dim], -1, *out.shape[dim + 1:])
         out = torch.gather(out, dim=dim, index=map2)
     return out
+
+def _get_uniqueness(a: List) -> List[int]:
+    # get the uniqueness pattern from the list, e.g. _get_uniqueness([1, 1, 2, 3, 2])
+    # will return [0, 0, 1, 2, 1]
+    s: Dict = {}
+    res: List[int] = []
+    i = 0
+    for elmt in a:
+        if elmt in s:
+            res.append(s[elmt])
+        else:
+            s[elmt] = i
+            res.append(i)
+            i += 1
+    return res
