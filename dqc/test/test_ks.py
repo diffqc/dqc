@@ -256,6 +256,9 @@ u_mols_energies = {
         # numbers from pyscf with basis 6-311++G** with grid level 3 and LDA x
         -148.149998931489,  # O2
     ],
+    "lda_x+lda_c_pw": [
+        -1.49259447e+02,  # O2
+    ],
     "gga_x_pbe": [
         -149.64097658035521,
     ],
@@ -268,6 +271,9 @@ u_mols_energies_df = {
         # numbers from pyscf with basis 6-311++G** with grid level 3 and LDA x
         # with def2-svp-jkfit auxbasis
         -1.48150027e+02,  # O2
+    ],
+    "lda_x+lda_c_pw": [
+        -1.49259475e+02,  # O2
     ],
     "gga_x_pbe": [
         -1.49641013e+02,
@@ -288,7 +294,8 @@ def test_uks_energy_same_as_rks(xc, atomzs, dist, energy_true):
 
 @pytest.mark.parametrize(
     "xc,atomz,spin,energy_true",
-    [("lda_x", atomz, spin, energy) for ((atomz, spin), energy) in zip(u_atomzs_spins, u_atom_energies["lda_x"])] + \
+    [("lda_x", atomz, spin, energy) for ((atomz, spin), energy)
+        in zip(u_atomzs_spins, u_atom_energies["lda_x"])] + \
     [("gga_x_pbe", atomz, spin, energy) for ((atomz, spin), energy)
         in zip(u_atomzs_spins, u_atom_energies["gga_x_pbe"])] + \
     [("mgga_x_scan", atomz, spin, energy) for ((atomz, spin), energy)
@@ -311,6 +318,8 @@ def test_uks_energy_atoms(xc, atomz, spin, energy_true):
     "xc,atomzs,dist,spin,energy_true",
     [("lda_x", atomzs, dist, spin, energy) for ((atomzs, dist, spin), energy)
         in zip(u_mols_dists_spins, u_mols_energies["lda_x"])] + \
+    [("lda_x+lda_c_pw", atomzs, dist, spin, energy) for ((atomzs, dist, spin), energy)
+        in zip(u_mols_dists_spins, u_mols_energies["lda_x+lda_c_pw"])] + \
     [("gga_x_pbe", atomzs, dist, spin, energy) for ((atomzs, dist, spin), energy)
         in zip(u_mols_dists_spins, u_mols_energies["gga_x_pbe"])] + \
     [("mgga_x_scan", atomzs, dist, spin, energy) for ((atomzs, dist, spin), energy)
@@ -373,6 +382,8 @@ def test_rks_energy_df(xc, atomzs, dist, energy_true, grid):
     "xc,atomzs,dist,spin,energy_true",
     [("lda_x", atomzs, dist, spin, energy) for ((atomzs, dist, spin), energy)
         in zip(u_mols_dists_spins, u_mols_energies_df["lda_x"])] + \
+    [("lda_x+lda_c_pw", atomzs, dist, spin, energy) for ((atomzs, dist, spin), energy)
+        in zip(u_mols_dists_spins, u_mols_energies_df["lda_x+lda_c_pw"])] + \
     [("gga_x_pbe", atomzs, dist, spin, energy) for ((atomzs, dist, spin), energy)
         in zip(u_mols_dists_spins, u_mols_energies_df["gga_x_pbe"])]
 )
