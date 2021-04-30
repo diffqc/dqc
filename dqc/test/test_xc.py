@@ -175,6 +175,35 @@ def test_libxc_lda_value():
     assert torch.allclose(vxc_pol.u.value, vxc_pol_u_value_true)
     assert torch.allclose(vxc_pol.d.value, vxc_pol_d_value_true)
 
+def test_libxc_ldac_value():
+    # check if the value of lda_c_pw is consistent
+    xc = get_libxc("lda_c_pw")
+    assert xc.family == 1
+    assert xc.family == 1
+
+    torch.manual_seed(123)
+    n = 100
+    rho_1 = torch.rand((n,), dtype=torch.float64)
+    rho_2 = torch.rand((n,), dtype=torch.float64)
+    rho_u = torch.maximum(rho_1, rho_2)
+    rho_d = torch.minimum(rho_1, rho_2)
+    rho_tot = rho_u + rho_d
+    xi = (rho_u - rho_d) / rho_tot
+
+    densinfo_u = ValGrad(value=rho_u)
+    densinfo_d = ValGrad(value=rho_d)
+    densinfo = SpinParam(u=densinfo_u, d=densinfo_d)
+    densinfo_tot = ValGrad(value=rho_tot)
+
+    # calculate the energy and compare with analytic
+    edens_unpol = xc.get_edensityxc(densinfo_tot)
+    edens_unpol_true = ldac_e_true(rho_tot, rho_tot * 0)
+    assert torch.allclose(edens_unpol, edens_unpol_true)
+
+    edens_pol = xc.get_edensityxc(densinfo)
+    edens_pol_true = ldac_e_true(rho_tot, xi)
+    assert torch.allclose(edens_pol, edens_pol_true)
+
 def test_libxc_gga_value():
     # compare the calculated value of GGA potential
     dtype = torch.float64
@@ -339,6 +368,29 @@ def test_xc_default_vxc(xccls, libxcname):
 
 def lda_e_true(rho):
     return -0.75 * (3 / np.pi) ** (1. / 3) * rho ** (4. / 3)
+
+def ldac_e_true(rho, xi):
+    # lda correlation based on PW92
+    rs = safepow(4 * np.pi * rho / 3.0, -1.0 / 3)
+
+    sl = (slice(None, None, None),) + ((None,) * max(rs.ndim, xi.ndim))
+    a_pp     = torch.tensor([1, 1, 1])[sl]
+    a_a      = torch.tensor([0.0310907, 0.01554535, 0.0168869])[sl]
+    a_alpha1 = torch.tensor([0.21370,  0.20548,  0.11125])[sl]
+    a_beta1  = torch.tensor([7.5957, 14.1189, 10.357])[sl]
+    a_beta2  = torch.tensor([3.5876, 6.1977, 3.6231])[sl]
+    a_beta3  = torch.tensor([1.6382, 3.3662,  0.88026])[sl]
+    a_beta4  = torch.tensor([0.49294, 0.62517, 0.49671])[sl]
+    a_fz20   = 1.709920934161365617563962776245
+
+    g_aux = a_beta1 * torch.sqrt(rs) + a_beta2 * rs + a_beta3 * rs ** 1.5 + a_beta4 * rs ** (a_pp + 1)
+    # log1p(x) provides better numerical stability than log(1+x)
+    g     = -2 * a_a * (1 + a_alpha1 * rs) * torch.log1p(1. / (2 * a_a * g_aux))
+
+    f_xi = (safepow(1 + xi, 4. / 3) + safepow(1 - xi, 4. / 3) - 2) / (2 ** (4. / 3) - 2)
+    f_pw = g[0] + xi ** 4 * f_xi * (g[1] - g[0] + g[2] / a_fz20) - f_xi * g[2] / a_fz20
+
+    return f_pw * rho
 
 def lda_v_true(rho):
     return -(3 / np.pi) ** (1. / 3) * rho ** (1. / 3)
