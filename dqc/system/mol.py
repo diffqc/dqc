@@ -1,4 +1,5 @@
-from typing import List, Union, Optional, Tuple
+from typing import List, Union, Optional, Tuple, Set
+import warnings
 import torch
 import numpy as np
 from dqc.hamilton.base_hamilton import BaseHamilton
@@ -58,6 +59,9 @@ class Mol(BaseSystem):
         of electric field with the last dimension is the direction of the electric
         field, third element is the gradgrad of electric field, etc.
         If None, then the electric field is assumed to be 0.
+    * diffparams: Union[str, List[str], None]
+        List of parameters that is required to be differentiable.
+        The parameter names that can be forced are: ["atompos"]
     * dtype: torch.dtype
         The data type of tensors in this class.
         Default: torch.float64
@@ -75,6 +79,7 @@ class Mol(BaseSystem):
                  charge: ZType = 0,
                  orb_weights: Optional[SpinParam[torch.Tensor]] = None,
                  efield: Union[torch.Tensor, Tuple[torch.Tensor, ...], None] = None,
+                 diffparams: Union[str, List[str], None] = [],
                  dtype: torch.dtype = torch.float64,
                  device: torch.device = torch.device('cpu'),
                  ):
@@ -83,6 +88,10 @@ class Mol(BaseSystem):
         self._grid_inp = grid
         self._basis_inp = basis
         self._grid: Optional[BaseGrid] = None
+
+        # set up the diff params
+        accepted_diffparams = set(["atompos"])
+        self._diffparams = _normalize_diffparams(diffparams, accepted_diffparams)
 
         # make efield a tuple
         self._efield = _normalize_efield(efield)
@@ -94,7 +103,9 @@ class Mol(BaseSystem):
         # get the AtomCGTOBasis & the hamiltonian
         # atomzs: (natoms,) dtype: torch.int or dtype for floating point
         # atompos: (natoms, ndim)
-        atomzs, atompos = _parse_moldesc(moldesc, dtype, device)
+        atomzs, atompos = _parse_moldesc(
+            moldesc, dtype, device,
+            pos_force_grad="atompos" in self._diffparams)
         atomzs_int = torch.round(atomzs).to(torch.int) if atomzs.is_floating_point() else atomzs
         allbases = _parse_basis(atomzs_int, basis)  # list of list of CGTOBasis
         atombases = [AtomCGTOBasis(atomz=atz, bases=bas, pos=atpos)
@@ -283,7 +294,8 @@ class Mol(BaseSystem):
 
 def _parse_moldesc(moldesc: Union[str, Tuple[AtomZsType, AtomPosType]],
                    dtype: torch.dtype,
-                   device: torch.device) -> Tuple[torch.Tensor, torch.Tensor]:
+                   device: torch.device,
+                   pos_force_grad: bool = False) -> Tuple[torch.Tensor, torch.Tensor]:
     if isinstance(moldesc, str):
         # TODO: use regex!
         elmts = [
@@ -314,6 +326,10 @@ def _parse_moldesc(moldesc: Union[str, Tuple[AtomZsType, AtomPosType]],
     # convert to dtype if atomzs is a floating point tensor, not an integer tensor
     if atomzs.is_floating_point():
         atomzs = atomzs.to(dtype)
+
+    # force atompos to requires grad, if pos_force_grad is True
+    if pos_force_grad:
+        atompos = atompos.requires_grad_()
 
     return atomzs, atompos
 
@@ -421,3 +437,21 @@ def _preprocess_efield(efs: Optional[Tuple[torch.Tensor, ...]]) -> Optional[Tupl
         res_list.append(efi.reshape(-1))
 
     return tuple(res_list)
+
+def _normalize_diffparams(inp: Union[str, List[str], None], acclist: Set[str]) -> Set[str]:
+    # convert the input into set of strings and check if the inputs are not known
+    msg = "'%s' is not in the list of parameters that can be forced to be differentiable.\n"
+    msg += "The list are: " + str(acclist)
+
+    if inp is None:
+        res: Set[str] = set([])
+    elif isinstance(inp, str):
+        res = set([inp])
+    else:
+        res = set(inp)
+
+    # check if there are unknown names in the list
+    for ip in res:
+        if ip not in acclist:
+            warnings.warn(msg % ip, stacklevel=3)
+    return res

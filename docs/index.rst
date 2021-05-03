@@ -16,10 +16,13 @@ DQC's example API:
 
 .. code-block:: python
 
+    import torch
     from dqc import Mol, HF
-    mol = Mol("H -1 0 0; H 1 0 0", basis="3-21G")
+    # set up the H2 molecule, forcing the atom positions to be differentiable
+    mol = Mol("H -1 0 0; H 1 0 0", basis="3-21G", diffparams=["atompos"])
     qc = HF(mol).run()
     ene = qc.energy()  # calculate the energy
+    force = -torch.autograd.grad(ene, mol.atompos)[0]  # calculate the force
 
 
 .. toctree::

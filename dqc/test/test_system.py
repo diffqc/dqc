@@ -112,6 +112,19 @@ def test_mol_cache():
     olp1 = h1.get_overlap().fullmatrix()
     assert torch.allclose(olp, olp1)
 
+def test_mol_diffparams():
+    # test if diffparams forcing the parameters to be differentiable
+    m = Mol("H 1 0 0; H -1 0 0", basis="3-21G", diffparams=["atompos"])
+    assert m.atompos.requires_grad
+    m = Mol("H 1 0 0; H -1 0 0", basis="3-21G", diffparams="atompos")
+    assert m.atompos.requires_grad
+    m = Mol("H 1 0 0; H -1 0 0", basis="3-21G")
+    assert not m.atompos.requires_grad
+
+    # raise a warning if the input is unknown
+    with pytest.warns(UserWarning, match=r"'poss'*"):
+        m = Mol("H 1 0 0; H -1 0 0", basis="3-21G", diffparams=["poss"])
+
 def test_sol_cache():
 
     # test if cache is stored correctly
@@ -152,6 +165,20 @@ def test_sol_cache():
 
     j2c1 = h1.df.j2c
     assert torch.allclose(j2c, j2c1)
+
+def test_sol_diffparams():
+    # test if diffparams forcing the parameters to be differentiable
+    alattice = torch.eye(3, dtype=dtype) * 3
+    m = Sol("H 1 0 0; H -1 0 0", alattice=alattice, basis="3-21G", diffparams=["atompos"])
+    assert m.atompos.requires_grad
+    m = Sol("H 1 0 0; H -1 0 0", alattice=alattice, basis="3-21G", diffparams="atompos")
+    assert m.atompos.requires_grad
+    m = Sol("H 1 0 0; H -1 0 0", alattice=alattice, basis="3-21G")
+    assert not m.atompos.requires_grad
+
+    # raise a warning if the input is unknown
+    with pytest.warns(UserWarning, match=r"'poss'*"):
+        m = Sol("H 1 0 0; H -1 0 0", alattice=alattice, basis="3-21G", diffparams=["poss"])
 
 ##################### pbc #####################
 def test_mol_pbc_nuclei_energy():
