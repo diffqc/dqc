@@ -80,9 +80,9 @@ copyright = '2021, %s' % author
 # built documents.
 #
 # The short X.Y version.
-import dqc
+from dqc.version import get_version
 # The full version, including alpha/beta/rc tags.
-release = dqc.__version__
+release = get_version()
 # short version
 version = ".".join(release.split(".")[:2])
 
