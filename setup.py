@@ -6,7 +6,7 @@ file_dir = os.path.dirname(os.path.realpath(__file__))
 absdir = lambda p: os.path.join(file_dir, p)
 
 ############### versioning ###############
-verfile = os.path.abspath(os.path.join(module_name, "version.py"))
+verfile = os.path.abspath(os.path.join(module_name, "_version.py"))
 version = {"__file__": verfile}
 with open(verfile, "r") as fp:
     exec(fp.read(), version)
