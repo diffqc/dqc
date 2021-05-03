@@ -27,7 +27,7 @@ class Mol(BaseSystem):
     ---------
     * moldesc: str or 2-elements tuple (atomzs, atompos)
         Description of the molecule system.
-        If string, it can be described like "H 0 0 0; H 0.5 0.5 0.5".
+        If string, it can be described like ``"H 1 0 0; H -1 0 0"``.
         If tuple, the first element of the tuple is the Z number of the atoms while
         the second element is the position of the atoms.
     * basis: str, CGTOBasis or list of str or CGTOBasis
@@ -61,7 +61,7 @@ class Mol(BaseSystem):
         If None, then the electric field is assumed to be 0.
     * diffparams: Union[str, List[str], None]
         List of parameters that is required to be differentiable.
-        The parameter names that can be forced are: ["atompos"]
+        The parameter names that can be forced are: ``["atompos"]``
     * dtype: torch.dtype
         The data type of tensors in this class.
         Default: torch.float64

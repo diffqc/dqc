@@ -1,9 +1,9 @@
 How to contribute
 =================
 
-There are a lot of ways to contribute to dqc:
+There are a lot of ways to contribute to DQC:
 
-- Report bugs or request features via :github:`dqc Github page <issues>`
+- Report bugs or request features via :github:`DQC Github page <issues>`
 - Improving documentations
 - Reporting and fixing bugs
 - Writing a new feature / simulation
@@ -29,7 +29,7 @@ Writing a new feature / simulation
 
 If you want to implement a new feature or simulation, please raise an issue on
 the :github:`Github page <issues>` before starting your work.
-It will be reviewed if the feature is suitable for dqc.
+It will be reviewed if the feature is suitable for DQC.
 If approved, you are welcome to make a pull request.
 We can also give pointers on how to implement the feature if you don't
 know where to start.

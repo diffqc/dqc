@@ -1,0 +1,29 @@
+{
+  "Systems": {
+    "module": "dqc.system",
+    "prefix": "dqc.",
+    "desc": "physical systems",
+    "api": {
+      "Mol": "isolated molecules",
+      "Sol": "periodic boundary system"
+    }
+  },
+  "QCCalc": {
+    "module": "dqc.qccalc",
+    "prefix": "dqc.",
+    "desc": "quantum chemistry calculations",
+    "api": {
+      "HF": "Hartree-Fock",
+      "KS": "Kohn-Sham"
+    }
+  },
+  "Utils": {
+    "module": "dqc.api",
+    "prefix": "dqc.",
+    "desc": "utilities API",
+    "api": {
+      "loadbasis": "",
+      "get_xc": ""
+    }
+  }
+}

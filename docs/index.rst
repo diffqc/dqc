@@ -32,6 +32,14 @@ DQC's example API:
    getstart/installation
    getstart/contribute
 
+.. toctree::
+   :maxdepth: 1
+   :caption: Modules
+
+   api/dqc_system/index
+   api/dqc_qccalc/index
+   api/dqc_api/index
+
 
 Indices and tables
 ==================

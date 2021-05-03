@@ -76,21 +76,21 @@ class BaseSystem(xt.EditableModule):
     @abstractproperty
     def atompos(self) -> torch.Tensor:
         """
-        Returns the atom positions as a tensor with shape (natoms, ndim)
+        Returns the atom positions as a tensor with shape ``(natoms, ndim)``
         """
         pass
 
     @abstractproperty
     def atomzs(self) -> torch.Tensor:
         """
-        Returns the tensor containing the atomic number with shape (natoms)
+        Returns the tensor containing the atomic number with shape ``(natoms,)``
         """
         pass
 
     @abstractproperty
     def atommasses(self) -> torch.Tensor:
         """
-        Returns the tensor containing atomic mass with shape (natoms) in atomic unit
+        Returns the tensor containing atomic mass with shape ``(natoms)`` in atomic unit
         """
         pass
 

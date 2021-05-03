@@ -27,6 +27,69 @@ import json
 import importlib
 import inspect
 
+# generate the api files
+api_dir = os.path.abspath("api")
+api_toc_path = os.path.join(api_dir, "toc.json")
+module_index_template = """{name}
+{underlines}
+
+.. toctree::
+   :maxdepth: 2
+
+   {api_list}
+"""
+module_api_list_indent = " "*3
+file_template = """{name}
+{underlines}
+
+.. auto{function_or_class}:: {fullname}
+   {with_members}
+"""
+with open(api_toc_path, "r") as f:
+    api_toc = json.load(f)
+
+def format_api_display(api, desc, prefix):
+    if desc == "":
+        return api
+    else:
+        return "{prefix}{api}: {desc} <{api}>".format(desc=desc, api=api, prefix=prefix)
+
+for modname, module_details in api_toc.items():
+    module = module_details["module"]
+    prefix = module_details["prefix"]
+    api_list = [format_api_display(api, desc, prefix) for (api, desc) in module_details["api"].items()]
+    module_dir_name = module.replace(".", "_")
+    module_api_dir = os.path.join(api_dir, module_dir_name)
+    if not os.path.exists(module_api_dir):
+        os.mkdir(module_api_dir)
+
+    # write the index.rst
+    api_list_str = ("\n"+module_api_list_indent).join(api_list)
+    module_index_fname = os.path.join(module_api_dir, "index.rst")
+    with open(module_index_fname, "w") as f:
+        content = module_index_template.format(
+            name=modname,
+            underlines="="*len(modname),
+            api_list=api_list_str
+        )
+        f.write(content)
+
+    pymod = importlib.import_module(module)
+    for fn in module_details["api"]:
+        fullname = module + "." + fn
+        isfn = inspect.isfunction(getattr(pymod, fn))
+        fname = os.path.join(module_api_dir, fn+".rst")
+        file_content = file_template.format(
+            name=fn,
+            fullname=fullname,
+            underlines="="*len(fn),
+            function_or_class="function" if isfn else "class",
+            with_members="" if isfn else ":members:"
+        )
+        with open(fname, "w") as f:
+            f.write(file_content)
+
+
 # -- General configuration ------------------------------------------------
 
 # If your documentation needs a minimal Sphinx version, state it here.
