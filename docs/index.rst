@@ -12,12 +12,22 @@ automatically provide gradients of (almost) any variables with respect to
 DQC provides analytic first and higher order derivatives automatically
 using PyTorch's autograd engine.
 
+DQC's example API:
+
 .. code-block:: python
 
     from dqc import Mol, HF
     mol = Mol("H -1 0 0; H 1 0 0", basis="3-21G")
     qc = HF(mol).run()
     ene = qc.energy()  # calculate the energy
+
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Getting started
+
+   getstart/installation
+   getstart/contribute
 
 
 Indices and tables
