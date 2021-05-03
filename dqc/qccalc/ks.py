@@ -10,6 +10,8 @@ from dqc.xc.base_xc import BaseXC
 from dqc.api.getxc import get_xc
 from dqc.utils.datastruct import SpinParam
 
+__all__ = ["KS"]
+
 class KS(SCF_QCCalc):
     """
     Performing Restricted or Unrestricted Kohn-Sham DFT calculation.

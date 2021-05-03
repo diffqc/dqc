@@ -17,6 +17,8 @@ from dqc.hamilton.intor.lattice import Lattice
 from dqc.hamilton.intor.pbcintor import PBCIntOption
 from dqc.utils.cache import Cache
 
+__all__ = ["Sol"]
+
 class Sol(BaseSystem):
     """
     Describe the system of a solid (i.e. periodic boundary condition system).

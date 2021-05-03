@@ -16,6 +16,8 @@ from dqc.utils.cache import Cache
 AtomZsType  = Union[List[str], List[ZType], torch.Tensor]
 AtomPosType = Union[List[List[float]], np.ndarray, torch.Tensor]
 
+__all__ = ["Mol"]
+
 class Mol(BaseSystem):
     """
     Describe the system of an isolated molecule.
