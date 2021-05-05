@@ -56,6 +56,9 @@ jobs:
     - name: Run test
       run: |
         pytest dqc/test/ --cov=./ --cov-report=xml
+    - name: Run examples
+      run: |
+        for f in examples/*.py; do echo "$f"; python "$f"; done
     - name: Upload coverage to codecov
       uses: codecov/codecov-action@v1
       with:
