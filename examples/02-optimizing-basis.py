@@ -22,7 +22,7 @@ def fcn(bparams, bpacker):
 print("Original basis")
 print(basis)
 min_bparams = xitorch.optimize.minimize(fcn, bparams, (bpacker,), method="gd",
-                                        step=2e-1, maxiter=100, verbose=True)
+                                        step=2e-1, maxiter=200, verbose=True)
 opt_basis = bpacker.construct_from_tensor(min_bparams)
 print("Optimized basis")
 print(opt_basis)

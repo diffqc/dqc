@@ -12,7 +12,8 @@ def get_ene(atompos: torch.Tensor) -> torch.Tensor:
     return ene
 
 atompos0 = torch.tensor([[1, 0, 0], [-1, 0, 0]], dtype=torch.float64)
-minpos = xitorch.optimize.minimize(get_ene, atompos0, method="gd", step=0.8, verbose=True)
+minpos = xitorch.optimize.minimize(get_ene, atompos0, method="gd", maxiter=200,
+                                   step=1e-2, verbose=True)
 
 print("Equilibrium position:")
 print(minpos)
