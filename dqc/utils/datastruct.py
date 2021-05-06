@@ -1,7 +1,7 @@
 from __future__ import annotations
 import torch
 from dataclasses import dataclass
-from typing import Optional, Union, List, TypeVar, Generic, Callable, overload
+from typing import Optional, Union, List, TypeVar, Generic, Callable, overload, Dict
 from dqc.utils.misc import gaussian_int
 
 __all__ = ["CGTOBasis", "AtomCGTOBasis", "ValGrad", "ZType", "is_z_float",
@@ -63,7 +63,8 @@ class AtomCGTOBasis:
     pos: torch.Tensor  # (ndim,)
 
 # input basis type
-BasisInpType = Union[str, List[CGTOBasis], List[str], List[List[CGTOBasis]]]
+BasisInpType = Union[str, List[CGTOBasis], List[str], List[List[CGTOBasis]],
+                     Dict[Union[str, int], Union[List[CGTOBasis], str]]]
 
 @dataclass
 class DensityFitInfo:

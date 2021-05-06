@@ -340,6 +340,15 @@ def _parse_basis(atomzs: torch.Tensor, basis: BasisInpType) -> List[List[CGTOBas
     if isinstance(basis, str):
         return [loadbasis("%d:%s" % (atomz, basis)) for atomz in atomzs]
 
+    elif isinstance(basis, dict):
+        # convert the basis key into atomz
+        basis_int: Dict[int, List[CGTOBasis]] = {}
+        for k, v in basis.items():
+            atz = get_atomz(k)
+            bas = v if isinstance(v, list) else loadbasis("%d:%s" % (atz, v))
+            basis_int[atz] = bas
+        return [basis_int[int(atomz)] for atomz in atomzs]
+
     else:  # basis is a list
         assert len(atomzs) == len(basis)
 

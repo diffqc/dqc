@@ -2,6 +2,7 @@ from itertools import product
 import numpy as np
 import torch
 import pytest
+from dqc.api.loadbasis import loadbasis
 from dqc.qccalc.hf import HF
 from dqc.system.mol import Mol
 from dqc.system.sol import Sol
@@ -66,6 +67,33 @@ def test_rhf_grad_pos(atomzs, dist, grad2):
                                      rtol=1e-2, atol=1e-5)
     else:
         torch.autograd.gradcheck(get_energy, (dist_tensor,))
+
+def test_rhf_basis_inputs():
+    # test to see if the various basis inputs produce the same results
+    atomzs = [1, 1]
+    poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * 1.0
+    mol0 = Mol((atomzs, poss), basis=basis, dtype=dtype)
+    ene0 = HF(mol0, restricted=True).run().energy()
+
+    mol1 = Mol((atomzs, poss), basis=[basis, basis], dtype=dtype)
+    ene1 = HF(mol1, restricted=True).run().energy()
+    assert torch.allclose(ene0, ene1)
+
+    mol1 = Mol((atomzs, poss), basis=loadbasis("1:" + basis), dtype=dtype)
+    ene1 = HF(mol1, restricted=True).run().energy()
+    assert torch.allclose(ene0, ene1)
+
+    mol2 = Mol((atomzs, poss), basis={"H": basis}, dtype=dtype)
+    ene2 = HF(mol2, restricted=True).run().energy()
+    assert torch.allclose(ene0, ene2)
+
+    mol2 = Mol((atomzs, poss), basis={1: basis}, dtype=dtype)
+    ene2 = HF(mol2, restricted=True).run().energy()
+    assert torch.allclose(ene0, ene2)
+
+    mol2 = Mol((atomzs, poss), basis={1: loadbasis("1:3-21G")}, dtype=dtype)
+    ene2 = HF(mol2, restricted=True).run().energy()
+    assert torch.allclose(ene0, ene2)
 
 ############### Unrestricted Kohn-Sham ###############
 u_atomzs_spins = [
