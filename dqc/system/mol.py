@@ -1,4 +1,4 @@
-from typing import List, Union, Optional, Tuple, Set
+from typing import List, Union, Optional, Tuple, Set, Dict
 import warnings
 import torch
 import numpy as np
@@ -344,7 +344,7 @@ def _parse_basis(atomzs: torch.Tensor, basis: BasisInpType) -> List[List[CGTOBas
         # convert the basis key into atomz
         basis_int: Dict[int, List[CGTOBasis]] = {}
         for k, v in basis.items():
-            atz = get_atomz(k)
+            atz = int(get_atomz(k))
             bas = v if isinstance(v, list) else loadbasis("%d:%s" % (atz, v))
             basis_int[atz] = bas
         return [basis_int[int(atomz)] for atomz in atomzs]
