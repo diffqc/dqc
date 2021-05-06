@@ -36,7 +36,7 @@ class SCF_QCCalc(BaseQCCalc):
     def get_system(self) -> BaseSystem:
         return self._engine.get_system()
 
-    def run(self, dm0: Optional[Union[torch.Tensor, SpinParam[torch.Tensor]]] = None,  # type: ignore
+    def run(self, dm0: Optional[Union[str, torch.Tensor, SpinParam[torch.Tensor]]] = "1e",  # type: ignore
             eigen_options: Optional[Mapping[str, Any]] = None,
             fwd_options: Optional[Mapping[str, Any]] = None,
             bck_options: Optional[Mapping[str, Any]] = None) -> BaseQCCalc:
@@ -66,17 +66,26 @@ class SCF_QCCalc(BaseQCCalc):
 
         # set up the initial self-consistent param guess
         if dm0 is None:
-            if not self._polarized:
-                dm0 = torch.zeros(self._shape, dtype=self.dtype,
-                                  device=self.device)
+            dm = self._get_zero_dm()
+        elif isinstance(dm0, str):
+            if dm0 == "1e":  # initial density based on 1-electron Hamiltonian
+                dm = self._get_zero_dm()
+                scp0 = self._engine.dm2scp(dm)
+                dm = self._engine.scp2dm(scp0)
             else:
-                dm0_u = torch.zeros(self._shape, dtype=self.dtype,
-                                    device=self.device)
-                dm0_d = torch.zeros(self._shape, dtype=self.dtype,
-                                    device=self.device)
-                dm0 = SpinParam(u=dm0_u, d=dm0_d)
+                raise RuntimeError("Unknown dm0: %s" % dm0)
+        else:
+            dm = dm0
 
-        scp0 = self._engine.dm2scp(dm0)
+        # making it spin param for polarized and tensor for nonpolarized
+        if isinstance(dm, torch.Tensor) and self._polarized:
+            dm_u = dm * 0.5
+            dm_d = dm * 0.5
+            dm = SpinParam(u=dm_u, d=dm_d)
+        elif isinstance(dm, SpinParam) and not self._polarized:
+            dm = SpinParam.sum(dm)
+
+        scp0 = self._engine.dm2scp(dm)
 
         # do the self-consistent iteration
         scp = xitorch.optimize.equilibrium(
@@ -99,6 +108,18 @@ class SCF_QCCalc(BaseQCCalc):
         # returns the density matrix in the atomic-orbital basis
         assert self._has_run
         return self._dm
+
+    def _get_zero_dm(self) -> Union[SpinParam[torch.Tensor], torch.Tensor]:
+        # get the initial dm that are all zeros
+        if not self._polarized:
+            return torch.zeros(self._shape, dtype=self.dtype,
+                               device=self.device)
+        else:
+            dm0_u = torch.zeros(self._shape, dtype=self.dtype,
+                                device=self.device)
+            dm0_d = torch.zeros(self._shape, dtype=self.dtype,
+                                device=self.device)
+            return SpinParam(u=dm0_u, d=dm0_d)
 
 class BaseSCFEngine(xt.EditableModule):
     @abstractproperty
