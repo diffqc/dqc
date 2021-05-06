@@ -83,7 +83,7 @@ class SCF_QCCalc(BaseQCCalc):
             dm_d = dm * 0.5
             dm = SpinParam(u=dm_u, d=dm_d)
         elif isinstance(dm, SpinParam) and not self._polarized:
-            dm = SpinParam.sum(dm)
+            dm = dm.u + dm.d
 
         scp0 = self._engine.dm2scp(dm)
 
