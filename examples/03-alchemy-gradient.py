@@ -20,7 +20,8 @@ def fcn(atompos, dev):
 print("Finding the equilibrium position")
 atompos0 = torch.tensor([[1.2, 0.0, 0.0], [-1.2, 0.0, 0.0]], dtype=dtype)
 equil_atompos = xitorch.optimize.minimize(fcn, atompos0, (dev,), method="gd",
-                                          step=1e-1, maxiter=100, verbose=True)
+                                          step=1e-1, maxiter=100, f_rtol=1e-10,
+                                          verbose=True)
 equil_ene = fcn(equil_atompos, dev)
 
 # gradient of the energy at the equilibrium position w.r.t. dev
