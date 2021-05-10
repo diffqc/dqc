@@ -250,7 +250,6 @@ class HamiltonCGTO(BaseHamilton):
         # dm @ ao will be used in every case
         dmdmt = (dm + dm.transpose(-2, -1)) * 0.5  # (*BD, nao, nao)
         dmao = torch.matmul(dmdmt, self.basis)  # (*BD, nao, nr)
-        dmao2 = 2 * dmao
 
         # calculate the density
         dens = torch.einsum("...ir,ir->...r", dmao, self.basis)
@@ -264,9 +263,9 @@ class HamiltonCGTO(BaseHamilton):
 
             gdens = torch.zeros((*dm.shape[:-2], 3, self.basis.shape[-1]),
                                 dtype=self.dtype, device=self.device)  # (..., ndim, ngrid)
-            gdens[..., 0, :] = torch.einsum("...ir,ir->...r", dmao2, self.grad_basis[0])
-            gdens[..., 1, :] = torch.einsum("...ir,ir->...r", dmao2, self.grad_basis[1])
-            gdens[..., 2, :] = torch.einsum("...ir,ir->...r", dmao2, self.grad_basis[2])
+            gdens[..., 0, :] = torch.einsum("...ir,ir->...r", dmao, self.grad_basis[0]) * 2
+            gdens[..., 1, :] = torch.einsum("...ir,ir->...r", dmao, self.grad_basis[1]) * 2
+            gdens[..., 2, :] = torch.einsum("...ir,ir->...r", dmao, self.grad_basis[2]) * 2
 
         lapldens: Optional[torch.Tensor] = None
         kindens: Optional[torch.Tensor] = None
@@ -275,11 +274,15 @@ class HamiltonCGTO(BaseHamilton):
             if not self.is_lapl_ao_set:
                 msg = "Please call `setup_grid(grid, gradlevel>=2)` to calculate the density gradient"
                 raise RuntimeError(msg)
-            lapl_basis = torch.einsum("...ir,ir->...r", dmao2, self.lapl_basis)
-            grad_grad = torch.einsum("...ij,ir,jr->...r", dmdmt, self.grad_basis[0], self.grad_basis[0])
-            grad_grad += torch.einsum("...ij,ir,jr->...r", dmdmt, self.grad_basis[1], self.grad_basis[1])
-            grad_grad += torch.einsum("...ij,ir,jr->...r", dmdmt, self.grad_basis[2], self.grad_basis[2])
-            lapldens = lapl_basis + 2 * grad_grad
+            lapl_basis = torch.einsum("...ir,ir->...r", dmao, self.lapl_basis)
+            grad_grad = torch.einsum("...ir,ir->...r", torch.matmul(dmdmt, self.grad_basis[0]), self.grad_basis[0])
+            grad_grad += torch.einsum("...ir,ir->...r", torch.matmul(dmdmt, self.grad_basis[1]), self.grad_basis[1])
+            grad_grad += torch.einsum("...ir,ir->...r", torch.matmul(dmdmt, self.grad_basis[2]), self.grad_basis[2])
+            # pytorch's "...ij,ir,jr->...r" is really slow for large matrix
+            # grad_grad = torch.einsum("...ij,ir,jr->...r", dmdmt, self.grad_basis[0], self.grad_basis[0])
+            # grad_grad += torch.einsum("...ij,ir,jr->...r", dmdmt, self.grad_basis[1], self.grad_basis[1])
+            # grad_grad += torch.einsum("...ij,ir,jr->...r", dmdmt, self.grad_basis[2], self.grad_basis[2])
+            lapldens = (lapl_basis + grad_grad) * 2
             kindens = grad_grad * 0.5
 
         # dens: (*BD, ngrid)
