@@ -9,6 +9,7 @@ from dqc.utils.datastruct import AtomCGTOBasis, ValGrad, SpinParam, DensityFitIn
 from dqc.grid.base_grid import BaseGrid
 from dqc.xc.base_xc import BaseXC
 from dqc.utils.cache import Cache
+from dqc.utils.misc import chunkify
 
 class HamiltonCGTO(BaseHamilton):
     def __init__(self, atombases: List[AtomCGTOBasis], spherical: bool = True,
@@ -249,10 +250,17 @@ class HamiltonCGTO(BaseHamilton):
 
         # dm @ ao will be used in every case
         dmdmt = (dm + dm.transpose(-2, -1)) * 0.5  # (*BD, nao, nao)
-        dmao = torch.matmul(dmdmt, self.basis)  # (*BD, nao, nr)
 
-        # calculate the density
-        dens = torch.einsum("...ir,ir->...r", dmao, self.basis)
+        # it is faster to split into chunks than evaluating a single chunk
+        dens = torch.empty((*dm.shape[:-2], self.basis.shape[-1]), dtype=self.dtype, device=self.device)
+        for basis, ioff, iend in chunkify(self.basis, dim=-1, maxnumel=2000000):
+            dmao = torch.matmul(dmdmt, basis)
+            dens[..., ioff:iend] = torch.einsum("...ir,ir->...r", dmao, basis)
+
+        # dmao = torch.matmul(dmdmt, self.basis)  # (*BD, nao, nr)
+        #
+        # # calculate the density
+        # dens = torch.einsum("...ir,ir->...r", dmao, self.basis)
 
         # calculate the density gradient
         gdens: Optional[torch.Tensor] = None
