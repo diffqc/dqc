@@ -6,6 +6,7 @@ from dqc.df.base_df import BaseDF
 from dqc.utils.datastruct import DensityFitInfo
 from dqc.utils.mem import get_memory
 from dqc.utils.config import config
+from dqc.utils.misc import logger
 
 class DFMol(BaseDF):
     """
@@ -28,7 +29,9 @@ class DFMol(BaseDF):
         basisw, auxbw = intor.LibcintWrapper.concatenate(self.wrapper, auxbasiswrapper)
 
         if method == "coulomb":
+            logger.log("Calculating the 2e2c integrals")
             j2c = intor.coul2c(auxbw)  # (nxao, nxao)
+            logger.log("Calculating the 2e3c integrals")
             j3c = intor.coul3c(basisw, other1=basisw,
                                other2=auxbw)  # (nao, nao, nxao)
         elif method == "overlap":
@@ -38,6 +41,7 @@ class DFMol(BaseDF):
                 "Density fitting with overlap minimization is not implemented")
         self._j2c = j2c  # (nxao, nxao)
         self._j3c = j3c  # (nao, nao, nxao)
+        logger.log("Precompute matrix for density fittings")
         self._inv_j2c = torch.inverse(j2c)
 
         # if the memory is too big, then don't precompute elmat
@@ -47,6 +51,7 @@ class DFMol(BaseDF):
             self._precompute_elmat = True
             self._el_mat = torch.matmul(j3c, self._inv_j2c)  # (nao, nao, nxao)
 
+        logger.log("Density fitting done")
         return self
 
     def get_elrep(self, dm: torch.Tensor) -> xt.LinearOperator:

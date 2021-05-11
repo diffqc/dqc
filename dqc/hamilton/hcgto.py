@@ -10,6 +10,7 @@ from dqc.grid.base_grid import BaseGrid
 from dqc.xc.base_xc import BaseXC
 from dqc.utils.cache import Cache
 from dqc.utils.mem import chunkify
+from dqc.utils.misc import logger
 
 class HamiltonCGTO(BaseHamilton):
     def __init__(self, atombases: List[AtomCGTOBasis], spherical: bool = True,
@@ -66,8 +67,11 @@ class HamiltonCGTO(BaseHamilton):
                 "dfoptions": self._dfoptions,
             })
 
+            logger.log("Calculating the overlap matrix")
             self.olp_mat = self._cache.cache("overlap", lambda: intor.overlap(self.libcint_wrapper))
+            logger.log("Calculating the kinetic matrix")
             kin_mat = self._cache.cache("kinetic", lambda: intor.kinetic(self.libcint_wrapper))
+            logger.log("Calculating the nuclear attraction matrix")
             nucl_mat = self._cache.cache("nuclattr", lambda: intor.nuclattr(self.libcint_wrapper))
             self.nucl_mat = nucl_mat
             self.kinnucl_mat = kin_mat + nucl_mat
@@ -84,10 +88,13 @@ class HamiltonCGTO(BaseHamilton):
                     self.kinnucl_mat = self.kinnucl_mat + efield_mat / fac
 
             if self._df is None:
+                logger.log("Calculating the electron repulsion matrix")
                 self.el_mat = self._cache.cache("elrep", lambda: intor.elrep(self.libcint_wrapper))  # (nao^4)
             else:
+                logger.log("Building the density fitting matrices")
                 self._df.build()
             self.is_built = True
+            logger.log("Setting up the Hamiltonian done")
 
         return self
 
@@ -187,6 +194,7 @@ class HamiltonCGTO(BaseHamilton):
         assert grid.coord_type == "cart"
 
         # setup the basis as a spatial function
+        logger.log("Calculating the basis values in the grid")
         self.is_ao_set = True
         self.basis = intor.eval_gto(self.libcint_wrapper, self.rgrid)  # (nao, ngrid)
         self.dvolume = self.grid.get_dvolume()
@@ -196,6 +204,7 @@ class HamiltonCGTO(BaseHamilton):
             return
 
         # setup the gradient of the basis
+        logger.log("Calculating the basis gradient values in the grid")
         self.is_grad_ao_set = True
         self.grad_basis = intor.eval_gradgto(self.libcint_wrapper, self.rgrid)  # (ndim, nao, ngrid)
         if self.xcfamily == 2:  # GGA
@@ -203,6 +212,7 @@ class HamiltonCGTO(BaseHamilton):
 
         # setup the laplacian of the basis
         self.is_lapl_ao_set = True
+        logger.log("Calculating the basis laplacian values in the grid")
         self.lapl_basis = intor.eval_laplgto(self.libcint_wrapper, self.rgrid)  # (nao, ngrid)
 
     def get_vext(self, vext: torch.Tensor) -> xt.LinearOperator:

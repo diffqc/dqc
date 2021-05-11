@@ -2,6 +2,7 @@ from typing import Callable, overload, TypeVar, Any, Mapping
 import functools
 import torch
 import scipy.special
+from dqc.utils.config import config
 
 T = TypeVar('T')
 K = TypeVar('K')
@@ -43,3 +44,13 @@ def gaussian_int(n, alpha):
     # int_0^inf x^n exp(-alpha x^2) dx
     n1 = (n + 1) * 0.5
     return scipy.special.gamma(n1) / (2 * alpha ** n1)
+
+class _Logger(object):
+    def log(self, s: str, vlevel: int = 0):
+        """
+        Print the string ``s`` if the verbosity level exceeds ``vlevel``.
+        """
+        if config.VERBOSE > vlevel:
+            print(s)
+
+logger = _Logger()
