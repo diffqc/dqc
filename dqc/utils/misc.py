@@ -56,7 +56,7 @@ def chunkify(a: torch.Tensor, dim: int, maxnumel: int) -> \
               (a.shape, dim, maxnumel)
         raise RuntimeError(msg)
 
-    csize = maxnumel // nondimnumel
+    csize = min(maxnumel // nondimnumel, dimnumel)
     ioffset = 0
     lslice = (slice(None, None, None),) * dim
     rslice = (slice(None, None, None),) * (a.ndim - dim - 1)
