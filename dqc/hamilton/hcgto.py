@@ -264,7 +264,7 @@ class HamiltonCGTO(BaseHamilton):
             kindens = torch.empty((*dm.shape[:-2], self.basis.shape[-1]), dtype=self.dtype, device=self.device)
 
         # It is faster to split into chunks than evaluating a single big chunk
-        for basis, ioff, iend in chunkify(self.basis, dim=-1, maxnumel=2000000000000):
+        for basis, ioff, iend in chunkify(self.basis, dim=-1, maxnumel=2000000):
 
             dmao = torch.matmul(dmdmt, basis)
             dens[..., ioff:iend] = torch.einsum("...ir,ir->...r", dmao, basis)
@@ -308,6 +308,10 @@ class HamiltonCGTO(BaseHamilton):
 
     def _get_vxc_from_potinfo(self, potinfo: ValGrad) -> xt.LinearOperator:
         # obtain the vxc operator from the potential information
+        # potinfo.value: (*BD, nr)
+        # potinfo.grad: (*BD, ndim, nr)
+        # potinfo.lapl: (*BD, nr)
+        # potinfo.kin: (*BD, nr)
 
         vb = potinfo.value.unsqueeze(-2) * self.basis
         if self.xcfamily in [2, 4]:  # GGA or MGGA
