@@ -8,6 +8,7 @@ from dqc.system.sol import Sol
 from dqc.xc.base_xc import BaseXC
 from dqc.utils.safeops import safepow, safenorm
 from dqc.utils.datastruct import ValGrad
+from dqc.utils.config import config
 
 # checks on end-to-end outputs and gradients
 
@@ -370,13 +371,23 @@ def test_rks_energy_df(xc, atomzs, dist, energy_true, grid):
     if xc == "mgga_x_scan":
         if atomzs == [1, 1]:
             pytest.xfail("Psi4 and PySCF don't converge")
-    poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist
-    mol = Mol((atomzs, poss), basis="6-311++G**", dtype=dtype, grid=grid)
-    mol.densityfit(method="coulomb", auxbasis="def2-sv(p)-jkfit")
-    qc = KS(mol, xc=xc, restricted=True).run()
-    ene = qc.energy()
-    # error to be < 1 kcal/mol
-    assert torch.allclose(ene, ene * 0 + energy_true, atol=1.1e-3, rtol=0)
+
+    for lowmem in [False, True]:  # simulating low memory condition
+        if lowmem:
+            init_value = config.THRESHOLD_MEMORY
+            config.THRESHOLD_MEMORY = 1000000  # 1 MB
+
+        poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist
+        mol = Mol((atomzs, poss), basis="6-311++G**", dtype=dtype, grid=grid)
+        mol.densityfit(method="coulomb", auxbasis="def2-sv(p)-jkfit")
+        qc = KS(mol, xc=xc, restricted=True).run()
+        ene = qc.energy()
+        # error to be < 1 kcal/mol
+        assert torch.allclose(ene, ene * 0 + energy_true, atol=1.1e-3, rtol=0)
+
+        if lowmem:
+            # restore the value
+            config.THRESHOLD_MEMORY = init_value
 
 @pytest.mark.parametrize(
     "xc,atomzs,dist,spin,energy_true",

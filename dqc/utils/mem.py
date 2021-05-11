@@ -1,9 +1,6 @@
 from typing import Generator, Tuple
 import torch
 
-# Threshold memory (matrix above this size should not be constructed)
-THRESHOLD_MEMORY = 10 * 1024 ** 3  # in B
-
 def chunkify(a: torch.Tensor, dim: int, maxnumel: int) -> \
         Generator[Tuple[torch.Tensor, int, int], None, None]:
     """

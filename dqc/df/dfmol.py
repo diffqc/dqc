@@ -4,6 +4,8 @@ from typing import List
 import dqc.hamilton.intor as intor
 from dqc.df.base_df import BaseDF
 from dqc.utils.datastruct import DensityFitInfo
+from dqc.utils.mem import get_memory
+from dqc.utils.config import config
 
 class DFMol(BaseDF):
     """
@@ -13,6 +15,7 @@ class DFMol(BaseDF):
         self.dfinfo = dfinfo
         self.wrapper = wrapper
         self._is_built = False
+        self._precompute_elmat = True
 
     def build(self) -> BaseDF:
         self._is_built = True
@@ -37,7 +40,13 @@ class DFMol(BaseDF):
         self._j3c = j3c  # (nao, nao, nxao)
         self._inv_j2c = torch.inverse(j2c)
 
-        self._el_mat = torch.matmul(j3c, self._inv_j2c)  # (nao, nao, nxao)
+        # if the memory is too big, then don't precompute elmat
+        if get_memory(j3c) > config.THRESHOLD_MEMORY:
+            self._precompute_elmat = False
+        else:
+            self._precompute_elmat = True
+            self._el_mat = torch.matmul(j3c, self._inv_j2c)  # (nao, nao, nxao)
+
         return self
 
     def get_elrep(self, dm: torch.Tensor) -> xt.LinearOperator:
@@ -45,7 +54,12 @@ class DFMol(BaseDF):
         # elrep_mat: (nao, nao, nao, nao)
         # return: (*BD, nao, nao)
 
-        df_coeffs = torch.einsum("...ij,ijk->...k", dm, self._el_mat)  # (*BD, nxao)
+        if self._precompute_elmat:
+            df_coeffs = torch.einsum("...ij,ijk->...k", dm, self._el_mat)  # (*BD, nxao)
+        else:
+            temp = torch.einsum("...ij,ijl->...l", dm, self._j3c)
+            df_coeffs = torch.einsum("...l,lk->...k", temp, self._inv_j2c)  # (*BD, nxao)
+
         mat = torch.einsum("...k,ijk->...ij", df_coeffs, self._j3c)  # (*BD, nao, nao)
         mat = (mat + mat.transpose(-2, -1)) * 0.5
         return xt.LinearOperator.m(mat, is_hermitian=True)
@@ -60,6 +74,9 @@ class DFMol(BaseDF):
 
     def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
         if methodname == "get_elrep":
-            return [prefix + "_el_mat", prefix + "_j3c"]
+            if self._precompute_elmat:
+                return [prefix + "_el_mat", prefix + "_j3c"]
+            else:
+                return [prefix + "_inv_j2c", prefix + "_j3c"]
         else:
             raise KeyError("getparamnames has no %s method" % methodname)
