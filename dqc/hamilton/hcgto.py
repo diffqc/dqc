@@ -9,7 +9,7 @@ from dqc.utils.datastruct import AtomCGTOBasis, ValGrad, SpinParam, DensityFitIn
 from dqc.grid.base_grid import BaseGrid
 from dqc.xc.base_xc import BaseXC
 from dqc.utils.cache import Cache
-from dqc.utils.misc import chunkify
+from dqc.utils.mem import chunkify
 
 class HamiltonCGTO(BaseHamilton):
     def __init__(self, atombases: List[AtomCGTOBasis], spherical: bool = True,
