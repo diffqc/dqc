@@ -203,7 +203,12 @@ def get_grid(atomzs: Union[List[int], torch.Tensor], atompos: torch.Tensor,
     trunc = get_option("truncation rule", truncate_str, trunc_options)()
 
     sphgrids: List[BaseGrid] = []
-    for (atz, atpos) in zip(atomzs_list, atompos):
+    sphgrids_dict: Dict[int, BaseGrid] = {}
+    for atz in atomzs_list:
+        if atz in sphgrids_dict:
+            sphgrids.append(sphgrids_dict[atz])
+            continue
+
         nr_value = _get_nr(nr, atz)
         radgrid = RadialGrid(nr_value, grid_integrator=radgrid_generator,
                              grid_transform=radgrid_tf(atz), dtype=dtype, device=device)
@@ -214,6 +219,7 @@ def get_grid(atomzs: Union[List[int], torch.Tensor], atompos: torch.Tensor,
             sphgrid = TruncatedLebedevGrid(radgrids, precs)
         else:
             sphgrid = LebedevGrid(radgrid, prec=_get_nr(prec, atz))
+        sphgrids_dict[atz] = sphgrid
         sphgrids.append(sphgrid)
 
     # get the multi atoms grid
