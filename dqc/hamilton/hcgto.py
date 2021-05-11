@@ -270,6 +270,7 @@ class HamiltonCGTO(BaseHamilton):
             dens[..., ioff:iend] = torch.einsum("...ir,ir->...r", dmao, basis)
 
             if self.xcfamily == 2 or self.xcfamily == 4:  # GGA or MGGA
+                assert gdens is not None
                 if not self.is_grad_ao_set:
                     msg = "Please call `setup_grid(grid, gradlevel>=1)` to calculate the density gradient"
                     raise RuntimeError(msg)
@@ -284,6 +285,8 @@ class HamiltonCGTO(BaseHamilton):
                 gdens[..., 2, ioff:iend] = torch.einsum("...ir,ir->...r", dmao, grad_basis2) * 2
 
             if self.xcfamily == 4:
+                assert lapldens is not None
+                assert kindens is not None
                 # calculate the laplacian of the density and kinetic energy density at the grid
                 if not self.is_lapl_ao_set:
                     msg = "Please call `setup_grid(grid, gradlevel>=2)` to calculate the density gradient"
@@ -312,29 +315,43 @@ class HamiltonCGTO(BaseHamilton):
         # potinfo.grad: (*BD, ndim, nr)
         # potinfo.lapl: (*BD, nr)
         # potinfo.kin: (*BD, nr)
+        # self.basis: (nao, nr)
+        # self.grad_basis: (ndim, nao, nr)
 
-        vb = potinfo.value.unsqueeze(-2) * self.basis
-        if self.xcfamily in [2, 4]:  # GGA or MGGA
-            assert potinfo.grad is not None  # (..., ndim, nrgrid)
-            vgrad = potinfo.grad * 2
-            vb += torch.einsum("...r,ar->...ar", vgrad[..., 0, :], self.grad_basis[0])
-            vb += torch.einsum("...r,ar->...ar", vgrad[..., 1, :], self.grad_basis[1])
-            vb += torch.einsum("...r,ar->...ar", vgrad[..., 2, :], self.grad_basis[2])
-        if self.xcfamily == 4:  # MGGA
-            assert potinfo.lapl is not None  # (..., nrgrid)
-            assert potinfo.kin is not None
-            vb += 2 * potinfo.lapl.unsqueeze(-2) * self.lapl_basis
+        # prepare the fock matrix component from vxc
+        nao = self.basis.shape[-2]
+        mat = torch.zeros((*potinfo.value.shape[:-1], nao, nao), dtype=self.dtype, device=self.device)
 
-        # calculating the matrix from multiplication with the basis
-        mat = torch.matmul(vb, self.basis_dvolume.transpose(-2, -1))
+        # Split the r-dimension into several parts, it is usually faster than
+        # evaluating all at once
+        for basis, ioff, iend in chunkify(self.basis, dim=-1, maxnumel=2000000):
+            vb = potinfo.value[..., ioff:iend].unsqueeze(-2) * basis  # (*BD, nao, nr)
+            if self.xcfamily in [2, 4]:  # GGA or MGGA
+                assert potinfo.grad is not None  # (..., ndim, nrgrid)
+                vgrad = potinfo.grad[..., ioff:iend] * 2
+                grad_basis0 = self.grad_basis[0, :, ioff:iend]
+                grad_basis1 = self.grad_basis[1, :, ioff:iend]
+                grad_basis2 = self.grad_basis[2, :, ioff:iend]
+                vb += torch.einsum("...r,ar->...ar", vgrad[..., 0, :], grad_basis0)
+                vb += torch.einsum("...r,ar->...ar", vgrad[..., 1, :], grad_basis1)
+                vb += torch.einsum("...r,ar->...ar", vgrad[..., 2, :], grad_basis2)
+            if self.xcfamily == 4:  # MGGA
+                assert potinfo.lapl is not None  # (..., nrgrid)
+                assert potinfo.kin is not None
+                lapl = potinfo.lapl[..., ioff:iend]
+                kin = potinfo.kin[..., ioff:iend]
+                vb += 2 * lapl.unsqueeze(-2) * self.lapl_basis[:, ioff:iend]
 
-        if self.xcfamily == 4:  # MGGA
-            assert potinfo.lapl is not None  # (..., nrgrid)
-            assert potinfo.kin is not None
-            lapl_kin_dvol = (2 * potinfo.lapl + 0.5 * potinfo.kin) * self.dvolume
-            mat += torch.einsum("...r,br,cr->...bc", lapl_kin_dvol, self.grad_basis[0], self.grad_basis[0])
-            mat += torch.einsum("...r,br,cr->...bc", lapl_kin_dvol, self.grad_basis[1], self.grad_basis[1])
-            mat += torch.einsum("...r,br,cr->...bc", lapl_kin_dvol, self.grad_basis[2], self.grad_basis[2])
+            # calculating the matrix from multiplication with the basis
+            mat += torch.matmul(vb, self.basis_dvolume[:, ioff:iend].transpose(-2, -1))
+
+            if self.xcfamily == 4:  # MGGA
+                assert potinfo.lapl is not None  # (..., nrgrid)
+                assert potinfo.kin is not None
+                lapl_kin_dvol = (2 * lapl + 0.5 * kin) * self.dvolume[..., ioff:iend]
+                mat += torch.einsum("...r,br,cr->...bc", lapl_kin_dvol, grad_basis0, grad_basis0)
+                mat += torch.einsum("...r,br,cr->...bc", lapl_kin_dvol, grad_basis1, grad_basis1)
+                mat += torch.einsum("...r,br,cr->...bc", lapl_kin_dvol, grad_basis2, grad_basis2)
 
         # construct the Hermitian linear operator
         mat = (mat + mat.transpose(-2, -1)) * 0.5
