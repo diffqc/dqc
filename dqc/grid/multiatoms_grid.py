@@ -4,8 +4,6 @@ from typing import List, Optional, Tuple
 from dqc.grid.base_grid import BaseGrid
 from dqc.grid.lebedev_grid import LebedevGrid
 from dqc.hamilton.intor.lattice import Lattice
-from dqc.utils.config import config
-from dqc.utils.mem import chunkify, get_dtype_memsize
 
 class BeckeGrid(BaseGrid):
     """
