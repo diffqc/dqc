@@ -7,7 +7,7 @@ from dqc.system.mol import Mol
 from dqc.system.sol import Sol
 from dqc.xc.base_xc import BaseXC
 from dqc.utils.safeops import safepow, safenorm
-from dqc.utils.datastruct import ValGrad
+from dqc.utils.datastruct import ValGrad, CGTOBasis
 from dqc.utils.config import config
 
 # checks on end-to-end outputs and gradients
@@ -130,6 +130,24 @@ def test_rks_grad_pos(xc, atomzs, dist, grad2):
                                      rtol=1e-2, atol=1e-5)
     else:
         torch.autograd.gradcheck(get_energy, (dist_tensor,))
+
+def test_rks_grad_basis():
+    # test grad of energy w.r.t. bases
+    torch.manual_seed(123)
+
+    # from STO-2G
+    alphas = torch.tensor([1.3098, 0.2331], dtype=torch.double).requires_grad_()
+    coeffs = torch.tensor([1.3305, 0.5755], dtype=torch.double).requires_grad_()
+    from dqc.qccalc.hf import HF
+    def get_energy(alphas, coeffs):
+        basis = {'H': [CGTOBasis(angmom=0, alphas=alphas, coeffs=coeffs, normalized=True)]}
+        moldesc = "H 0.0000 0.0000 0.0000; H 0.0000 0.0000 1.1163"
+        mol = Mol(moldesc, basis=basis, dtype=dtype, grid=3)
+        # qc = HF(mol, restricted=True).run()
+        qc = KS(mol, xc="lda_x", restricted=True).run()
+        return qc.energy()
+
+    torch.autograd.gradcheck(get_energy, (alphas, coeffs))
 
 @pytest.mark.parametrize(
     "xc,atomzs,dist,vext_p",

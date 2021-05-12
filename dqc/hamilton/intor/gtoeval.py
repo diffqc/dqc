@@ -7,6 +7,7 @@ from dqc.hamilton.intor.lcintwrap import LibcintWrapper
 from dqc.hamilton.intor.utils import np2ctypes, int2ctypes, NDIM, CGTO
 from dqc.hamilton.intor.pbcintor import _get_default_kpts, _get_default_options, PBCIntOption
 from dqc.utils.pbc import estimate_ovlp_rcut
+from dqc.hamilton.intor.molintor import _gather_at_dims
 
 __all__ = ["evl", "eval_gto", "eval_gradgto", "eval_laplgto",
            "pbc_evl", "pbc_eval_gto", "pbc_eval_gradgto", "pbc_eval_laplgto"]
@@ -102,8 +103,8 @@ class _EvalGTO(torch.autograd.Function):
     def forward(ctx,  # type: ignore
                 # tensors not used in calculating the forward, but required
                 # for the backward propagation
-                alphas: torch.Tensor,  # (ngauss_tot)
                 coeffs: torch.Tensor,  # (ngauss_tot)
+                alphas: torch.Tensor,  # (ngauss_tot)
                 pos: torch.Tensor,  # (natom, ndim)
 
                 # tensors used in forward
@@ -116,7 +117,7 @@ class _EvalGTO(torch.autograd.Function):
                 to_transpose: bool) -> torch.Tensor:
 
         res = gto_evaluator(wrapper, shortname, rgrid, to_transpose)  # (*, nao, ngrid)
-        ctx.save_for_backward(alphas, coeffs, pos, rgrid)
+        ctx.save_for_backward(coeffs, alphas, pos, rgrid)
         ctx.other_info = (ao_to_atom, wrapper, shortname, to_transpose)
         return res
 
@@ -124,14 +125,48 @@ class _EvalGTO(torch.autograd.Function):
     def backward(ctx, grad_res: torch.Tensor) -> Tuple[Optional[torch.Tensor], ...]:  # type: ignore
         # grad_res: (*, nao, ngrid)
         ao_to_atom, wrapper, shortname, to_transpose = ctx.other_info
-        alphas, coeffs, pos, rgrid = ctx.saved_tensors
+        coeffs, alphas, pos, rgrid = ctx.saved_tensors
 
         if to_transpose:
             grad_res = grad_res.transpose(-2, -1)
 
-        # TODO: implement the gradient w.r.t. alphas and coeffs
         grad_alphas = None
         grad_coeffs = None
+        if alphas.requires_grad or coeffs.requires_grad:
+            u_wrapper, uao2ao = wrapper.get_uncontracted_wrapper()
+            u_coeffs, u_alphas, u_pos = u_wrapper.params
+            # (*, nu_ao, ngrid)
+            u_grad_res = _gather_at_dims(grad_res, mapidxs=[uao2ao], dims=[-2])
+
+            # get the scatter indices
+            ao2shl = u_wrapper.ao_to_shell()
+
+            # calculate the gradient w.r.t. coeffs
+            if coeffs.requires_grad:
+                grad_coeffs = torch.zeros_like(coeffs)  # (ngauss)
+
+                # get the uncontracted version of the integral
+                dout_dcoeff = _EvalGTO.apply(*u_wrapper.params,
+                    rgrid, ao_to_atom, u_wrapper, shortname, False)  # (..., nu_ao, ngrid)
+
+                # get the coefficients and spread it on the u_ao-length tensor
+                coeffs_ao = torch.gather(coeffs, dim=-1, index=ao2shl)  # (nu_ao)
+                dout_dcoeff = dout_dcoeff / coeffs_ao[:, None]
+                grad_dcoeff = torch.einsum("...ur,...ur->u", u_grad_res, dout_dcoeff)  # (nu_ao)
+
+                grad_coeffs.scatter_add_(dim=-1, index=ao2shl, src=grad_dcoeff)
+
+            if alphas.requires_grad:
+                grad_alphas = torch.zeros_like(alphas)
+
+                new_sname = _get_evalgto_derivname(shortname, "a")
+                dout_dalpha = _EvalGTO.apply(*u_wrapper.params, rgrid,
+                    ao_to_atom, u_wrapper, new_sname, False)  # (..., nu_ao, ngrid)
+
+                alphas_ao = torch.gather(alphas, dim=-1, index=ao2shl)  # (nu_ao)
+                grad_dalpha = -torch.einsum("...ur,...ur->u", u_grad_res, dout_dalpha)
+
+                grad_alphas.scatter_add_(dim=-1, index=ao2shl, src=grad_dalpha)
 
         # calculate the gradient w.r.t. basis' pos and rgrid
         grad_pos = None
@@ -152,7 +187,7 @@ class _EvalGTO(torch.autograd.Function):
                 grad_pos = torch.zeros_like(pos)  # (natom, ndim)
                 grad_pos.scatter_add_(dim=0, index=ao_to_atom, src=grad_rao)
 
-        return grad_alphas, grad_coeffs, grad_pos, grad_rgrid, \
+        return grad_coeffs, grad_alphas, grad_pos, grad_rgrid, \
             None, None, None, None, None, None
 
 ################### evaluator (direct interfact to libcgto) ###################
@@ -217,5 +252,7 @@ def _get_evalgto_compshape(shortname: str) -> Tuple[int, ...]:
 def _get_evalgto_derivname(shortname: str, derivmode: str):
     if derivmode == "r":
         return "ip%s" % shortname
+    elif derivmode == "a":
+        return "%srr" % shortname
     else:
         raise RuntimeError("Unknown derivmode: %s" % derivmode)

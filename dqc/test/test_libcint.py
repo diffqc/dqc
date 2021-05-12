@@ -584,6 +584,45 @@ def test_eval_gto_grad_pos(eval_type, partial, to_transpose):
     torch.autograd.gradcheck(evalgto, (rgrid, eval_type, *poss))
     torch.autograd.gradgradcheck(evalgto, (rgrid, eval_type, *poss))
 
+@pytest.mark.parametrize(
+    "eval_type,partial,to_transpose",
+    list(itertools.product(
+        ["", "grad", "lapl"],
+        [False, True],
+        [False, True],
+    ))
+)
+def test_eval_gto_grad_basis(eval_type, partial, to_transpose):
+    name = eval_type
+    alphas = torch.tensor([1.3098, 0.2331], dtype=torch.double).requires_grad_()
+    coeffs = torch.tensor([1.3305, 0.5755], dtype=torch.double).requires_grad_()
+    rgrid = torch.tensor([[-0.75, 0.0, 0.0],
+                          [-0.50, 0.0, 0.0],
+                          [0.0, 0.0, 0.0],
+                          [0.50, 0.0, 0.0],
+                          [0.75, 0.0, 0.0]], dtype=torch.double)
+
+    def evalgto(alphas, coeffs):
+        bases = [CGTOBasis(angmom=0, alphas=alphas, coeffs=coeffs, normalized=True)]
+        atombases = [
+            AtomCGTOBasis(atomz=1, bases=bases, pos=torch.tensor([-0.5, 0, 0])),
+            AtomCGTOBasis(atomz=1, bases=bases, pos=torch.tensor([0.5, 0, 0])),
+        ]
+        env = intor.LibcintWrapper(atombases, spherical=True)
+        env1 = env[:len(env) // 2] if partial else env
+        if name == "":
+            return intor.eval_gto(env1, rgrid, to_transpose=to_transpose)
+        elif name == "grad":
+            return intor.eval_gradgto(env1, rgrid, to_transpose=to_transpose)
+        elif name == "lapl":
+            return intor.eval_laplgto(env1, rgrid, to_transpose=to_transpose)
+        else:
+            raise RuntimeError("Unknown name: %s" % name)
+
+    # evals gradcheck
+    torch.autograd.gradcheck(evalgto, (alphas, coeffs))
+    torch.autograd.gradgradcheck(evalgto, (alphas, coeffs))
+
 ################ pbc intor ################
 @pytest.mark.parametrize(
     "int_type",

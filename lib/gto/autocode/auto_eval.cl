@@ -4,8 +4,14 @@
 (load "gen-code.cl")
 
 (gen-eval "auto_eval1.c"
+  '("GTOval_rr"         (r dot r))
+  '("GTOval_rrrr"       (r dot r r dot r))
+  '("GTOval_iprr"       (nabla r dot r))
+  '("GTOval_iprrrr"     (nabla r dot r r dot r))
   '("GTOval_ipip"       (nabla nabla))
   '("GTOval_ipipip"     (nabla nabla nabla))
+  '("GTOval_laplrr"     (nabla dot nabla r dot r ))
+  '("GTOval_laplrrrr"   (nabla dot nabla r dot r r dot r))
   '("GTOval_lapl"       (nabla dot nabla))
   '("GTOval_iplapl"     (nabla nabla dot nabla))
   '("GTOval_ipiplapl"   (nabla nabla nabla dot nabla))
