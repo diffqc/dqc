@@ -8,6 +8,7 @@ import xitorch.optimize
 from dqc.system.base_system import BaseSystem
 from dqc.qccalc.base_qccalc import BaseQCCalc
 from dqc.utils.datastruct import SpinParam
+from dqc.utils.config import config
 
 class SCF_QCCalc(BaseQCCalc):
     """
@@ -51,7 +52,7 @@ class SCF_QCCalc(BaseQCCalc):
                 "method": "broyden1",
                 "alpha": -0.5,
                 "maxiter": 50,
-                # "verbose": True,
+                "verbose": config.VERBOSE > 0,
             }
         if bck_options is None:
             bck_options = {

@@ -13,6 +13,7 @@ from dqc.utils.periodictable import get_atomz, get_atom_mass
 from dqc.utils.safeops import occnumber, safe_cdist
 from dqc.api.loadbasis import loadbasis
 from dqc.utils.cache import Cache
+from dqc.utils.misc import logger
 
 AtomZsType  = Union[List[str], List[ZType], torch.Tensor]
 AtomPosType = Union[List[List[float]], np.ndarray, torch.Tensor]
@@ -237,8 +238,10 @@ class Mol(BaseSystem):
 
     def setup_grid(self) -> None:
         grid_inp = self._grid_inp
+        logger.log("Constructing the integration grid")
         self._grid = get_predefined_grid(self._grid_inp, self._atomzs_int, self._atompos,
                                          dtype=self._dtype, device=self._device)
+        logger.log("Constructing the integration grid: done")
 
         # #        0,  1,  2,  3,  4,  5
         # nr   = [20, 40, 60, 75, 100, 125][grid_inp]
