@@ -507,13 +507,54 @@ def test_eval_gto_vs_pyscf(eval_type):
     assert torch.allclose(ao_value, ao_value_scf, atol=2e-7)
 
 @pytest.mark.parametrize(
-    "eval_type,partial",
+    "eval_type",
+    ["", "grad", "lapl"]
+)
+def test_eval_gto_transpose(eval_type):
+    # check if our eval_gto transpose produces the correct transposed results
+
+    basis = "6-311++G**"
+    d = 0.8
+
+    # setup the system for dqc
+    atomenv = get_atom_env(dtype, ngrid=100)
+    rgrid = atomenv.rgrid
+    wrapper = get_wrapper(atomenv, spherical=True)
+    wrapper1 = wrapper[:len(wrapper)]
+    if eval_type == "":
+        ao_value = intor.eval_gto(wrapper, rgrid)
+        ao_value1 = intor.eval_gto(wrapper1, rgrid)
+        ao_valueT = intor.eval_gto(wrapper, rgrid, to_transpose=True)
+        ao_value1T = intor.eval_gto(wrapper1, rgrid, to_transpose=True)
+    elif eval_type == "grad":
+        ao_value = intor.eval_gradgto(wrapper, rgrid)
+        ao_value1 = intor.eval_gradgto(wrapper1, rgrid)
+        ao_valueT = intor.eval_gradgto(wrapper, rgrid, to_transpose=True)
+        ao_value1T = intor.eval_gradgto(wrapper1, rgrid, to_transpose=True)
+    elif eval_type == "lapl":
+        ao_value = intor.eval_laplgto(wrapper, rgrid)
+        ao_value1 = intor.eval_laplgto(wrapper1, rgrid)
+        ao_valueT = intor.eval_laplgto(wrapper, rgrid, to_transpose=True)
+        ao_value1T = intor.eval_laplgto(wrapper1, rgrid, to_transpose=True)
+
+    # make sure they are contiguous (TODO: any better way to check is contiguous?)
+    ao_value.view(-1)
+    ao_value1.view(-1)
+    ao_valueT.view(-1)
+    ao_value1T.view(-1)
+
+    assert torch.allclose(ao_value, ao_valueT.transpose(-2, -1))
+    assert torch.allclose(ao_value1, ao_value1T.transpose(-2, -1))
+
+@pytest.mark.parametrize(
+    "eval_type,partial,to_transpose",
     list(itertools.product(
         ["", "grad", "lapl"],
         [False, True],
+        [False, True],
     ))
 )
-def test_eval_gto_grad_pos(eval_type, partial):
+def test_eval_gto_grad_pos(eval_type, partial, to_transpose):
 
     atomenv = get_atom_env(dtype, ngrid=3)
     poss = atomenv.poss
@@ -531,11 +572,11 @@ def test_eval_gto_grad_pos(eval_type, partial):
         env = intor.LibcintWrapper(atombases, spherical=True)
         env1 = env[:len(env) // 2] if partial else env
         if name == "":
-            return intor.eval_gto(env1, rgrid)
+            return intor.eval_gto(env1, rgrid, to_transpose=to_transpose)
         elif name == "grad":
-            return intor.eval_gradgto(env1, rgrid)
+            return intor.eval_gradgto(env1, rgrid, to_transpose=to_transpose)
         elif name == "lapl":
-            return intor.eval_laplgto(env1, rgrid)
+            return intor.eval_laplgto(env1, rgrid, to_transpose=to_transpose)
         else:
             raise RuntimeError("Unknown name: %s" % name)
 

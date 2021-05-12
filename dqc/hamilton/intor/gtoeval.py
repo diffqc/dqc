@@ -14,7 +14,8 @@ __all__ = ["evl", "eval_gto", "eval_gradgto", "eval_laplgto",
 BLKSIZE = 128  # same as lib/gto/grid_ao_drv.c
 
 # evaluation of the gaussian basis
-def evl(shortname: str, wrapper: LibcintWrapper, rgrid: torch.Tensor) -> torch.Tensor:
+def evl(shortname: str, wrapper: LibcintWrapper, rgrid: torch.Tensor,
+        *, to_transpose: bool = False) -> torch.Tensor:
     # expand ao_to_atom to have shape of (nao, ndim)
     ao_to_atom = wrapper.ao_to_atom().unsqueeze(-1).expand(-1, NDIM)
 
@@ -24,7 +25,7 @@ def evl(shortname: str, wrapper: LibcintWrapper, rgrid: torch.Tensor) -> torch.T
         *wrapper.params, rgrid,
 
         # nontensors or int tensors
-        ao_to_atom, wrapper, shortname)
+        ao_to_atom, wrapper, shortname, to_transpose)
 
 def pbc_evl(shortname: str, wrapper: LibcintWrapper, rgrid: torch.Tensor,
             kpts: Optional[torch.Tensor] = None,
@@ -55,20 +56,20 @@ def pbc_evl(shortname: str, wrapper: LibcintWrapper, rgrid: torch.Tensor,
     return out
 
 # shortcuts
-def eval_gto(wrapper: LibcintWrapper, rgrid: torch.Tensor) -> torch.Tensor:
+def eval_gto(wrapper: LibcintWrapper, rgrid: torch.Tensor, *, to_transpose: bool = False) -> torch.Tensor:
     # rgrid: (ngrid, ndim)
     # return: (nao, ngrid)
-    return evl("", wrapper, rgrid)
+    return evl("", wrapper, rgrid, to_transpose=to_transpose)
 
-def eval_gradgto(wrapper: LibcintWrapper, rgrid: torch.Tensor) -> torch.Tensor:
+def eval_gradgto(wrapper: LibcintWrapper, rgrid: torch.Tensor, *, to_transpose: bool = False) -> torch.Tensor:
     # rgrid: (ngrid, ndim)
     # return: (ndim, nao, ngrid)
-    return evl("ip", wrapper, rgrid)
+    return evl("ip", wrapper, rgrid, to_transpose=to_transpose)
 
-def eval_laplgto(wrapper: LibcintWrapper, rgrid: torch.Tensor) -> torch.Tensor:
+def eval_laplgto(wrapper: LibcintWrapper, rgrid: torch.Tensor, *, to_transpose: bool = False) -> torch.Tensor:
     # rgrid: (ngrid, ndim)
     # return: (nao, ngrid)
-    return evl("lapl", wrapper, rgrid)
+    return evl("lapl", wrapper, rgrid, to_transpose=to_transpose)
 
 def pbc_eval_gto(wrapper: LibcintWrapper, rgrid: torch.Tensor,
                  kpts: Optional[torch.Tensor] = None,
@@ -111,18 +112,22 @@ class _EvalGTO(torch.autograd.Function):
                 # other non-tensor info
                 ao_to_atom: torch.Tensor,  # int tensor (nao, ndim)
                 wrapper: LibcintWrapper,
-                shortname: str) -> torch.Tensor:
+                shortname: str,
+                to_transpose: bool) -> torch.Tensor:
 
-        res = gto_evaluator(wrapper, shortname, rgrid)  # (*, nao, ngrid)
+        res = gto_evaluator(wrapper, shortname, rgrid, to_transpose)  # (*, nao, ngrid)
         ctx.save_for_backward(alphas, coeffs, pos, rgrid)
-        ctx.other_info = (ao_to_atom, wrapper, shortname)
+        ctx.other_info = (ao_to_atom, wrapper, shortname, to_transpose)
         return res
 
     @staticmethod
     def backward(ctx, grad_res: torch.Tensor) -> Tuple[Optional[torch.Tensor], ...]:  # type: ignore
         # grad_res: (*, nao, ngrid)
-        ao_to_atom, wrapper, shortname = ctx.other_info
+        ao_to_atom, wrapper, shortname, to_transpose = ctx.other_info
         alphas, coeffs, pos, rgrid = ctx.saved_tensors
+
+        if to_transpose:
+            grad_res = grad_res.transpose(-2, -1)
 
         # TODO: implement the gradient w.r.t. alphas and coeffs
         grad_alphas = None
@@ -134,7 +139,7 @@ class _EvalGTO(torch.autograd.Function):
         if rgrid.requires_grad or pos.requires_grad:
             opsname = _get_evalgto_derivname(shortname, "r")
             dresdr = _EvalGTO.apply(*ctx.saved_tensors,
-                                    ao_to_atom, wrapper, opsname)  # (ndim, *, nao, ngrid)
+                                    ao_to_atom, wrapper, opsname, False)  # (ndim, *, nao, ngrid)
             grad_r = dresdr * grad_res  # (ndim, *, nao, ngrid)
 
             if rgrid.requires_grad:
@@ -148,15 +153,16 @@ class _EvalGTO(torch.autograd.Function):
                 grad_pos.scatter_add_(dim=0, index=ao_to_atom, src=grad_rao)
 
         return grad_alphas, grad_coeffs, grad_pos, grad_rgrid, \
-            None, None, None, None, None
+            None, None, None, None, None, None
 
 ################### evaluator (direct interfact to libcgto) ###################
-def gto_evaluator(wrapper: LibcintWrapper, shortname: str, rgrid: torch.Tensor):
+def gto_evaluator(wrapper: LibcintWrapper, shortname: str, rgrid: torch.Tensor,
+                  to_transpose: bool):
     # NOTE: this function do not propagate gradient and should only be used
     # in this file only
 
     # rgrid: (ngrid, ndim)
-    # returns: (*, nao, ngrid)
+    # returns: (*, nao, ngrid) if not to_transpose else (*, ngrid, nao)
 
     ngrid = rgrid.shape[0]
     nshells = len(wrapper)
@@ -188,6 +194,9 @@ def gto_evaluator(wrapper: LibcintWrapper, shortname: str, rgrid: torch.Tensor):
              np2ctypes(atm), int2ctypes(atm.shape[0]),
              np2ctypes(bas), int2ctypes(bas.shape[0]),
              np2ctypes(env))
+
+    if to_transpose:
+        out = np.ascontiguousarray(np.moveaxis(out, -1, -2))
 
     out_tensor = torch.as_tensor(out, dtype=wrapper.dtype, device=wrapper.device)
     return out_tensor
