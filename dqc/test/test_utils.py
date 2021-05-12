@@ -16,3 +16,6 @@ def test_logger(capsys):
     logger.log(s, vlevel=1)
     captured = capsys.readouterr()
     assert captured.out == ""
+
+    # restore the verbosity level to 0
+    config.VERBOSE = 0

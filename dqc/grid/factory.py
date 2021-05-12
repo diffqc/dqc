@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import Union, List, Optional, Mapping, Callable
+from typing import Union, List, Optional, Mapping, Callable, Dict
 import torch
 from dqc.grid.base_grid import BaseGrid
 from dqc.grid.radial_grid import RadialGrid, LogM3Transformation, \
