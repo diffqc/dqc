@@ -189,7 +189,7 @@ def gto_evaluator(wrapper: LibcintWrapper, shortname: str, rgrid: torch.Tensor):
              np2ctypes(bas), int2ctypes(bas.shape[0]),
              np2ctypes(env))
 
-    out_tensor = torch.tensor(out, dtype=wrapper.dtype, device=wrapper.device)
+    out_tensor = torch.as_tensor(out, dtype=wrapper.dtype, device=wrapper.device)
     return out_tensor
 
 def _get_evalgto_opname(shortname: str, spherical: bool) -> str:
