@@ -9,7 +9,8 @@ from dqc.utils.datastruct import AtomCGTOBasis, ValGrad, SpinParam, DensityFitIn
 from dqc.grid.base_grid import BaseGrid
 from dqc.xc.base_xc import BaseXC
 from dqc.utils.cache import Cache
-from dqc.utils.mem import chunkify
+from dqc.utils.mem import chunkify, get_dtype_memsize
+from dqc.utils.config import config
 from dqc.utils.misc import logger
 
 class HamiltonCGTO(BaseHamilton):
@@ -274,7 +275,8 @@ class HamiltonCGTO(BaseHamilton):
             kindens = torch.empty((*dm.shape[:-2], self.basis.shape[-1]), dtype=self.dtype, device=self.device)
 
         # It is faster to split into chunks than evaluating a single big chunk
-        for basis, ioff, iend in chunkify(self.basis, dim=-1, maxnumel=2000000):
+        maxnumel = config.CHUNK_MEMORY // get_dtype_memsize(self.basis)
+        for basis, ioff, iend in chunkify(self.basis, dim=-1, maxnumel=maxnumel):
 
             dmao = torch.matmul(dmdmt, basis)
             dens[..., ioff:iend] = torch.einsum("...ir,ir->...r", dmao, basis)
@@ -334,7 +336,8 @@ class HamiltonCGTO(BaseHamilton):
 
         # Split the r-dimension into several parts, it is usually faster than
         # evaluating all at once
-        for basis, ioff, iend in chunkify(self.basis, dim=-1, maxnumel=2000000):
+        maxnumel = config.CHUNK_MEMORY // get_dtype_memsize(self.basis)
+        for basis, ioff, iend in chunkify(self.basis, dim=-1, maxnumel=maxnumel):
             vb = potinfo.value[..., ioff:iend].unsqueeze(-2) * basis  # (*BD, nao, nr)
             if self.xcfamily in [2, 4]:  # GGA or MGGA
                 assert potinfo.grad is not None  # (..., ndim, nrgrid)

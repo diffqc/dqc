@@ -1,6 +1,8 @@
 from typing import Generator, Tuple
 import torch
 
+__all__ = ["chunkify", "get_memory", "get_dtype_memsize"]
+
 def chunkify(a: torch.Tensor, dim: int, maxnumel: int) -> \
         Generator[Tuple[torch.Tensor, int, int], None, None]:
     """
@@ -37,6 +39,10 @@ def chunkify(a: torch.Tensor, dim: int, maxnumel: int) -> \
 
 def get_memory(a: torch.Tensor) -> int:
     # returns the size of the tensor in bytes
+    return a.numel() * get_dtype_memsize(a)
+
+def get_dtype_memsize(a: torch.Tensor) -> int:
+    # returns the size of each element in the tensor in bytes
     if a.dtype == torch.float64 or a.dtype == torch.int64:
         size = 8
     elif a.dtype == torch.float32 or a.dtype == torch.int32:
@@ -45,4 +51,4 @@ def get_memory(a: torch.Tensor) -> int:
         size = 1
     else:
         raise TypeError("Unknown tensor type: %s" % a.dtype)
-    return a.numel() * size
+    return size

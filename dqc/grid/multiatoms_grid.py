@@ -177,6 +177,7 @@ def _get_atom_weights(rgrids: List[torch.Tensor], atompos: torch.Tensor,
     # atompos: (natoms, ndim)
     # atomradii: (natoms,) or None
     # returns: (ngrid,)
+    print("OK1")
     assert len(rgrids) == atompos.shape[0]
     dtype = atompos.dtype
     device = atompos.device
@@ -187,6 +188,7 @@ def _get_atom_weights(rgrids: List[torch.Tensor], atompos: torch.Tensor,
     rdatoms = rdatoms + torch.eye(rdatoms.shape[0], dtype=rdatoms.dtype,
                                   device=rdatoms.device).unsqueeze(-1)
     ratoms = torch.norm(rdatoms, dim=-1)  # (natoms, natoms)
+    print("OK2")
 
     # calculate the distortion due to heterogeneity
     # (Appendix in Becke's https://doi.org/10.1063/1.454033)
@@ -209,6 +211,7 @@ def _get_atom_weights(rgrids: List[torch.Tensor], atompos: torch.Tensor,
     # xyz: (ngrid, ndim)
     # cdist is more efficient but produces nan in second grad
     # rgatoms = torch.cdist(atompos, xyz, p=2.0)  # (natoms, ngrid)
+    # MEMORY BOTTLENECK HERE
     rgatoms = torch.norm(xyz - atompos.unsqueeze(1), dim=-1)  # (natoms, ngrid)
     mu_ij = (rgatoms - rgatoms.unsqueeze(1))  # (natoms, natoms, ngrid)
     mu_ij /= ratoms.unsqueeze(-1)  # (natoms, natoms, ngrid)
