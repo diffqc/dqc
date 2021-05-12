@@ -4,6 +4,8 @@ from typing import List, Optional, Tuple
 from dqc.grid.base_grid import BaseGrid
 from dqc.grid.lebedev_grid import LebedevGrid
 from dqc.hamilton.intor.lattice import Lattice
+from dqc.utils.config import config
+from dqc.utils.mem import chunkify, get_dtype_memsize
 
 class BeckeGrid(BaseGrid):
     """
@@ -205,66 +207,69 @@ def _get_atom_weights(rgrids: List[torch.Tensor], atompos: torch.Tensor,
         aij = torch.clamp(uij / (uij * uij - 1), min=-0.45, max=0.45)  # (natoms, natoms)
         aij = aij.unsqueeze(-1)  # (natoms, natoms, 1)
 
-    xyz = torch.cat(rgrids, dim=0)
-    # xyz: (ngrid, ndim)
+    xyz_full = torch.cat(rgrids, dim=0)
+    # xyz_full: (ngrid, ndim)
     # cdist is more efficient but produces nan in second grad
     # rgatoms = torch.cdist(atompos, xyz, p=2.0)  # (natoms, ngrid)
-    # MEMORY BOTTLENECK HERE
-    rgatoms = torch.norm(xyz - atompos.unsqueeze(1), dim=-1)  # (natoms, ngrid)
-    mu_ij = (rgatoms - rgatoms.unsqueeze(1))  # (natoms, natoms, ngrid)
-    mu_ij /= ratoms.unsqueeze(-1)  # (natoms, natoms, ngrid)
-
-    if atomradii is not None:
-        # mu_ij += aij * (1 - mu_ij * mu_ij)
-        mu_ij2 = mu_ij * mu_ij
-        mu_ij2 -= 1
-        mu_ij2 *= (-aij)
-        mu_ij2 += mu_ij
-        mu_ij = mu_ij2
-
-    # making mu_ij sparse for efficiency
-    # threshold: mu_ij < 0.65 (s > 1e-3), mu_ij < 0.74 (s > 1e-4)
-    nnz_idx_bool = torch.all(mu_ij < 0.74, dim=0).unsqueeze(0)  # (1, natoms, ngrid)
-    mu_ij_nnz = mu_ij[:, nnz_idx_bool.squeeze(0)].reshape(-1)  # (natoms * nnz_col)
-    nnz_idx0 = torch.nonzero(nnz_idx_bool).unsqueeze(0)  # (1, nnz_col, 3)
-    nnz_col_idx = nnz_idx0[0, :, 1:].transpose(-2, -1)  # (2, nnz_col)
-    nnz_idx_atm = torch.zeros((natoms, 1, 3), dtype=nnz_idx0.dtype, device=nnz_idx0.device)  # (natoms, 1, 3)
-    nnz_idx_atm[:, 0, 0] = torch.arange(natoms, dtype=nnz_idx0.dtype, device=nnz_idx0.device)
-    nnz_idx = (nnz_idx0 + nnz_idx_atm).reshape(-1, 3)  # (nnz = natoms * nnz_col, 3)
-    atom_diag_idx = nnz_idx[:, 0] == nnz_idx[:, 1]  # (nnz,)
-
-    f = mu_ij_nnz
-    for _ in range(3):
-        # f = 0.5 * f * (3 - f * f)
-        f2 = f.clone()
-        f2 *= f
-        f2 -= 3
-        f2 *= f
-        f2 *= (-0.5)
-        f = f2
-
-    # small epsilon to avoid nan in the gradient
-    # s = 0.5 * (1. + 1e-12 - f)  # (nnz,)
-    s = f
-    s -= (1 + 1e-12)
-    s *= (-0.5)
-
-    # s += 0.5 * torch.eye(natoms)
-    s[atom_diag_idx] += 0.5
-    s = s.reshape(natoms, -1)  # (natoms, nnz_col)
-    psparse = s.prod(dim=0)  # (nnz_col,)
-
-    # densify and normalize p
-    p = torch.zeros((natoms, mu_ij.shape[-1]), dtype=dtype, device=device)  # (natoms, ngrid)
-    p[nnz_col_idx[0], nnz_col_idx[1]] = psparse
-    p = p / p.sum(dim=0, keepdim=True)  # (natoms, ngrid)
-
     w_list: List[torch.Tensor] = []
-    ig = 0
+    ioff = 0
     for ia in range(natoms):
-        ig1 = ig + rgrids[ia].shape[0]
-        w_list.append(p[ia, ig:ig1])
-        ig = ig1
+        # concatenate the grid to save memory
+        iend = ioff + rgrids[ia].shape[0]
+        xyz = xyz_full[ioff:iend, :]
+
+        rgatoms = torch.norm(xyz - atompos.unsqueeze(1), dim=-1)  # (natoms, ngrid)
+        mu_ij = (rgatoms - rgatoms.unsqueeze(1))  # (natoms, natoms, ngrid)
+        mu_ij /= ratoms.unsqueeze(-1)  # (natoms, natoms, ngrid)
+
+        if atomradii is not None:
+            # mu_ij += aij * (1 - mu_ij * mu_ij)
+            mu_ij2 = mu_ij * mu_ij
+            mu_ij2 -= 1
+            mu_ij2 *= (-aij)
+            mu_ij2 += mu_ij
+            mu_ij = mu_ij2
+
+        # making mu_ij sparse for efficiency
+        # threshold: mu_ij < 0.65 (s > 1e-3), mu_ij < 0.74 (s > 1e-4)
+        nnz_idx_bool = torch.all(mu_ij < 0.74, dim=0).unsqueeze(0)  # (1, natoms, ngrid)
+        mu_ij_nnz = mu_ij[:, nnz_idx_bool.squeeze(0)].reshape(-1)  # (natoms * nnz_col)
+        nnz_idx0 = torch.nonzero(nnz_idx_bool).unsqueeze(0)  # (1, nnz_col, 3)
+        nnz_col_idx = nnz_idx0[0, :, 1:].transpose(-2, -1)  # (2, nnz_col)
+        nnz_idx_atm = torch.zeros((natoms, 1, 3), dtype=nnz_idx0.dtype, device=nnz_idx0.device)  # (natoms, 1, 3)
+        nnz_idx_atm[:, 0, 0] = torch.arange(natoms, dtype=nnz_idx0.dtype, device=nnz_idx0.device)
+        nnz_idx = (nnz_idx0 + nnz_idx_atm).reshape(-1, 3)  # (nnz = natoms * nnz_col, 3)
+        atom_diag_idx = nnz_idx[:, 0] == nnz_idx[:, 1]  # (nnz,)
+
+        f = mu_ij_nnz
+        for _ in range(3):
+            # f = 0.5 * f * (3 - f * f)
+            f2 = f.clone()
+            f2 *= f
+            f2 -= 3
+            f2 *= f
+            f2 *= (-0.5)
+            f = f2
+
+        # small epsilon to avoid nan in the gradient
+        # s = 0.5 * (1. + 1e-12 - f)  # (nnz,)
+        s = f
+        s -= (1 + 1e-12)
+        s *= (-0.5)
+
+        # s += 0.5 * torch.eye(natoms)
+        s[atom_diag_idx] += 0.5
+        s = s.reshape(natoms, -1)  # (natoms, nnz_col)
+        psparse = s.prod(dim=0)  # (nnz_col,)
+
+        # densify and normalize p
+        p = torch.zeros((natoms, mu_ij.shape[-1]), dtype=dtype, device=device)  # (natoms, ngrid)
+        p[nnz_col_idx[0], nnz_col_idx[1]] = psparse
+        p = p / p.sum(dim=0, keepdim=True)  # (natoms, ngrid)
+
+        # save the grid
+        w_list.append(p[ia])
+        ioff = iend
 
     w = torch.cat(w_list, dim=-1)  # (ngrid)
     return w
