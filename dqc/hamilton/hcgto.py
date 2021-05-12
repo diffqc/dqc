@@ -197,9 +197,9 @@ class HamiltonCGTO(BaseHamilton):
         # setup the basis as a spatial function
         logger.log("Calculating the basis values in the grid")
         self.is_ao_set = True
-        self.basis = intor.eval_gto(self.libcint_wrapper, self.rgrid)  # (nao, ngrid)
+        self.basis = intor.eval_gto(self.libcint_wrapper, self.rgrid, to_transpose=True)  # (ngrid, nao)
         self.dvolume = self.grid.get_dvolume()
-        self.basis_dvolume = self.basis * self.dvolume  # (nao, ngrid)
+        self.basis_dvolume = self.basis * self.dvolume.unsqueeze(-1)  # (ngrid, nao)
 
         if self.xcfamily == 1:  # LDA
             return
@@ -207,20 +207,21 @@ class HamiltonCGTO(BaseHamilton):
         # setup the gradient of the basis
         logger.log("Calculating the basis gradient values in the grid")
         self.is_grad_ao_set = True
-        self.grad_basis = intor.eval_gradgto(self.libcint_wrapper, self.rgrid)  # (ndim, nao, ngrid)
+        # (ndim, nao, ngrid)
+        self.grad_basis = intor.eval_gradgto(self.libcint_wrapper, self.rgrid, to_transpose=True)
         if self.xcfamily == 2:  # GGA
             return
 
         # setup the laplacian of the basis
         self.is_lapl_ao_set = True
         logger.log("Calculating the basis laplacian values in the grid")
-        self.lapl_basis = intor.eval_laplgto(self.libcint_wrapper, self.rgrid)  # (nao, ngrid)
+        self.lapl_basis = intor.eval_laplgto(self.libcint_wrapper, self.rgrid, to_transpose=True)  # (nao, ngrid)
 
     def get_vext(self, vext: torch.Tensor) -> xt.LinearOperator:
         # vext: (*BR, ngrid)
         if not self.is_ao_set:
             raise RuntimeError("Please call `setup_grid(grid, xc)` to call this function")
-        mat = torch.einsum("...r,br,cr->...bc", vext, self.basis_dvolume, self.basis)  # (*BR, nao, nao)
+        mat = torch.einsum("...r,rb,rc->...bc", vext, self.basis_dvolume, self.basis)  # (*BR, nao, nao)
         mat = (mat + mat.transpose(-2, -1)) * 0.5  # ensure the symmetricity and reduce numerical instability
         return xt.LinearOperator.m(mat, is_hermitian=True)
 
@@ -257,29 +258,34 @@ class HamiltonCGTO(BaseHamilton):
     def _dm2densinfo(self, dm: torch.Tensor) -> ValGrad:
         # dm: (*BD, nao, nao), Hermitian
         # family: 1 for LDA, 2 for GGA, 3 for MGGA
-        # self.basis: (nao, ngrid)
+        # self.basis: (ngrid, nao)
+        # self.grad_basis: (ndim, ngrid, nao)
+
+        ngrid = self.basis.shape[-2]
+        batchshape = dm.shape[:-2]
 
         # dm @ ao will be used in every case
         dmdmt = (dm + dm.transpose(-2, -1)) * 0.5  # (*BD, nao, nao)
 
         # prepare the densinfo components
-        dens = torch.empty((*dm.shape[:-2], self.basis.shape[-1]), dtype=self.dtype, device=self.device)
+        dens = torch.empty((*batchshape, ngrid), dtype=self.dtype, device=self.device)
         gdens: Optional[torch.Tensor] = None
         lapldens: Optional[torch.Tensor] = None
         kindens: Optional[torch.Tensor] = None
         if self.xcfamily == 2 or self.xcfamily == 4:  # GGA or MGGA
-            gdens = torch.empty((*dm.shape[:-2], 3, self.basis.shape[-1]),
+            gdens = torch.empty((*dm.shape[:-2], 3, ngrid),
                                 dtype=self.dtype, device=self.device)  # (..., ndim, ngrid)
         if self.xcfamily == 4:  # MGGA
-            lapldens = torch.empty((*dm.shape[:-2], self.basis.shape[-1]), dtype=self.dtype, device=self.device)
-            kindens = torch.empty((*dm.shape[:-2], self.basis.shape[-1]), dtype=self.dtype, device=self.device)
+            lapldens = torch.empty((*batchshape, ngrid), dtype=self.dtype, device=self.device)
+            kindens = torch.empty((*batchshape, ngrid), dtype=self.dtype, device=self.device)
 
         # It is faster to split into chunks than evaluating a single big chunk
         maxnumel = config.CHUNK_MEMORY // get_dtype_memsize(self.basis)
-        for basis, ioff, iend in chunkify(self.basis, dim=-1, maxnumel=maxnumel):
+        for basis, ioff, iend in chunkify(self.basis, dim=0, maxnumel=maxnumel):
+            # basis: (ngrid2, nao)
 
-            dmao = torch.matmul(dmdmt, basis)
-            dens[..., ioff:iend] = torch.einsum("...ir,ir->...r", dmao, basis)
+            dmao = torch.matmul(basis, dmdmt)  # (ngrid2, nao)
+            dens[..., ioff:iend] = torch.einsum("...ri,ri->...r", dmao, basis)
 
             if self.xcfamily == 2 or self.xcfamily == 4:  # GGA or MGGA
                 assert gdens is not None
@@ -288,13 +294,13 @@ class HamiltonCGTO(BaseHamilton):
                     raise RuntimeError(msg)
 
                 # summing it 3 times is faster than applying the d-axis directly
-                grad_basis0 = self.grad_basis[0, :, ioff:iend]
-                grad_basis1 = self.grad_basis[1, :, ioff:iend]
-                grad_basis2 = self.grad_basis[2, :, ioff:iend]
+                grad_basis0 = self.grad_basis[0, ioff:iend, :]  # (ngrid2, nao)
+                grad_basis1 = self.grad_basis[1, ioff:iend, :]
+                grad_basis2 = self.grad_basis[2, ioff:iend, :]
 
-                gdens[..., 0, ioff:iend] = torch.einsum("...ir,ir->...r", dmao, grad_basis0) * 2
-                gdens[..., 1, ioff:iend] = torch.einsum("...ir,ir->...r", dmao, grad_basis1) * 2
-                gdens[..., 2, ioff:iend] = torch.einsum("...ir,ir->...r", dmao, grad_basis2) * 2
+                gdens[..., 0, ioff:iend] = torch.einsum("...ri,ri->...r", dmao, grad_basis0) * 2
+                gdens[..., 1, ioff:iend] = torch.einsum("...ri,ri->...r", dmao, grad_basis1) * 2
+                gdens[..., 2, ioff:iend] = torch.einsum("...ri,ri->...r", dmao, grad_basis2) * 2
 
             if self.xcfamily == 4:
                 assert lapldens is not None
@@ -304,11 +310,11 @@ class HamiltonCGTO(BaseHamilton):
                     msg = "Please call `setup_grid(grid, gradlevel>=2)` to calculate the density gradient"
                     raise RuntimeError(msg)
 
-                lapl_basis_cat = self.lapl_basis[..., ioff:iend]
-                lapl_basis = torch.einsum("...ir,ir->...r", dmao, lapl_basis_cat)
-                grad_grad = torch.einsum("...ir,ir->...r", torch.matmul(dmdmt, grad_basis0), grad_basis0)
-                grad_grad += torch.einsum("...ir,ir->...r", torch.matmul(dmdmt, grad_basis1), grad_basis1)
-                grad_grad += torch.einsum("...ir,ir->...r", torch.matmul(dmdmt, grad_basis2), grad_basis2)
+                lapl_basis_cat = self.lapl_basis[ioff:iend, :]
+                lapl_basis = torch.einsum("...ri,ri->...r", dmao, lapl_basis_cat)
+                grad_grad = torch.einsum("...ri,ri->...r", torch.matmul(grad_basis0, dmdmt), grad_basis0)
+                grad_grad += torch.einsum("...ri,ri->...r", torch.matmul(grad_basis1, dmdmt), grad_basis1)
+                grad_grad += torch.einsum("...ri,ri->...r", torch.matmul(grad_basis2, dmdmt), grad_basis2)
                 # pytorch's "...ij,ir,jr->...r" is really slow for large matrix
                 # grad_grad = torch.einsum("...ij,ir,jr->...r", dmdmt, self.grad_basis[0], self.grad_basis[0])
                 # grad_grad += torch.einsum("...ij,ir,jr->...r", dmdmt, self.grad_basis[1], self.grad_basis[1])
@@ -327,44 +333,45 @@ class HamiltonCGTO(BaseHamilton):
         # potinfo.grad: (*BD, ndim, nr)
         # potinfo.lapl: (*BD, nr)
         # potinfo.kin: (*BD, nr)
-        # self.basis: (nao, nr)
-        # self.grad_basis: (ndim, nao, nr)
+        # self.basis: (nr, nao)
+        # self.grad_basis: (ndim, nr, nao)
 
         # prepare the fock matrix component from vxc
-        nao = self.basis.shape[-2]
+        nao = self.basis.shape[-1]
         mat = torch.zeros((*potinfo.value.shape[:-1], nao, nao), dtype=self.dtype, device=self.device)
 
         # Split the r-dimension into several parts, it is usually faster than
         # evaluating all at once
         maxnumel = config.CHUNK_MEMORY // get_dtype_memsize(self.basis)
-        for basis, ioff, iend in chunkify(self.basis, dim=-1, maxnumel=maxnumel):
-            vb = potinfo.value[..., ioff:iend].unsqueeze(-2) * basis  # (*BD, nao, nr)
+        for basis, ioff, iend in chunkify(self.basis, dim=0, maxnumel=maxnumel):
+            # basis: (nr, nao)
+            vb = potinfo.value[..., ioff:iend].unsqueeze(-1) * basis  # (*BD, nr, nao)
             if self.xcfamily in [2, 4]:  # GGA or MGGA
-                assert potinfo.grad is not None  # (..., ndim, nrgrid)
+                assert potinfo.grad is not None  # (..., ndim, nr)
                 vgrad = potinfo.grad[..., ioff:iend] * 2
-                grad_basis0 = self.grad_basis[0, :, ioff:iend]
-                grad_basis1 = self.grad_basis[1, :, ioff:iend]
-                grad_basis2 = self.grad_basis[2, :, ioff:iend]
-                vb += torch.einsum("...r,ar->...ar", vgrad[..., 0, :], grad_basis0)
-                vb += torch.einsum("...r,ar->...ar", vgrad[..., 1, :], grad_basis1)
-                vb += torch.einsum("...r,ar->...ar", vgrad[..., 2, :], grad_basis2)
+                grad_basis0 = self.grad_basis[0, ioff:iend, :]  # (nr, nao)
+                grad_basis1 = self.grad_basis[1, ioff:iend, :]
+                grad_basis2 = self.grad_basis[2, ioff:iend, :]
+                vb += torch.einsum("...r,ra->...ra", vgrad[..., 0, :], grad_basis0)
+                vb += torch.einsum("...r,ra->...ra", vgrad[..., 1, :], grad_basis1)
+                vb += torch.einsum("...r,ra->...ra", vgrad[..., 2, :], grad_basis2)
             if self.xcfamily == 4:  # MGGA
                 assert potinfo.lapl is not None  # (..., nrgrid)
                 assert potinfo.kin is not None
                 lapl = potinfo.lapl[..., ioff:iend]
                 kin = potinfo.kin[..., ioff:iend]
-                vb += 2 * lapl.unsqueeze(-2) * self.lapl_basis[:, ioff:iend]
+                vb += 2 * lapl.unsqueeze(-1) * self.lapl_basis[ioff:iend, :]
 
             # calculating the matrix from multiplication with the basis
-            mat += torch.matmul(vb, self.basis_dvolume[:, ioff:iend].transpose(-2, -1))
+            mat += torch.matmul(self.basis_dvolume[ioff:iend, :].transpose(-2, -1), vb)
 
             if self.xcfamily == 4:  # MGGA
                 assert potinfo.lapl is not None  # (..., nrgrid)
                 assert potinfo.kin is not None
                 lapl_kin_dvol = (2 * lapl + 0.5 * kin) * self.dvolume[..., ioff:iend]
-                mat += torch.einsum("...r,br,cr->...bc", lapl_kin_dvol, grad_basis0, grad_basis0)
-                mat += torch.einsum("...r,br,cr->...bc", lapl_kin_dvol, grad_basis1, grad_basis1)
-                mat += torch.einsum("...r,br,cr->...bc", lapl_kin_dvol, grad_basis2, grad_basis2)
+                mat += torch.einsum("...r,rb,rc->...bc", lapl_kin_dvol, grad_basis0, grad_basis0)
+                mat += torch.einsum("...r,rb,rc->...bc", lapl_kin_dvol, grad_basis1, grad_basis1)
+                mat += torch.einsum("...r,rb,rc->...bc", lapl_kin_dvol, grad_basis2, grad_basis2)
 
         # construct the Hermitian linear operator
         mat = (mat + mat.transpose(-2, -1)) * 0.5
