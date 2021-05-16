@@ -146,8 +146,9 @@ class _EvalGTO(torch.autograd.Function):
                 grad_coeffs = torch.zeros_like(coeffs)  # (ngauss)
 
                 # get the uncontracted version of the integral
+                # (..., nu_ao, ngrid)
                 dout_dcoeff = _EvalGTO.apply(*u_wrapper.params,
-                    rgrid, ao_to_atom, u_wrapper, shortname, False)  # (..., nu_ao, ngrid)
+                                             rgrid, ao_to_atom, u_wrapper, shortname, False)
 
                 # get the coefficients and spread it on the u_ao-length tensor
                 coeffs_ao = torch.gather(coeffs, dim=-1, index=ao2shl)  # (nu_ao)
@@ -160,8 +161,9 @@ class _EvalGTO(torch.autograd.Function):
                 grad_alphas = torch.zeros_like(alphas)
 
                 new_sname = _get_evalgto_derivname(shortname, "a")
+                # (..., nu_ao, ngrid)
                 dout_dalpha = _EvalGTO.apply(*u_wrapper.params, rgrid,
-                    ao_to_atom, u_wrapper, new_sname, False)  # (..., nu_ao, ngrid)
+                                             ao_to_atom, u_wrapper, new_sname, False)
 
                 alphas_ao = torch.gather(alphas, dim=-1, index=ao2shl)  # (nu_ao)
                 grad_dalpha = -torch.einsum("...ur,...ur->u", u_grad_res, dout_dalpha)
