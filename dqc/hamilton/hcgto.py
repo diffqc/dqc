@@ -56,6 +56,7 @@ class HamiltonCGTO(BaseHamilton):
     def df(self) -> Optional[BaseDF]:
         return self._df
 
+    ############# setups #############
     def build(self) -> BaseHamilton:
         # get the matrices (all (nao, nao), except el_mat)
         # these matrices have already been normalized
@@ -99,6 +100,43 @@ class HamiltonCGTO(BaseHamilton):
 
         return self
 
+    def setup_grid(self, grid: BaseGrid, xc: Optional[BaseXC] = None) -> None:
+        # save the family and save the xc
+        self.xc = xc
+        if xc is None:
+            self.xcfamily = 1
+        else:
+            self.xcfamily = xc.family
+
+        # save the grid
+        self.grid = grid
+        self.rgrid = grid.get_rgrid()
+        assert grid.coord_type == "cart"
+
+        # setup the basis as a spatial function
+        logger.log("Calculating the basis values in the grid")
+        self.is_ao_set = True
+        self.basis = intor.eval_gto(self.libcint_wrapper, self.rgrid, to_transpose=True)  # (ngrid, nao)
+        self.dvolume = self.grid.get_dvolume()
+        self.basis_dvolume = self.basis * self.dvolume.unsqueeze(-1)  # (ngrid, nao)
+
+        if self.xcfamily == 1:  # LDA
+            return
+
+        # setup the gradient of the basis
+        logger.log("Calculating the basis gradient values in the grid")
+        self.is_grad_ao_set = True
+        # (ndim, nao, ngrid)
+        self.grad_basis = intor.eval_gradgto(self.libcint_wrapper, self.rgrid, to_transpose=True)
+        if self.xcfamily == 2:  # GGA
+            return
+
+        # setup the laplacian of the basis
+        self.is_lapl_ao_set = True
+        logger.log("Calculating the basis laplacian values in the grid")
+        self.lapl_basis = intor.eval_laplgto(self.libcint_wrapper, self.rgrid, to_transpose=True)  # (nao, ngrid)
+
+    ############ fock matrix components ############
     def get_nuclattr(self) -> xt.LinearOperator:
         # nucl_mat: (nao, nao)
         # return: (nao, nao)
@@ -153,6 +191,34 @@ class HamiltonCGTO(BaseHamilton):
             return SpinParam(u=self.get_exchange(2 * dm.u),
                              d=self.get_exchange(2 * dm.d))
 
+    def get_vext(self, vext: torch.Tensor) -> xt.LinearOperator:
+        # vext: (*BR, ngrid)
+        if not self.is_ao_set:
+            raise RuntimeError("Please call `setup_grid(grid, xc)` to call this function")
+        mat = torch.einsum("...r,rb,rc->...bc", vext, self.basis_dvolume, self.basis)  # (*BR, nao, nao)
+        mat = (mat + mat.transpose(-2, -1)) * 0.5  # ensure the symmetricity and reduce numerical instability
+        return xt.LinearOperator.m(mat, is_hermitian=True)
+
+    @overload
+    def get_vxc(self, dm: SpinParam[torch.Tensor]) -> SpinParam[xt.LinearOperator]:
+        ...
+
+    @overload
+    def get_vxc(self, dm: torch.Tensor) -> xt.LinearOperator:
+        ...
+
+    def get_vxc(self, dm):
+        # dm: (*BD, nao, nao)
+        assert self.xc is not None, "Please call .setup_grid with the xc object"
+
+        densinfo = SpinParam.apply_fcn(
+            lambda dm_: self._dm2densinfo(dm_), dm)  # value: (*BD, nr)
+        potinfo = self.xc.get_vxc(densinfo)  # value: (*BD, nr)
+        vxc_linop = SpinParam.apply_fcn(
+            lambda potinfo_: self._get_vxc_from_potinfo(potinfo_), potinfo)
+        return vxc_linop
+
+    ############### interface to dm ###############
     def ao_orb2dm(self, orb: torch.Tensor, orb_weight: torch.Tensor) -> torch.Tensor:
         # convert the atomic orbital to the density matrix
         # in CGTO, it is U.W.U^T
@@ -190,7 +256,7 @@ class HamiltonCGTO(BaseHamilton):
         elrep_mat = self.get_elrep(dm).fullmatrix()
         return 0.5 * torch.einsum("...ij,...ji->...", elrep_mat, dm)
 
-    def get_e_exchange(self, dm: torch.Tensor) -> torch.Tensor:
+    def get_e_exchange(self, dm: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
         # get the energy from two electron exchange operator
         exc_mat = self.get_exchange(dm)
         ene = SpinParam.apply_fcn(
@@ -198,71 +264,6 @@ class HamiltonCGTO(BaseHamilton):
             exc_mat, dm)
         enetot = SpinParam.sum(ene)
         return enetot
-
-    ############### grid-related ###############
-    def setup_grid(self, grid: BaseGrid, xc: Optional[BaseXC] = None) -> None:
-        # save the family and save the xc
-        self.xc = xc
-        if xc is None:
-            self.xcfamily = 1
-        else:
-            self.xcfamily = xc.family
-
-        # save the grid
-        self.grid = grid
-        self.rgrid = grid.get_rgrid()
-        assert grid.coord_type == "cart"
-
-        # setup the basis as a spatial function
-        logger.log("Calculating the basis values in the grid")
-        self.is_ao_set = True
-        self.basis = intor.eval_gto(self.libcint_wrapper, self.rgrid, to_transpose=True)  # (ngrid, nao)
-        self.dvolume = self.grid.get_dvolume()
-        self.basis_dvolume = self.basis * self.dvolume.unsqueeze(-1)  # (ngrid, nao)
-
-        if self.xcfamily == 1:  # LDA
-            return
-
-        # setup the gradient of the basis
-        logger.log("Calculating the basis gradient values in the grid")
-        self.is_grad_ao_set = True
-        # (ndim, nao, ngrid)
-        self.grad_basis = intor.eval_gradgto(self.libcint_wrapper, self.rgrid, to_transpose=True)
-        if self.xcfamily == 2:  # GGA
-            return
-
-        # setup the laplacian of the basis
-        self.is_lapl_ao_set = True
-        logger.log("Calculating the basis laplacian values in the grid")
-        self.lapl_basis = intor.eval_laplgto(self.libcint_wrapper, self.rgrid, to_transpose=True)  # (nao, ngrid)
-
-    def get_vext(self, vext: torch.Tensor) -> xt.LinearOperator:
-        # vext: (*BR, ngrid)
-        if not self.is_ao_set:
-            raise RuntimeError("Please call `setup_grid(grid, xc)` to call this function")
-        mat = torch.einsum("...r,rb,rc->...bc", vext, self.basis_dvolume, self.basis)  # (*BR, nao, nao)
-        mat = (mat + mat.transpose(-2, -1)) * 0.5  # ensure the symmetricity and reduce numerical instability
-        return xt.LinearOperator.m(mat, is_hermitian=True)
-
-    ################ xc-related ################
-    @overload
-    def get_vxc(self, dm: SpinParam[torch.Tensor]) -> SpinParam[xt.LinearOperator]:
-        ...
-
-    @overload
-    def get_vxc(self, dm: torch.Tensor) -> xt.LinearOperator:
-        ...
-
-    def get_vxc(self, dm):
-        # dm: (*BD, nao, nao)
-        assert self.xc is not None, "Please call .setup_grid with the xc object"
-
-        densinfo = SpinParam.apply_fcn(
-            lambda dm_: self._dm2densinfo(dm_), dm)  # value: (*BD, nr)
-        potinfo = self.xc.get_vxc(densinfo)  # value: (*BD, nr)
-        vxc_linop = SpinParam.apply_fcn(
-            lambda potinfo_: self._get_vxc_from_potinfo(potinfo_), potinfo)
-        return vxc_linop
 
     def get_exc(self, dm: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
         assert self.xc is not None, "Please call .setup_grid with the xc object"
@@ -274,6 +275,7 @@ class HamiltonCGTO(BaseHamilton):
 
         return torch.sum(self.grid.get_dvolume() * edens, dim=-1)
 
+    ################ misc ################
     def _dm2densinfo(self, dm: torch.Tensor) -> ValGrad:
         # dm: (*BD, nao, nao), Hermitian
         # family: 1 for LDA, 2 for GGA, 3 for MGGA

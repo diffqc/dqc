@@ -13,6 +13,7 @@ class BaseHamilton(xt.EditableModule):
     Hamilton is a class that provides the LinearOperator of the Hamiltonian
     components.
     """
+    ############ properties ############
     @abstractproperty
     def nao(self) -> int:
         """
@@ -37,6 +38,7 @@ class BaseHamilton(xt.EditableModule):
         """
         pass
 
+    ############# setups #############
     @abstractmethod
     def build(self) -> BaseHamilton:
         """
@@ -45,6 +47,17 @@ class BaseHamilton(xt.EditableModule):
         """
         pass
 
+    @abstractmethod
+    def setup_grid(self, grid: BaseGrid, xc: Optional[BaseXC] = None) -> None:
+        """
+        Setup the basis (with its grad) in the spatial grid and prepare the
+        gradient of atomic orbital according to the ones required by the xc.
+        If xc is not given, then only setup the grid with ao (without any gradients
+        of ao)
+        """
+        pass
+
+    ############ fock matrix components ############
     @abstractmethod
     def get_nuclattr(self) -> xt.LinearOperator:
         """
@@ -99,58 +112,6 @@ class BaseHamilton(xt.EditableModule):
         pass
 
     @abstractmethod
-    def ao_orb2dm(self, orb: torch.Tensor, orb_weight: torch.Tensor) -> torch.Tensor:
-        """
-        Convert the atomic orbital to the density matrix.
-        """
-        # orb: (*BO, nao, norb)
-        # orb_weight: (*BW, norb)
-        # return: (*BOWH, nao, nao)
-        pass
-
-    @abstractmethod
-    def aodm2dens(self, dm: torch.Tensor, xyz: torch.Tensor) -> torch.Tensor:
-        """
-        Get the density value in the Cartesian coordinate.
-        """
-        # dm: (*BD, nao, nao)
-        # xyz: (*BR, ndim)
-        # return: (*BRD)
-        pass
-
-    ############### energy of the Hamiltonian ###############
-    def get_e_hcore(self, dm: torch.Tensor) -> torch.Tensor:
-        """
-        Get the energy from the one-electron Hamiltonian. The input is total
-        density matrix.
-        """
-        pass
-
-    def get_e_elrep(self, dm: torch.Tensor) -> torch.Tensor:
-        """
-        Get the energy from the electron repulsion. The input is total density
-        matrix.
-        """
-        pass
-
-    def get_e_exchange(self, dm: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
-        """
-        Get the energy from the exact exchange.
-        """
-        pass
-
-    ############### grid-related ###############
-    @abstractmethod
-    def setup_grid(self, grid: BaseGrid, xc: Optional[BaseXC] = None) -> None:
-        """
-        Setup the basis (with its grad) in the spatial grid and prepare the
-        gradient of atomic orbital according to the ones required by the xc.
-        If xc is not given, then only setup the grid with ao (without any gradients
-        of ao)
-        """
-        pass
-
-    @abstractmethod
     def get_vext(self, vext: torch.Tensor) -> xt.LinearOperator:
         r"""
         Returns a LinearOperator of the external potential in the grid.
@@ -181,6 +142,51 @@ class BaseHamilton(xt.EditableModule):
         # exact-exchange
         pass
 
+    ############### interface to dm ###############
+    @abstractmethod
+    def ao_orb2dm(self, orb: torch.Tensor, orb_weight: torch.Tensor) -> torch.Tensor:
+        """
+        Convert the atomic orbital to the density matrix.
+        """
+        # orb: (*BO, nao, norb)
+        # orb_weight: (*BW, norb)
+        # return: (*BOWH, nao, nao)
+        pass
+
+    @abstractmethod
+    def aodm2dens(self, dm: torch.Tensor, xyz: torch.Tensor) -> torch.Tensor:
+        """
+        Get the density value in the Cartesian coordinate.
+        """
+        # dm: (*BD, nao, nao)
+        # xyz: (*BR, ndim)
+        # return: (*BRD)
+        pass
+
+    ############### energy of the Hamiltonian ###############
+    @abstractmethod
+    def get_e_hcore(self, dm: torch.Tensor) -> torch.Tensor:
+        """
+        Get the energy from the one-electron Hamiltonian. The input is total
+        density matrix.
+        """
+        pass
+
+    @abstractmethod
+    def get_e_elrep(self, dm: torch.Tensor) -> torch.Tensor:
+        """
+        Get the energy from the electron repulsion. The input is total density
+        matrix.
+        """
+        pass
+
+    @abstractmethod
+    def get_e_exchange(self, dm: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
+        """
+        Get the energy from the exact exchange.
+        """
+        pass
+
     @abstractmethod
     def get_exc(self, dm: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
         """
@@ -191,6 +197,7 @@ class BaseHamilton(xt.EditableModule):
         # return: (*BDH)
         pass
 
+    ############### xitorch's editable module ###############
     @abstractmethod
     def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
         """

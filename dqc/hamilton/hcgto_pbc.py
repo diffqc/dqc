@@ -87,6 +87,7 @@ class HamiltonCGTO_PBC(HamiltonCGTO):
     def df(self) -> Optional[BaseDF]:
         return self._df
 
+    ############ setups ############
     def build(self) -> BaseHamilton:
         if self._df is None:
             raise NotImplementedError(
@@ -115,6 +116,42 @@ class HamiltonCGTO_PBC(HamiltonCGTO):
         self._is_built = True
         return self
 
+    def setup_grid(self, grid: BaseGrid, xc: Optional[BaseXC] = None) -> None:
+        # save the family and save the xc
+        self.xc = xc
+        if xc is None:
+            self.xcfamily = 1
+        else:
+            self.xcfamily = xc.family
+
+        # save the grid
+        self.grid = grid
+        self.rgrid = grid.get_rgrid()
+        assert grid.coord_type == "cart"
+
+        # setup the basis as a spatial function
+        self.is_ao_set = True
+        self.basis = intor.pbc_eval_gto(  # (nkpts, nao, ngrid)
+            self._basiswrapper, self.rgrid, kpts=self._kpts, options=self._lattsum_opt)
+        basis_dvolume = self.basis * self.grid.get_dvolume()  # (nkpts, nao, ngrid)
+        self.basis_dvolume_conj = basis_dvolume.conj()
+
+        if self.xcfamily == 1:  # LDA
+            return
+
+        # setup the gradient of the basis
+        self.is_grad_ao_set = True
+        self.grad_basis = intor.pbc_eval_gradgto(  # (ndim, nkpts, nao, ngrid)
+            self._basiswrapper, self.rgrid, kpts=self._kpts, options=self._lattsum_opt)
+        if self.xcfamily == 2:  # GGA
+            return
+
+        # setup the laplacian of the basis
+        self.is_lapl_ao_set = True
+        self.lapl_basis = intor.pbc_eval_laplgto(  # (nkpts, nao, ngrid)
+            self._basiswrapper, self.rgrid, kpts=self._kpts, options=self._lattsum_opt)
+
+    ############ fock matrix components ############
     def get_nuclattr(self) -> xt.LinearOperator:
         # return: (nkpts, nao, nao)
         return xt.LinearOperator.m(self._nucl_mat, is_hermitian=True)
@@ -147,6 +184,28 @@ class HamiltonCGTO_PBC(HamiltonCGTO):
         msg = "Exact exchange for periodic boundary conditions has not been implemented"
         raise NotImplementedError(msg)
 
+    def get_vext(self, vext: torch.Tensor) -> xt.LinearOperator:
+        # vext: (*BR, ngrid)
+        # return: (*BR, nkpts, nao, nao)
+        if not self.is_ao_set:
+            raise RuntimeError("Please call `setup_grid(grid, xc)` to call this function")
+        mat = torch.einsum("...r,kbr,kcr->...kbc", vext, self.basis_dvolume_conj, self.basis)  # (*BR, nao, nao)
+        mat = (mat + mat.transpose(-2, -1).conj()) * 0.5  # ensure the hermitianness and reduce numerical instability
+        return xt.LinearOperator.m(mat, is_hermitian=True)
+
+    @overload
+    def get_vxc(self, dm: SpinParam[torch.Tensor]) -> SpinParam[xt.LinearOperator]:
+        ...
+
+    @overload
+    def get_vxc(self, dm: torch.Tensor) -> xt.LinearOperator:
+        ...
+
+    def get_vxc(self, dm):
+        # dm: (*BD, nao, nao)
+        return super().get_vxc(dm)
+
+    ############### interface to dm ###############
     def ao_orb2dm(self, orb: torch.Tensor, orb_weight: torch.Tensor) -> torch.Tensor:
         # convert the atomic orbital to the density matrix
 
@@ -200,67 +259,10 @@ class HamiltonCGTO_PBC(HamiltonCGTO):
         enetot = SpinParam.sum(ene)
         return enetot
 
-    ############### grid-related ###############
-    def setup_grid(self, grid: BaseGrid, xc: Optional[BaseXC] = None) -> None:
-        # save the family and save the xc
-        self.xc = xc
-        if xc is None:
-            self.xcfamily = 1
-        else:
-            self.xcfamily = xc.family
-
-        # save the grid
-        self.grid = grid
-        self.rgrid = grid.get_rgrid()
-        assert grid.coord_type == "cart"
-
-        # setup the basis as a spatial function
-        self.is_ao_set = True
-        self.basis = intor.pbc_eval_gto(  # (nkpts, nao, ngrid)
-            self._basiswrapper, self.rgrid, kpts=self._kpts, options=self._lattsum_opt)
-        basis_dvolume = self.basis * self.grid.get_dvolume()  # (nkpts, nao, ngrid)
-        self.basis_dvolume_conj = basis_dvolume.conj()
-
-        if self.xcfamily == 1:  # LDA
-            return
-
-        # setup the gradient of the basis
-        self.is_grad_ao_set = True
-        self.grad_basis = intor.pbc_eval_gradgto(  # (ndim, nkpts, nao, ngrid)
-            self._basiswrapper, self.rgrid, kpts=self._kpts, options=self._lattsum_opt)
-        if self.xcfamily == 2:  # GGA
-            return
-
-        # setup the laplacian of the basis
-        self.is_lapl_ao_set = True
-        self.lapl_basis = intor.pbc_eval_laplgto(  # (nkpts, nao, ngrid)
-            self._basiswrapper, self.rgrid, kpts=self._kpts, options=self._lattsum_opt)
-
-    def get_vext(self, vext: torch.Tensor) -> xt.LinearOperator:
-        # vext: (*BR, ngrid)
-        # return: (*BR, nkpts, nao, nao)
-        if not self.is_ao_set:
-            raise RuntimeError("Please call `setup_grid(grid, xc)` to call this function")
-        mat = torch.einsum("...r,kbr,kcr->...kbc", vext, self.basis_dvolume_conj, self.basis)  # (*BR, nao, nao)
-        mat = (mat + mat.transpose(-2, -1).conj()) * 0.5  # ensure the hermitianness and reduce numerical instability
-        return xt.LinearOperator.m(mat, is_hermitian=True)
-
-    ################ xc-related ################
-    @overload
-    def get_vxc(self, dm: SpinParam[torch.Tensor]) -> SpinParam[xt.LinearOperator]:
-        ...
-
-    @overload
-    def get_vxc(self, dm: torch.Tensor) -> xt.LinearOperator:
-        ...
-
-    def get_vxc(self, dm):
-        # dm: (*BD, nao, nao)
-        return super().get_vxc(dm)
-
     def get_exc(self, dm: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
         return super().get_exc(dm)
 
+    ################ xc-related ################
     def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
         # getparamnames to list the name of parameters affecting the method
         if methodname == "get_kinnucl":
