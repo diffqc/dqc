@@ -50,6 +50,26 @@ class BaseQCCalc(object):
         # return: (nao, nao)
         pass
 
+    #################### all-time calculations ####################
+    # (i.e. meaning it does not have to be executed to run the functions below)
+    @abstractmethod
+    def dm2energy(self, dm: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
+        """
+        Calculate the energy from the given density matrix.
+
+        Arguments
+        ---------
+        dm: torch.Tensor or SpinParam of torch.Tensor
+            The input density matrix. It is tensor if restricted, and SpinParam
+            of tensor if unrestricted.
+
+        Returns
+        -------
+        torch.Tensor
+            Tensor that represents the energy given the energy.
+        """
+        pass
+
     @abstractmethod
     def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
         pass

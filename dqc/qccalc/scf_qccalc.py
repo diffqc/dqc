@@ -110,6 +110,12 @@ class SCF_QCCalc(BaseQCCalc):
         assert self._has_run
         return self._dm
 
+    def dm2energy(self, dm: Union[torch.Tensor, SpinParam[torch.Tensor]]):
+        # calculate the energy given the density matrix
+        assert (isinstance(dm, torch.Tensor) and not self._polarized) or \
+            (isinstance(dm, SpinParam) and self._polarized)
+        return self._engine.dm2energy(dm)
+
     def _get_zero_dm(self) -> Union[SpinParam[torch.Tensor], torch.Tensor]:
         # get the initial dm that are all zeros
         if not self._polarized:
