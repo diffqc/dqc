@@ -183,7 +183,7 @@ class HamiltonCGTO_PBC(HamiltonCGTO):
     ############### energy of the Hamiltonian ###############
     def get_e_hcore(self, dm: torch.Tensor) -> torch.Tensor:
         # get the energy from one electron operator
-        return torch.einsum("...kij,...kji,k->...", self.kinnucl_mat, dm, self._wkpts)
+        return torch.einsum("...kij,...kji,k->...", self._kinnucl_mat, dm, self._wkpts)
 
     def get_e_elrep(self, dm: torch.Tensor) -> torch.Tensor:
         # get the energy from two electron repulsion operator
