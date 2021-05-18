@@ -180,6 +180,26 @@ class HamiltonCGTO_PBC(HamiltonCGTO):
         dens = torch.einsum("...k,k->...", densk.real, self._wkpts)  # (*BRD)
         return dens
 
+    ############### energy of the Hamiltonian ###############
+    def get_e_hcore(self, dm: torch.Tensor) -> torch.Tensor:
+        # get the energy from one electron operator
+        return torch.einsum("...kij,...kji,k->...", self.kinnucl_mat, dm, self._wkpts)
+
+    def get_e_elrep(self, dm: torch.Tensor) -> torch.Tensor:
+        # get the energy from two electron repulsion operator
+        elrep_mat = self.get_elrep(dm).fullmatrix()
+        return 0.5 * torch.einsum("...kij,...kji,k->...", elrep_mat, dm, self._wkpts)
+
+    def get_e_exchange(self, dm: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
+        # get the energy from two electron exchange operator
+        exc_mat = self.get_exchange(dm)
+        ene = SpinParam.apply_fcn(
+            lambda exc_mat, dm:
+                0.5 * torch.einsum("...kij,...kji,k->...", exc_mat.fullmatrix(), dm, self._wkpts),
+            exc_mat, dm)
+        enetot = SpinParam.sum(ene)
+        return enetot
+
     ############### grid-related ###############
     def setup_grid(self, grid: BaseGrid, xc: Optional[BaseXC] = None) -> None:
         # save the family and save the xc

@@ -118,6 +118,27 @@ class BaseHamilton(xt.EditableModule):
         # return: (*BRD)
         pass
 
+    ############### energy of the Hamiltonian ###############
+    def get_e_hcore(self, dm: torch.Tensor) -> torch.Tensor:
+        """
+        Get the energy from the one-electron Hamiltonian. The input is total
+        density matrix.
+        """
+        pass
+
+    def get_e_elrep(self, dm: torch.Tensor) -> torch.Tensor:
+        """
+        Get the energy from the electron repulsion. The input is total density
+        matrix.
+        """
+        pass
+
+    def get_e_exchange(self, dm: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
+        """
+        Get the energy from the exact exchange.
+        """
+        pass
+
     ############### grid-related ###############
     @abstractmethod
     def setup_grid(self, grid: BaseGrid, xc: Optional[BaseXC] = None) -> None:
