@@ -132,36 +132,11 @@ class _KSEngine(BaseSCFEngine):
 
     def dm2energy(self, dm: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
         # calculate the energy given the density matrix
-        fock = self.__dm2fock(dm)
-
-        # get the energy from xc and get the potential
-        e_exc = self.hamilton.get_exc(dm)
-        vxc = self.hamilton.get_vxc(dm)
-
-        # eivals: (..., norb), eivecs: (..., nao, norb)
-        eivals, eivecs = self.hf_engine.diagonalize(fock, self.norb)
-        e_eivals_ud = SpinParam.apply_fcn(
-            lambda eivals, orb_weight: torch.sum(eivals * orb_weight, dim=-1),
-            eivals, self.orb_weight)
-        e_eivals = SpinParam.sum(e_eivals_ud)  # torch.tensor
-
-        # get the energy from xc potential
-        e_vxc_ud = SpinParam.apply_fcn(
-            lambda eivecs, orb_weight, vxc: torch.einsum("...rc,c,...rc->...", vxc.mm(eivecs), orb_weight, eivecs),
-            eivecs, self.orb_weight, vxc)
-        e_vxc = SpinParam.sum(e_vxc_ud)
-
-        # get the energy from electron repulsion
-        elrep = self.hamilton.get_elrep(SpinParam.sum(dm))
-        e_elrep_ud = SpinParam.apply_fcn(
-            lambda eivecs, orb_weight:
-                0.5 * torch.einsum("...rc,c,...rc->...", elrep.mm(eivecs), orb_weight, eivecs),
-            eivecs, self.orb_weight)
-        e_elrep = SpinParam.sum(e_elrep_ud)
-
-        # compute the total energy
-        e_tot = e_eivals + (e_exc - e_vxc) - e_elrep + self._system.get_nuclei_energy()
-        return e_tot
+        dmtot = SpinParam.sum(dm)
+        e_core = self.hamilton.get_e_hcore(dmtot)
+        e_elrep = self.hamilton.get_e_elrep(dmtot)
+        e_xc = self.hamilton.get_exc(dm)
+        return e_core + e_elrep + e_xc + self._system.get_nuclei_energy()
 
     @overload
     def __dm2fock(self, dm: torch.Tensor) -> xt.LinearOperator:

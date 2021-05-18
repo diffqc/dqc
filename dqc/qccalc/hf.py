@@ -122,26 +122,11 @@ class _HFEngine(BaseSCFEngine):
 
     def dm2energy(self, dm: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
         # calculate the energy given the density matrix
-        vhf = self.__dm2vhf(dm)
-        core1e = self._core1e_linop
-        fock = SpinParam.apply_fcn(lambda vhf: core1e + vhf, vhf)
-        fock = SpinParam.apply_fcn(lambda vhf: core1e + vhf, vhf)
-        eivals, eivecs = self.diagonalize(fock, self._norb)
-
-        # get the total eigenvalues
-        e_eivals_ud = SpinParam.apply_fcn(
-            lambda eivals, orb_weight: torch.sum(eivals * orb_weight, dim=-1),
-            eivals, self._orb_weight)
-        e_eivals = SpinParam.sum(e_eivals_ud)  # torch.tensor
-
-        # get the half of vhf energy
-        e_vhf_ud = SpinParam.apply_fcn(
-            lambda eivecs, vhf, orb_weight:
-                torch.einsum("...rc,c,...rc->...", vhf.mm(eivecs), orb_weight, eivecs),
-            eivecs, vhf, self._orb_weight)
-        e_vhf = SpinParam.sum(e_vhf_ud)
-
-        return e_eivals - 0.5 * e_vhf + self._system.get_nuclei_energy()
+        dmtot = SpinParam.sum(dm)
+        e_core = self._hamilton.get_e_hcore(dmtot)
+        e_elrep = self._hamilton.get_e_elrep(dmtot)
+        e_exch = self._hamilton.get_e_exchange(dm)
+        return e_core + e_elrep + e_exch + self._system.get_nuclei_energy()
 
     @overload
     def __dm2fock(self, dm: torch.Tensor) -> xt.LinearOperator:
