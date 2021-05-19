@@ -66,4 +66,4 @@ def test_ks_velrepxc(dqc_xc, pscf_xc, moldesc, spin):
     elrepxc2 = torch.as_tensor(pscfelrepxc(moldesc, spin=spin, xc=pscf_xc))
 
     # compare the eigenvalues because the columns and rows can be swapped
-    assert torch.allclose(torch.symeig(elrepxc1)[0], torch.symeig(elrepxc2)[0])
+    assert torch.allclose(torch.linalg.eigh(elrepxc1)[0], torch.linalg.eigh(elrepxc2)[0])
