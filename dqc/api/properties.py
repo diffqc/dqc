@@ -331,7 +331,7 @@ def _equadrupole(qc: BaseQCCalc) -> torch.Tensor:
     return quadrupole + ion_quadrupole
 
 @memoize_method
-def _lowest_eival_orb_hessian(qc: BaseQCCalc) -> bool:
+def _lowest_eival_orb_hessian(qc: BaseQCCalc) -> torch.Tensor:
     # check if the orbital is in the ground state
     dm = qc.aodm()
     polarized = isinstance(dm, SpinParam)
