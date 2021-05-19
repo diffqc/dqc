@@ -84,7 +84,10 @@ def test_rhf_grad_pos(atomzs, dist, grad2, variational):
         torch.autograd.gradgradcheck(get_energy, (dist_tensor,),
                                      rtol=1e-2, atol=1e-5)
     else:
-        torch.autograd.gradcheck(get_energy, (dist_tensor,))
+        if variational:
+            torch.autograd.gradcheck(get_energy, (dist_tensor,), rtol=4e-3)
+        else:
+            torch.autograd.gradcheck(get_energy, (dist_tensor,))
 
 def test_rhf_basis_inputs():
     # test to see if the various basis inputs produce the same results
