@@ -1,4 +1,4 @@
-from typing import Optional, Mapping, Any, Tuple, List, Union, overload
+from typing import Optional, Dict, Any, Tuple, List, Union, overload
 import torch
 import xitorch as xt
 import xitorch.linalg
@@ -119,7 +119,7 @@ class _HFEngine(BaseSCFEngine):
 
     def aoparams2ene(self, aoparams: torch.Tensor) -> torch.Tensor:
         # calculate the energy from the atomic orbital params
-        if self._polarized:
+        if isinstance(self._orb_weight, SpinParam):
             dm_u = _symm(self._hamilton.ao_orb_params2dm(aoparams, self._orb_weight.u))
             dm_d = _symm(self._hamilton.ao_orb_params2dm(aoparams, self._orb_weight.d))
             dm = SpinParam(u=dm_u, d=dm_d)
@@ -127,7 +127,7 @@ class _HFEngine(BaseSCFEngine):
             dm = _symm(self._hamilton.ao_orb_params2dm(aoparams, self._orb_weight))
         return self.dm2energy(dm)
 
-    def set_eigen_options(self, eigen_options: Mapping[str, Any]) -> None:
+    def set_eigen_options(self, eigen_options: Dict[str, Any]) -> None:
         # set the eigendecomposition (diagonalization) option
         self.eigen_options = eigen_options
 
@@ -223,7 +223,7 @@ class _HFEngine(BaseSCFEngine):
         elif methodname == "dm2scp":
             return self.getparamnames("__dm2fock", prefix=prefix)
         elif methodname == "aoparams2ene":
-            if self._polarized:
+            if isinstance(self._orb_weight, SpinParam):
                 params = [prefix + "_orb_weight.u", prefix + "_orb_weight.d"]
             else:
                 params = [prefix + "_orb_weight"]

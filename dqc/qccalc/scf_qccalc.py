@@ -1,7 +1,6 @@
 from __future__ import annotations
 from abc import abstractmethod, abstractproperty
-import copy
-from typing import Optional, Mapping, Any, List, Union
+from typing import Optional, Dict, Any, List, Union
 import torch
 import xitorch as xt
 import xitorch.linalg
@@ -43,9 +42,9 @@ class SCF_QCCalc(BaseQCCalc):
         return self._engine.get_system()
 
     def run(self, dm0: Optional[Union[str, torch.Tensor, SpinParam[torch.Tensor]]] = "1e",  # type: ignore
-            eigen_options: Optional[Mapping[str, Any]] = None,
-            fwd_options: Optional[Mapping[str, Any]] = None,
-            bck_options: Optional[Mapping[str, Any]] = None) -> BaseQCCalc:
+            eigen_options: Optional[Dict[str, Any]] = None,
+            fwd_options: Optional[Dict[str, Any]] = None,
+            bck_options: Optional[Dict[str, Any]] = None) -> BaseQCCalc:
 
         # get default options
         if not self._variational:
@@ -96,7 +95,7 @@ class SCF_QCCalc(BaseQCCalc):
             else:
                 raise RuntimeError("Unknown dm0: %s" % dm0)
         else:
-            dm = dm0.detach()
+            dm = SpinParam.apply_fcn(lambda dm0: dm0.detach(), dm0)
 
         # making it spin param for polarized and tensor for nonpolarized
         if isinstance(dm, torch.Tensor) and self._polarized:
@@ -244,7 +243,7 @@ class BaseSCFEngine(xt.EditableModule):
         pass
 
     @abstractmethod
-    def set_eigen_options(self, eigen_options: Mapping[str, Any]) -> None:
+    def set_eigen_options(self, eigen_options: Dict[str, Any]) -> None:
         """
         Set the options for the diagonalization (i.e. eigendecomposition).
         """

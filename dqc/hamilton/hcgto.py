@@ -456,6 +456,7 @@ class HamiltonCGTO(BaseHamilton):
         elif methodname == "get_e_exchange":
             return self.getparamnames("get_exchange", prefix=prefix)
         elif methodname == "get_e_xc":
+            assert self.xc is not None
             return self.getparamnames("_dm2densinfo", prefix=prefix) + \
                 self.xc.getparamnames("get_edensityxc", prefix=prefix + "xc.") + \
                 self.grid.getparamnames("get_dvolume", prefix=prefix + "grid.")

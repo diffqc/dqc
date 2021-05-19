@@ -1,4 +1,4 @@
-from typing import Optional, Mapping, Any, List, Union, overload
+from typing import Optional, Dict, Any, List, Union, overload
 import torch
 import xitorch as xt
 import xitorch.linalg
@@ -126,7 +126,7 @@ class _KSEngine(BaseSCFEngine):
         dm = self.scp2dm(scp)
         return self.dm2scp(dm)
 
-    def set_eigen_options(self, eigen_options: Mapping[str, Any]) -> None:
+    def set_eigen_options(self, eigen_options: Dict[str, Any]) -> None:
         # set the eigendecomposition (diagonalization) option
         self.hf_engine.set_eigen_options(eigen_options)
 
