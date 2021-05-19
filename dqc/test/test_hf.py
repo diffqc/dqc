@@ -139,8 +139,8 @@ u_mols_energies = [
 
 @pytest.mark.parametrize(
     "atomzs,dist,energy_true,variational",
-    [(*atomz_pos, energy, False) for (atomz_pos, energy) in zip(atomzs_poss[:2], energies[:2])] + \
-    [(*atomz_pos, energy, True) for (atomz_pos, energy) in zip(atomzs_poss[:2], energies[:2])]
+    # [(*atomz_pos, energy, True) for (atomz_pos, energy) in zip(atomzs_poss[:2], energies[:2])] + \
+    [(*atomz_pos, energy, False) for (atomz_pos, energy) in zip(atomzs_poss[:2], energies[:2])]
 )
 def test_uhf_energy_same_as_rhf(atomzs, dist, energy_true, variational):
     # test to see if uhf energy gets the same energy as rhf for non-polarized systems
