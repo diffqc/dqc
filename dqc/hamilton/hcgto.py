@@ -235,6 +235,13 @@ class HamiltonCGTO(BaseHamilton):
         # orb_weight: (*BW, norb)
         # return: (*BOW, nao, nao)
 
+        # pad if orb weight is too short
+        if orb_weight.shape[-1] < orb.shape[-1]:
+            dnorb = orb.shape[-1] - orb_weight.shape[-1]
+            zeros = torch.zeros((*orb_weight.shape[:-1], dnorb), dtype=orb_weight.dtype,
+                                device=orb_weight.device)
+            orb_weight = torch.cat((orb_weight, zeros), dim=-1)
+
         orb_w = orb * orb_weight.unsqueeze(-2)  # (*BOW, nao, norb)
         return torch.matmul(orb, orb_w.transpose(-2, -1))  # (*BOW, nao, nao)
 
@@ -293,13 +300,12 @@ class HamiltonCGTO(BaseHamilton):
         ao_orb = self._inv_ovlp_sqrt @ ao_orbq
         return self.ao_orb2dm(ao_orb, orb_weight)
 
-    def dm2ao_orb_params(self, dm: torch.Tensor) -> torch.Tensor:
+    def dm2ao_orb_params(self, dm: torch.Tensor, norb: int) -> torch.Tensor:
         # convert back the density matrix to one solution in the parameters space
         mdmm = self._ovlp_sqrt @ dm @ self._ovlp_sqrt
         w, orbq = torch.linalg.eigh(mdmm)
-        w_nz = w.abs() > 1e-8
-        orbq_params = orbq[..., w_nz]  # (nao, norb)
-        return orbq_params
+        orbq_params = orbq[..., -norb:]  # (nao, norb)
+        return torch.flip(orbq_params, dims=(-1,))
 
     ################ misc ################
     def _dm2densinfo(self, dm: torch.Tensor) -> ValGrad:

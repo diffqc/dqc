@@ -335,8 +335,10 @@ def _is_orb_min(qc: BaseQCCalc) -> bool:
     h = system.get_hamiltonian()
 
     # (nao, norb)
-    orb_params = h.dm2ao_orb_params(SpinParam.sum(dm)).detach().clone().requires_grad_()
     orb_weights = system.get_orbweight(polarized=polarized)
+    norb = SpinParam.apply_fcn(lambda orb_weights: len(orb_weights), orb_weights)
+    norb_max = SpinParam.reduce(norb, max)
+    orb_params = h.dm2ao_orb_params(SpinParam.sum(dm), norb=norb_max).detach().clone().requires_grad_()
 
     # now reconstruct the orbital from the orbital parameters (just to construct
     # the graph)
@@ -353,7 +355,7 @@ def _is_orb_min(qc: BaseQCCalc) -> bool:
 
     # get the lowest eigenvalue
     eival, eivec = xt.linalg.symeig(hess, neig=1, mode="lowest")
-    return bool(torch.all(eival > -1e-6))
+    return bool(torch.all(eival > -1e-3))
 
 ########### helper functions ###########
 

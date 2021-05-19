@@ -220,7 +220,7 @@ class BaseHamilton(xt.EditableModule):
         pass
 
     @abstractmethod
-    def dm2ao_orb_params(self, dm: torch.Tensor) -> torch.Tensor:
+    def dm2ao_orb_params(self, dm: torch.Tensor, norb: int) -> torch.Tensor:
         """
         Convert from the density matrix to the orbital parameters.
         The map is not one-to-one, but instead one-to-many where there might
@@ -232,6 +232,8 @@ class BaseHamilton(xt.EditableModule):
         ---------
         dm: torch.Tensor
             The density matrix.
+        norb: int
+            The number of orbitals for the system.
 
         Returns
         -------

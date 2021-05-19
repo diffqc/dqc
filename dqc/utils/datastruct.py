@@ -83,6 +83,13 @@ class SpinParam(Generic[T]):
         else:
             return a
 
+    def reduce(a: Union[SpinParam[T], T], fcn: Callable[[T, T], T]) -> T:
+        # reduce up and down parameters with the given function
+        if isinstance(a, SpinParam):
+            return fcn(a.u, a.d)
+        else:
+            return a
+
     @overload
     @staticmethod
     def apply_fcn(fcn: Callable[..., P], *a: SpinParam[T]) -> SpinParam[P]:  # type: ignore
