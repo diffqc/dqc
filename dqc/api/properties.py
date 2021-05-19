@@ -167,7 +167,7 @@ def equadrupole(qc: BaseQCCalc, unit: Optional[str] = "Debye*Angst") -> torch.Te
     equad = equadrupole_to(equad, unit)
     return equad
 
-def is_orb_min(qc: BaseQCCalc) -> bool:
+def is_orb_min(qc: BaseQCCalc, threshold: float = -1e-3) -> bool:
     """
     Check the stability of the SCF if it is the minimum, not a saddle point.
 
@@ -175,13 +175,17 @@ def is_orb_min(qc: BaseQCCalc) -> bool:
     ---------
     qc: BaseQCCalc
         The qc calc object that has been executed.
+    threshold: float
+        The threshold value of the lowest eigenvalue of the Hessian matrix to be
+        qualified as a positive definite matrix.
 
     Returns
     -------
     bool
         True if the state is minimum, otherwise returns False.
     """
-    return _is_orb_min(qc)
+    eival = _lowest_eival_orb_hessian(qc)
+    return bool(torch.all(eival > threshold))
 
 @memoize_method
 def _hessian_pos(qc: BaseQCCalc) -> torch.Tensor:
@@ -327,7 +331,7 @@ def _equadrupole(qc: BaseQCCalc) -> torch.Tensor:
     return quadrupole + ion_quadrupole
 
 @memoize_method
-def _is_orb_min(qc: BaseQCCalc) -> bool:
+def _lowest_eival_orb_hessian(qc: BaseQCCalc) -> bool:
     # check if the orbital is in the ground state
     dm = qc.aodm()
     polarized = isinstance(dm, SpinParam)
@@ -355,7 +359,7 @@ def _is_orb_min(qc: BaseQCCalc) -> bool:
 
     # get the lowest eigenvalue
     eival, eivec = xt.linalg.symeig(hess, neig=1, mode="lowest")
-    return bool(torch.all(eival > -1e-3))
+    return eival
 
 ########### helper functions ###########
 
