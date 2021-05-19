@@ -11,7 +11,7 @@ from dqc.utils.datastruct import SpinParam
 from dqc.utils.units import length_to, freq_to, edipole_to, equadrupole_to, ir_ints_to, \
                             raman_ints_to
 
-__all__ = ["hessian_pos", "vibration", "edipole", "equadrupole"]
+__all__ = ["hessian_pos", "vibration", "edipole", "equadrupole", "is_orb_min"]
 
 # This file contains functions to calculate the perturbation properties of systems.
 
