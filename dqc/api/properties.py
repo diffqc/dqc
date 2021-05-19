@@ -3,8 +3,11 @@ import torch
 import numpy as np
 import xitorch as xt
 import xitorch.linalg
+import xitorch.grad
+import xitorch.optimize
 from dqc.qccalc.base_qccalc import BaseQCCalc
 from dqc.utils.misc import memoize_method
+from dqc.utils.datastruct import SpinParam
 from dqc.utils.units import length_to, freq_to, edipole_to, equadrupole_to, ir_ints_to, \
                             raman_ints_to
 
@@ -164,6 +167,22 @@ def equadrupole(qc: BaseQCCalc, unit: Optional[str] = "Debye*Angst") -> torch.Te
     equad = equadrupole_to(equad, unit)
     return equad
 
+def is_orb_min(qc: BaseQCCalc) -> bool:
+    """
+    Check the stability of the SCF if it is the minimum, not a saddle point.
+
+    Arguments
+    ---------
+    qc: BaseQCCalc
+        The qc calc object that has been executed.
+
+    Returns
+    -------
+    bool
+        True if the state is minimum, otherwise returns False.
+    """
+    return _is_orb_min(qc)
+
 @memoize_method
 def _hessian_pos(qc: BaseQCCalc) -> torch.Tensor:
     # calculate the hessian in atomic unit
@@ -306,6 +325,35 @@ def _equadrupole(qc: BaseQCCalc) -> torch.Tensor:
     ion_quadrupole = torch.einsum("ad,ae,a->de", atompos, atompos, atomzs)
 
     return quadrupole + ion_quadrupole
+
+@memoize_method
+def _is_orb_min(qc: BaseQCCalc) -> bool:
+    # check if the orbital is in the ground state
+    dm = qc.aodm()
+    polarized = isinstance(dm, SpinParam)
+    system = qc.get_system()
+    h = system.get_hamiltonian()
+
+    # (nao, norb)
+    orb_params = h.dm2ao_orb_params(SpinParam.sum(dm)).detach().clone().requires_grad_()
+    orb_weights = system.get_orbweight(polarized=polarized)
+
+    # now reconstruct the orbital from the orbital parameters (just to construct
+    # the graph)
+    def get_ene(orb_params):
+        dm2 = SpinParam.apply_fcn(
+            lambda orb_weights: h.ao_orb_params2dm(orb_params, orb_weights),
+            orb_weights)
+        ene = qc.dm2energy(dm2)
+        return ene
+
+    # construct the hessian of the energy w.r.t. orb_params
+    hess = xt.grad.hess(get_ene, (orb_params,), idxs=0)
+    assert isinstance(hess, xt.LinearOperator)
+
+    # get the lowest eigenvalue
+    eival, eivec = xt.linalg.symeig(hess, neig=1, mode="lowest")
+    return bool(torch.all(eival > -1e-6))
 
 ########### helper functions ###########
 
