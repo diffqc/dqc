@@ -135,7 +135,7 @@ class _KSEngine(BaseSCFEngine):
         dmtot = SpinParam.sum(dm)
         e_core = self.hamilton.get_e_hcore(dmtot)
         e_elrep = self.hamilton.get_e_elrep(dmtot)
-        e_xc = self.hamilton.get_exc(dm)
+        e_xc = self.hamilton.get_e_xc(dm)
         return e_core + e_elrep + e_xc + self._system.get_nuclei_energy()
 
     @overload

@@ -259,8 +259,8 @@ class HamiltonCGTO_PBC(HamiltonCGTO):
         enetot = SpinParam.sum(ene)
         return enetot
 
-    def get_exc(self, dm: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
-        return super().get_exc(dm)
+    def get_e_xc(self, dm: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
+        return super().get_e_xc(dm)
 
     ################ xc-related ################
     def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:

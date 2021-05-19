@@ -280,7 +280,7 @@ class HamiltonCGTO(BaseHamilton):
         enetot = SpinParam.sum(ene)
         return enetot
 
-    def get_exc(self, dm: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
+    def get_e_xc(self, dm: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
         assert self.xc is not None, "Please call .setup_grid with the xc object"
 
         # obtain the energy density per unit volume

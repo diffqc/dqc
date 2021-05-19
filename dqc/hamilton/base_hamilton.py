@@ -188,7 +188,7 @@ class BaseHamilton(xt.EditableModule):
         pass
 
     @abstractmethod
-    def get_exc(self, dm: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
+    def get_e_xc(self, dm: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
         """
         Returns the exchange-correlation energy using the xc object given in
         ``.setup_grid()``
