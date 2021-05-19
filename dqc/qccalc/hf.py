@@ -27,13 +27,18 @@ class HF(SCF_QCCalc):
         the unrestricted Kohn-Sham DFT.
         If None, it will choose True if the system is unpolarized and False if
         it is polarized
+    variational: bool
+        If True, then use optimization of the free orbital parameters to find
+        the minimum energy.
+        Otherwise, use self-consistent iterations.
     """
 
     def __init__(self, system: BaseSystem,
-                 restricted: Optional[bool] = None):
+                 restricted: Optional[bool] = None,
+                 variational: bool = False):
 
         engine = _HFEngine(system, restricted)
-        super().__init__(engine)
+        super().__init__(engine, variational)
 
 class _HFEngine(BaseSCFEngine):
     """
@@ -98,10 +103,6 @@ class _HFEngine(BaseSCFEngine):
 
     def scp2dm(self, scp: torch.Tensor) -> Union[torch.Tensor, SpinParam[torch.Tensor]]:
         # scp is like KS, using the concatenated Fock matrix
-        def _symm(scp: torch.Tensor):
-            # forcely symmetrize the tensor
-            return (scp + scp.transpose(-2, -1)) * 0.5
-
         if not self._polarized:
             fock = xt.LinearOperator.m(_symm(scp), is_hermitian=True)
             return self.__fock2dm(fock)
@@ -115,6 +116,16 @@ class _HFEngine(BaseSCFEngine):
         # to an scp
         dm = self.scp2dm(scp)
         return self.dm2scp(dm)
+
+    def aoparams2ene(self, aoparams: torch.Tensor) -> torch.Tensor:
+        # calculate the energy from the atomic orbital params
+        if self._polarized:
+            dm_u = _symm(self._hamilton.ao_orb_params2dm(aoparams, self._orb_weight.u))
+            dm_d = _symm(self._hamilton.ao_orb_params2dm(aoparams, self._orb_weight.d))
+            dm = SpinParam(u=dm_u, d=dm_d)
+        else:
+            dm = _symm(self._hamilton.ao_orb_params2dm(aoparams, self._orb_weight))
+        return self.dm2energy(dm)
 
     def set_eigen_options(self, eigen_options: Mapping[str, Any]) -> None:
         # set the eigendecomposition (diagonalization) option
@@ -211,6 +222,21 @@ class _HFEngine(BaseSCFEngine):
             return self.getparamnames("__fock2dm", prefix=prefix)
         elif methodname == "dm2scp":
             return self.getparamnames("__dm2fock", prefix=prefix)
+        elif methodname == "aoparams2ene":
+            if self._polarized:
+                params = [prefix + "_orb_weight.u", prefix + "_orb_weight.d"]
+            else:
+                params = [prefix + "_orb_weight"]
+            return self.getparamnames("dm2energy", prefix=prefix) + \
+                self._hamilton.getparamnames("ao_orb_params2dm", prefix=prefix + "_hamilton.") + \
+                params
+        elif methodname == "dm2energy":
+            hprefix = prefix + "_hamilton."
+            sprefix = prefix + "_system."
+            return self._hamilton.getparamnames("get_e_hcore", prefix=hprefix) + \
+                self._hamilton.getparamnames("get_e_elrep", prefix=hprefix) + \
+                self._hamilton.getparamnames("get_e_exchange", prefix=hprefix) + \
+                self._system.getparamnames("get_nuclei_energy", prefix=sprefix)
         elif methodname == "__fock2dm":
             if isinstance(self._orb_weight, SpinParam):
                 params = [prefix + "_orb_weight.u", prefix + "_orb_weight.d"]
@@ -231,3 +257,7 @@ class _HFEngine(BaseSCFEngine):
         else:
             raise KeyError("Method %s has no paramnames set" % methodname)
         return []  # TODO: to complete
+
+def _symm(scp: torch.Tensor):
+    # forcely symmetrize the tensor
+    return (scp + scp.transpose(-2, -1)) * 0.5

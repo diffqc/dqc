@@ -2,6 +2,7 @@ from itertools import product
 import numpy as np
 import torch
 import pytest
+import xitorch as xt
 from dqc.api.loadbasis import loadbasis
 from dqc.qccalc.hf import HF
 from dqc.system.mol import Mol
@@ -31,35 +32,52 @@ energies = [
 ]
 
 @pytest.mark.parametrize(
-    "atomzs,dist,energy_true",
-    [(*atomz_pos, energy) for (atomz_pos, energy) in zip(atomzs_poss, energies)]
+    "atomzs,dist,energy_true,variational",
+    [(*atomz_pos, energy, False) for (atomz_pos, energy) in zip(atomzs_poss, energies)] +
+    [(*atomz_pos, energy, True) for (atomz_pos, energy) in zip(atomzs_poss, energies)]
 )
-def test_rhf_energy(atomzs, dist, energy_true):
+def test_rhf_energy(atomzs, dist, energy_true, variational):
     # test to see if the energy calculated by DQC agrees with PySCF
+
+    # only set debugging mode only in one case to save time
+    if atomzs == [1, 1]:
+        xt.set_debug_mode(True)
+
     poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist
     mol = Mol((atomzs, poss), basis=basis, dtype=dtype)
-    qc = HF(mol, restricted=True).run()
+    qc = HF(mol, restricted=True, variational=variational).run()
     ene = qc.energy()
     assert torch.allclose(ene, ene * 0 + energy_true, rtol=1e-7)
 
+    if atomzs == [1, 1]:
+        xt.set_debug_mode(False)
+
 @pytest.mark.parametrize(
-    "atomzs,dist,grad2",
-    [(*atomz_pos, grad2) for (atomz_pos, grad2) in product(atomzs_poss, [False, True])]
+    "atomzs,dist,grad2,variational",
+    [(*atomz_pos, grad2, varnal) for (atomz_pos, grad2, varnal) in \
+        product(atomzs_poss, [False, True], [False, True])]
 )
-def test_rhf_grad_pos(atomzs, dist, grad2):
+def test_rhf_grad_pos(atomzs, dist, grad2, variational):
     # test grad of energy w.r.t. atom's position
 
     torch.manual_seed(123)
     # set stringent requirement for grad2
-    bck_options = None if not grad2 else {
-        "rtol": 1e-9,
-        "atol": 1e-9,
+    bck_options = None if (not grad2 and not variational) else {
+        "rtol": 1e-10,
+        "atol": 1e-10,
+        "method": "bicgstab",
+    }
+    fwd_options = None if not variational else {
+        "f_rtol": 1e-15,
+        "x_rtol": 1e-15,
+        "maxiter": 20000,
     }
 
     def get_energy(dist_tensor):
         poss_tensor = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist_tensor
         mol = Mol((atomzs, poss_tensor), basis=basis, dtype=dtype)
-        qc = HF(mol, restricted=True).run(bck_options=bck_options)
+        qc = HF(mol, restricted=True, variational=variational).run(
+            fwd_options=fwd_options, bck_options=bck_options)
         return qc.energy()
     dist_tensor = torch.tensor(dist, dtype=dtype, requires_grad=True)
     if grad2:
@@ -120,40 +138,46 @@ u_mols_energies = [
 ]
 
 @pytest.mark.parametrize(
-    "atomzs,dist,energy_true",
-    [(*atomz_pos, energy) for (atomz_pos, energy) in zip(atomzs_poss[:2], energies[:2])]
+    "atomzs,dist,energy_true,variational",
+    [(*atomz_pos, energy, False) for (atomz_pos, energy) in zip(atomzs_poss[:2], energies[:2])] + \
+    [(*atomz_pos, energy, True) for (atomz_pos, energy) in zip(atomzs_poss[:2], energies[:2])]
 )
-def test_uhf_energy_same_as_rhf(atomzs, dist, energy_true):
+def test_uhf_energy_same_as_rhf(atomzs, dist, energy_true, variational):
     # test to see if uhf energy gets the same energy as rhf for non-polarized systems
     poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist
     mol = Mol((atomzs, poss), basis=basis, dtype=dtype)
-    qc = HF(mol, restricted=False).run()
+    qc = HF(mol, restricted=False, variational=variational).run()
     ene = qc.energy()
     assert torch.allclose(ene, ene * 0 + energy_true, rtol=1e-8)
 
 @pytest.mark.parametrize(
-    "atomz,spin,energy_true",
-    [(atomz, spin, energy) for ((atomz, spin), energy) in zip(u_atomzs_spins, u_atom_energies)]
+    "atomz,spin,energy_true,variational",
+    # [(atomz, spin, energy, True) for ((atomz, spin), energy) in zip(u_atomzs_spins, u_atom_energies)] + \
+    [(atomz, spin, energy, False) for ((atomz, spin), energy) in zip(u_atomzs_spins, u_atom_energies)]
 )
-def test_uhf_energy_atoms(atomz, spin, energy_true):
+def test_uhf_energy_atoms(atomz, spin, energy_true, variational):
     # check the energy of atoms with non-0 spins
     poss = torch.tensor([[0.0, 0.0, 0.0]], dtype=dtype)
     mol = Mol(([atomz], poss), basis=basis, dtype=dtype, spin=spin)
-    qc = HF(mol, restricted=False).run()
+    qc = HF(mol, restricted=False, variational=variational).run()
     ene = qc.energy()
+    from dqc.api import is_orb_min
+    print("%.14e" % ene, is_orb_min(qc))
     assert torch.allclose(ene, ene * 0 + energy_true, atol=0.0, rtol=1e-7)
 
 @pytest.mark.parametrize(
-    "atomzs,dist,spin,energy_true",
-    [(atomzs, dist, spin, energy) for ((atomzs, dist, spin), energy)
+    "atomzs,dist,spin,energy_true,variational",
+    # [(atomzs, dist, spin, energy, True) for ((atomzs, dist, spin), energy)
+    #     in zip(u_mols_dists_spins, u_mols_energies)] + \
+    [(atomzs, dist, spin, energy, False) for ((atomzs, dist, spin), energy)
         in zip(u_mols_dists_spins, u_mols_energies)]
 )
-def test_uhf_energy_mols(atomzs, dist, spin, energy_true):
+def test_uhf_energy_mols(atomzs, dist, spin, energy_true, variational):
     # check the energy of molecules with non-0 spins
     # NOTE: O2 iteration gets into excited state (probably)
     poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist
     mol = Mol((atomzs, poss), basis=basis, dtype=dtype, spin=spin)
-    qc = HF(mol, restricted=False).run()
+    qc = HF(mol, restricted=False, variational=variational).run()
     ene = qc.energy()
     assert torch.allclose(ene, ene * 0 + energy_true, rtol=1e-8, atol=0.0)
 

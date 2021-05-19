@@ -1,11 +1,21 @@
-from typing import Callable, overload, TypeVar, Any, Mapping
+from typing import Callable, overload, TypeVar, Any, Mapping, Dict
 import functools
 import torch
+import copy
 import scipy.special
 from dqc.utils.config import config
 
 T = TypeVar('T')
 K = TypeVar('K')
+
+def set_default_option(defopt: Dict, opt: Dict) -> Dict:
+    # return a dictionary based on the options and if no item from option,
+    # take it from defopt
+
+    # make a shallow copy to detach the results from defopt
+    res = copy.copy(defopt)
+    res.update(opt)
+    return res
 
 def memoize_method(fcn: Callable[[Any], T]) -> Callable[[Any], T]:
     # alternative for lru_cache for memoizing a method without any arguments

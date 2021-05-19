@@ -80,7 +80,7 @@ class HamiltonCGTO(BaseHamilton):
 
             # calculate the sqrt of the overlap matrix and its inverse
             ovlp = self.olp_mat
-            ovlp_eival, ovlp_eivec = torch.linalg.eigh(ovlp)
+            ovlp_eival, ovlp_eivec = xt.linalg.symeig(xt.LinearOperator.m(ovlp, is_hermitian=True))
             ovlp_sqrt = (ovlp_eivec * (ovlp_eival ** 0.5)) @ ovlp_eivec.transpose(-2, -1).conj()
             inv_ovlp_sqrt = (ovlp_eivec * (ovlp_eival ** -0.5)) @ ovlp_eivec.transpose(-2, -1).conj()
             self._ovlp_sqrt = ovlp_sqrt
@@ -447,6 +447,18 @@ class HamiltonCGTO(BaseHamilton):
             return [prefix + "el_mat"]
         elif methodname == "ao_orb2dm":
             return []
+        elif methodname == "ao_orb_params2dm":
+            return [prefix + "_inv_ovlp_sqrt"] + self.getparamnames("ao_orb2dm", prefix=prefix)
+        elif methodname == "get_e_hcore":
+            return [prefix + "kinnucl_mat"]
+        elif methodname == "get_e_elrep":
+            return self.getparamnames("get_elrep", prefix=prefix)
+        elif methodname == "get_e_exchange":
+            return self.getparamnames("get_exchange", prefix=prefix)
+        elif methodname == "get_e_xc":
+            return self.getparamnames("_dm2densinfo", prefix=prefix) + \
+                self.xc.getparamnames("get_edensityxc", prefix=prefix + "xc.") + \
+                self.grid.getparamnames("get_dvolume", prefix=prefix + "grid.")
         elif methodname == "get_vext":
             return [prefix + "basis_dvolume", prefix + "basis"]
         elif methodname == "get_grad_vext":

@@ -1,5 +1,6 @@
 from __future__ import annotations
 from abc import abstractmethod, abstractproperty
+import copy
 from typing import Optional, Mapping, Any, List, Union
 import torch
 import xitorch as xt
@@ -9,6 +10,7 @@ from dqc.system.base_system import BaseSystem
 from dqc.qccalc.base_qccalc import BaseQCCalc
 from dqc.utils.datastruct import SpinParam
 from dqc.utils.config import config
+from dqc.utils.misc import set_default_option
 
 class SCF_QCCalc(BaseQCCalc):
     """
@@ -19,20 +21,23 @@ class SCF_QCCalc(BaseQCCalc):
     ---------
     engine: BaseSCFEngine
         The SCF engine
-    restricted: bool or None
-        If True, performing restricted SCF iteration. If False, it performs
-        the unrestricted SCF iteration.
-        If None, it will choose True if the system is unpolarized and False if
-        it is polarized.
+    variational: bool
+        If True, then use optimization of the free orbital parameters to find
+        the minimum energy.
+        Otherwise, use self-consistent iterations.
     """
 
-    def __init__(self, engine: BaseSCFEngine):
+    def __init__(self, engine: BaseSCFEngine, variational: bool = False):
         self._engine = engine
         self._polarized = engine.polarized
         self._shape = self._engine.shape
         self.dtype = self._engine.dtype
         self.device = self._engine.device
         self._has_run = False
+        self._variational = variational
+
+        if self._polarized and self._variational:
+            raise RuntimeError("Unrestricted and variational is not implemented")
 
     def get_system(self) -> BaseSystem:
         return self._engine.get_system()
@@ -42,25 +47,40 @@ class SCF_QCCalc(BaseQCCalc):
             fwd_options: Optional[Mapping[str, Any]] = None,
             bck_options: Optional[Mapping[str, Any]] = None) -> BaseQCCalc:
 
+        # get default options
+        if not self._variational:
+            fwd_defopt = {
+                "method": "broyden1",
+                "alpha": -0.5,
+                "maxiter": 50,
+                "verbose": config.VERBOSE > 0,
+            }
+        else:
+            fwd_defopt = {
+                "method": "gd",
+                "step": 1e-2,
+                "maxiter": 5000,
+                "f_rtol": 1e-10,
+                "x_rtol": 1e-10,
+                "verbose": config.VERBOSE > 0,
+            }
+        bck_defopt = {
+            # NOTE: it seems like in most cases the jacobian matrix is posdef
+            # if it is not the case, we can just remove the line below
+            "posdef": True,
+        }
+
         # setup the default options
         if eigen_options is None:
             eigen_options = {
                 "method": "exacteig"
             }
         if fwd_options is None:
-            fwd_options = {
-                "method": "broyden1",
-                "alpha": -0.5,
-                "maxiter": 50,
-                "verbose": config.VERBOSE > 0,
-            }
+            fwd_options = {}
         if bck_options is None:
-            bck_options = {
-                # NOTE: it seems like in most cases the jacobian matrix is posdef
-                # if it is not the case, we can just remove the line below
-                "posdef": True,
-                # "verbose": True,
-            }
+            bck_options = {}
+        fwd_options = set_default_option(fwd_defopt, fwd_options)
+        bck_options = set_default_option(bck_defopt, bck_options)
 
         # save the eigen_options for use in diagonalization
         self._engine.set_eigen_options(eigen_options)
@@ -76,7 +96,7 @@ class SCF_QCCalc(BaseQCCalc):
             else:
                 raise RuntimeError("Unknown dm0: %s" % dm0)
         else:
-            dm = dm0
+            dm = dm0.detach()
 
         # making it spin param for polarized and tensor for nonpolarized
         if isinstance(dm, torch.Tensor) and self._polarized:
@@ -86,17 +106,38 @@ class SCF_QCCalc(BaseQCCalc):
         elif isinstance(dm, SpinParam) and not self._polarized:
             dm = dm.u + dm.d
 
-        scp0 = self._engine.dm2scp(dm)
+        if not self._variational:
+            scp0 = self._engine.dm2scp(dm)
 
-        # do the self-consistent iteration
-        scp = xitorch.optimize.equilibrium(
-            fcn=self._engine.scp2scp,
-            y0=scp0,
-            bck_options={**bck_options},
-            **fwd_options)
+            # do the self-consistent iteration
+            scp = xitorch.optimize.equilibrium(
+                fcn=self._engine.scp2scp,
+                y0=scp0,
+                bck_options={**bck_options},
+                **fwd_options)
 
-        # post-process parameters
-        self._dm = self._engine.scp2dm(scp)
+            # post-process parameters
+            self._dm = self._engine.scp2dm(scp)
+        else:
+            system = self.get_system()
+            h = system.get_hamiltonian()
+            orb_weights = system.get_orbweight(polarized=self._polarized)
+            norb = SpinParam.apply_fcn(lambda orb_weights: len(orb_weights), orb_weights)
+            norb_max = SpinParam.reduce(norb, max)
+            params0 = h.dm2ao_orb_params(SpinParam.sum(dm), norb=norb_max)
+
+            min_params0 = xitorch.optimize.minimize(
+                fcn=self._engine.aoparams2ene,
+                # random noise to add the chance of it gets to the minimum, not
+                # a saddle point
+                y0=params0 + torch.randn_like(params0) * 0.01 / params0.numel(),
+                bck_options={**bck_options},
+                **fwd_options)
+
+            self._dm = SpinParam.apply_fcn(
+                lambda orb_weights: h.ao_orb_params2dm(min_params0, orb_weights),
+                orb_weights)
+
         self._has_run = True
         return self
 
@@ -192,6 +233,13 @@ class BaseSCFEngine(xt.EditableModule):
         """
         Calculate the next self-consistent parameter (scp) for the next iteration
         from the previous scp.
+        """
+        pass
+
+    @abstractmethod
+    def aoparams2ene(self, aoparams: torch.Tensor) -> torch.Tensor:
+        """
+        Calculate the energy from the given atomic orbital parameters.
         """
         pass
 

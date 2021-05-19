@@ -260,7 +260,13 @@ class Mol(BaseSystem):
         return self._grid
 
     def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
-        pass
+        if methodname == "get_nuclei_energy":
+            params = [prefix + "_atompos"]
+            if torch.is_floating_point(self._atomzs):
+                params += [prefix + "_atomzs"]
+            return params
+        else:
+            raise KeyError("Unknown methodname: %s" % methodname)
 
     ################### properties ###################
     @property
