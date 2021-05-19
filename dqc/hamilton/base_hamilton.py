@@ -197,6 +197,49 @@ class BaseHamilton(xt.EditableModule):
         # return: (*BDH)
         pass
 
+    ############### free parameters for variational method ###############
+    @abstractmethod
+    def ao_orb_params2dm(self, ao_orb_params: torch.Tensor, orb_weight: torch.Tensor) -> \
+            torch.Tensor:
+        """
+        Convert the atomic orbital free parameters (parametrized in such a way so
+        it is not bounded) to the density matrix.
+
+        Arguments
+        ---------
+        ao_orb_params: torch.Tensor
+            The tensors that parametrized atomic orbital in an unbounded space.
+        orb_weight: torch.Tensor
+            The orbital weights.
+
+        Returns
+        -------
+        torch.Tensor
+            The density matrix from the orbital parameters.
+        """
+        pass
+
+    @abstractmethod
+    def dm2ao_orb_params(self, dm: torch.Tensor) -> torch.Tensor:
+        """
+        Convert from the density matrix to the orbital parameters.
+        The map is not one-to-one, but instead one-to-many where there might
+        be more than one orbital parameters to describe the same density matrix.
+        For restricted systems, only one of the ``dm`` (``dm.u`` or ``dm.d``) is
+        sufficient.
+
+        Arguments
+        ---------
+        dm: torch.Tensor
+            The density matrix.
+
+        Returns
+        -------
+        torch.Tensor
+            The atomic orbital parameters.
+        """
+        pass
+
     ############### xitorch's editable module ###############
     @abstractmethod
     def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:

@@ -78,6 +78,14 @@ class HamiltonCGTO(BaseHamilton):
             self.nucl_mat = nucl_mat
             self.kinnucl_mat = kin_mat + nucl_mat
 
+            # calculate the sqrt of the overlap matrix and its inverse
+            ovlp = self.olp_mat
+            ovlp_eival, ovlp_eivec = torch.linalg.eigh(ovlp)
+            ovlp_sqrt = (ovlp_eivec * (ovlp_eival ** 0.5)) @ ovlp_eivec.transpose(-2, -1).conj()
+            inv_ovlp_sqrt = (ovlp_eivec * (ovlp_eival ** -0.5)) @ ovlp_eivec.transpose(-2, -1).conj()
+            self._ovlp_sqrt = ovlp_sqrt
+            self._inv_ovlp_sqrt = inv_ovlp_sqrt
+
             # electric field integral
             if self._efield is not None:
                 # (ndim, nao, nao)
@@ -274,6 +282,24 @@ class HamiltonCGTO(BaseHamilton):
         edens = self.xc.get_edensityxc(densinfo)  # (*BD, nr)
 
         return torch.sum(self.grid.get_dvolume() * edens, dim=-1)
+
+    ############### free parameters for variational method ###############
+    def ao_orb_params2dm(self, ao_orb_params: torch.Tensor, orb_weight: torch.Tensor) -> \
+            torch.Tensor:
+        # convert from atomic orbital parameters to density matrix
+        # the atomic orbital parameter is the inverse QR of the orbital
+        # ao_orb_params: (*BD, nao, norb)
+        ao_orbq, _ = torch.linalg.qr(ao_orb_params)
+        ao_orb = self._inv_ovlp_sqrt @ ao_orbq
+        return self.ao_orb2dm(ao_orb, orb_weight)
+
+    def dm2ao_orb_params(self, dm: torch.Tensor) -> torch.Tensor:
+        # convert back the density matrix to one solution in the parameters space
+        mdmm = self._ovlp_sqrt @ dm @ self._ovlp_sqrt
+        w, orbq = torch.symeig(mdmm, eigenvectors=True)
+        w_nz = w.abs() > 1e-8
+        orbq_params = orbq[..., w_nz]  # (nao, norb)
+        return orbq_params
 
     ################ misc ################
     def _dm2densinfo(self, dm: torch.Tensor) -> ValGrad:
