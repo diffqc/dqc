@@ -296,7 +296,7 @@ class HamiltonCGTO(BaseHamilton):
     def dm2ao_orb_params(self, dm: torch.Tensor) -> torch.Tensor:
         # convert back the density matrix to one solution in the parameters space
         mdmm = self._ovlp_sqrt @ dm @ self._ovlp_sqrt
-        w, orbq = torch.symeig(mdmm, eigenvectors=True)
+        w, orbq = torch.linalg.eigh(mdmm)
         w_nz = w.abs() > 1e-8
         orbq_params = orbq[..., w_nz]  # (nao, norb)
         return orbq_params
