@@ -30,14 +30,19 @@ class KS(SCF_QCCalc):
         the unrestricted Kohn-Sham DFT.
         If None, it will choose True if the system is unpolarized and False if
         it is polarized
+    variational: bool
+        If True, then solve the Kohn-Sham equation variationally (i.e. using
+        optimization) instead of using self-consistent iteration.
+        Otherwise, solve it using self-consistent iteration.
     """
 
     def __init__(self, system: BaseSystem, xc: Union[str, BaseXC],
                  vext: Optional[torch.Tensor] = None,
-                 restricted: Optional[bool] = None):
+                 restricted: Optional[bool] = None,
+                 variational: bool = False):
 
-        engine = _KSEngine(system, xc, vext, restricted)
-        super().__init__(engine)
+        engine = _KSEngine(system, xc, vext)
+        super().__init__(engine, variational)
 
 class _KSEngine(BaseSCFEngine):
     """
@@ -126,6 +131,33 @@ class _KSEngine(BaseSCFEngine):
         dm = self.scp2dm(scp)
         return self.dm2scp(dm)
 
+    def aoparams2ene(self, aoparams: torch.Tensor, with_penalty: Optional[float] = None) -> torch.Tensor:
+        # calculate the energy from the atomic orbital parameter
+        aop = self.unpack_aoparams(aoparams)  # tensor or SpinParam of tensor
+        dm_penalty = SpinParam.apply_fcn(
+            lambda aop, orb_weight: self.hamilton.ao_orb_params2dm(aop, orb_weight, with_penalty=with_penalty),
+            aop, self.orb_weight
+        )
+        if with_penalty is not None:
+            dm = SpinParam.apply_fcn(lambda dm_penalty: dm_penalty[0], dm_penalty)
+            penalty = SpinParam.apply_fcn(lambda dm_penalty: dm_penalty[1], dm_penalty)
+        else:
+            dm = dm_penalty
+        ene = self.dm2energy(dm)
+        if with_penalty:
+            loss = ene + SpinParam.sum(penalty)
+        else:
+            loss = ene
+        return loss
+
+    def pack_aoparams(self, aoparams: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
+        # pack the aoparams from tensor or SpinParam into a single tensor
+        return self.hf_engine.pack_aoparams(aoparams)
+
+    def unpack_aoparams(self, aoparams: torch.Tensor) -> Union[torch.Tensor, SpinParam[torch.Tensor]]:
+        # unpack the single tensor aoparams to SpinParam or a tensor
+        return self.hf_engine.unpack_aoparams(aoparams)
+
     def set_eigen_options(self, eigen_options: Dict[str, Any]) -> None:
         # set the eigendecomposition (diagonalization) option
         self.hf_engine.set_eigen_options(eigen_options)
@@ -161,6 +193,23 @@ class _KSEngine(BaseSCFEngine):
             return self.hf_engine.getparamnames("scp2dm", prefix=prefix + "hf_engine.")
         elif methodname == "dm2scp":
             return self.getparamnames("__dm2fock", prefix=prefix)
+        elif methodname == "aoparams2ene":
+            if isinstance(self.orb_weight, SpinParam):
+                params = [prefix + "orb_weight.u", prefix + "orb_weight.d"]
+            else:
+                params = [prefix + "orb_weight"]
+            return self.getparamnames("dm2energy", prefix=prefix) + \
+                self.hamilton.getparamnames("ao_orb_params2dm", prefix=prefix + "hamilton.") + \
+                params
+        elif methodname in ["pack_aoparams", "unpack_aoparams"]:
+            return self.hf_engine.getparamnames(methodname, prefix=prefix + "hf_engine.")
+        elif methodname == "dm2energy":
+            hprefix = prefix + "hamilton."
+            sprefix = prefix + "_system."
+            return self.hamilton.getparamnames("get_e_hcore", prefix=hprefix) + \
+                self.hamilton.getparamnames("get_e_elrep", prefix=hprefix) + \
+                self.hamilton.getparamnames("get_e_xc", prefix=hprefix) + \
+                self._system.getparamnames("get_nuclei_energy", prefix=sprefix)
         elif methodname == "__dm2fock":
             hprefix = prefix + "hamilton."
             return self.hamilton.getparamnames("get_elrep", prefix=hprefix) + \

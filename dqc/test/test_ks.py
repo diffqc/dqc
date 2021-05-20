@@ -85,14 +85,17 @@ energies_df = {
 }
 
 @pytest.mark.parametrize(
-    "xc,atomzs,dist,energy_true,grid",
-    [("lda_x", *atomz_pos, energy, 3) for (atomz_pos, energy) in zip(atomzs_poss, energies["lda_x"])] + \
-    [("lda_x", *atomz_pos, energy, "sg2") for (atomz_pos, energy) in zip(atomzs_poss, energies["lda_x"])] + \
-    [("gga_x_pbe", *atomz_pos, energy, 3) for (atomz_pos, energy) in zip(atomzs_poss, energies["gga_x_pbe"])] + \
-    [("gga_x_pbe", *atomz_pos, energy, "sg2") for (atomz_pos, energy) in zip(atomzs_poss, energies["gga_x_pbe"])] + \
-    [("mgga_x_scan", *atzpos, ene, 4) for (atzpos, ene) in zip(atomzs_poss, energies["mgga_x_scan"])]
+    "xc,atomzs,dist,energy_true,grid,variational",
+    [("lda_x", *atzpos, ene, 3, False) for (atzpos, ene) in zip(atomzs_poss, energies["lda_x"])] + \
+    [("lda_x", *atzpos, ene, 3, True) for (atzpos, ene) in zip(atomzs_poss, energies["lda_x"])] + \
+    [("lda_x", *atzpos, ene, "sg2", False) for (atzpos, ene) in zip(atomzs_poss, energies["lda_x"])] + \
+    [("gga_x_pbe", *atzpos, ene, 3, False) for (atzpos, ene) in zip(atomzs_poss, energies["gga_x_pbe"])] + \
+    [("gga_x_pbe", *atzpos, ene, 3, True) for (atzpos, ene) in zip(atomzs_poss, energies["gga_x_pbe"])] + \
+    [("gga_x_pbe", *atzpos, ene, "sg2", False) for (atzpos, ene) in zip(atomzs_poss, energies["gga_x_pbe"])] + \
+    [("mgga_x_scan", *atzpos, ene, 4, False) for (atzpos, ene) in zip(atomzs_poss, energies["mgga_x_scan"])] + \
+    [("mgga_x_scan", *atzpos, ene, 4, True) for (atzpos, ene) in zip(atomzs_poss, energies["mgga_x_scan"])]
 )
-def test_rks_energy(xc, atomzs, dist, energy_true, grid):
+def test_rks_energy(xc, atomzs, dist, energy_true, grid, variational):
     # test to see if the energy calculated by DQC agrees with PySCF
     # for this test only we test for different types of grids to see if any error is raised
     if xc == "mgga_x_scan":
@@ -100,7 +103,7 @@ def test_rks_energy(xc, atomzs, dist, energy_true, grid):
             pytest.xfail("Psi4 and PySCF don't converge")
     poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist
     mol = Mol((atomzs, poss), basis="6-311++G**", dtype=dtype, grid=grid)
-    qc = KS(mol, xc=xc, restricted=True).run()
+    qc = KS(mol, xc=xc, restricted=True, variational=variational).run(fwd_options={"verbose": True})
     ene = qc.energy()
     # < 1 kcal/mol
     assert torch.allclose(ene, ene * 0 + energy_true, atol=1.3e-3, rtol=0)
