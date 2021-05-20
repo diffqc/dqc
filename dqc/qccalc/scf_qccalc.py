@@ -35,7 +35,6 @@ class SCF_QCCalc(BaseQCCalc):
         self._has_run = False
         self._variational = variational
 
-
     def get_system(self) -> BaseSystem:
         return self._engine.get_system()
 
@@ -129,15 +128,14 @@ class SCF_QCCalc(BaseQCCalc):
                 return params
 
             def params2dm(params: torch.Tensor) -> Union[torch.Tensor, SpinParam[torch.Tensor]]:
-                p = self._engine.unpack_aoparams(params)
+                p: Union[torch.Tensor, SpinParam[torch.Tensor]] = self._engine.unpack_aoparams(params)
                 dm = SpinParam.apply_fcn(
-                    lambda p, orb_weights: h.ao_orb_params2dm(p, orb_weights),
+                    lambda p, orb_weights: h.ao_orb_params2dm(p, orb_weights, with_penalty=None),
                     p, orb_weights)
                 return dm
 
             params0 = dm2params(dm).detach()
-            # with torch.no_grad():
-            min_params0: Union[torch.Tensor, SpinParam[torch.Tensor]] = xitorch.optimize.minimize(
+            min_params0: torch.Tensor = xitorch.optimize.minimize(
                 fcn=self._engine.aoparams2ene,
                 # random noise to add the chance of it gets to the minimum, not
                 # a saddle point

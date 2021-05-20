@@ -301,7 +301,7 @@ class HamiltonCGTO(BaseHamilton):
                          with_penalty: float) -> Union[torch.Tensor, torch.Tensor]:
         ...
 
-    def ao_orb_params2dm(self, ao_orb_params, orb_weight, with_penalty = None):
+    def ao_orb_params2dm(self, ao_orb_params, orb_weight, with_penalty=None):
         # convert from atomic orbital parameters to density matrix
         # the atomic orbital parameter is the inverse QR of the orbital
         # ao_orb_params: (*BD, nao, norb)
