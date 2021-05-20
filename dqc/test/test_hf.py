@@ -82,7 +82,7 @@ def test_rhf_grad_pos(atomzs, dist, grad2, variational):
     dist_tensor = torch.tensor(dist, dtype=dtype, requires_grad=True)
     if grad2:
         torch.autograd.gradgradcheck(get_energy, (dist_tensor,),
-                                     rtol=0e-2, atol=1e-5)
+                                     rtol=1e-2, atol=1e-5)
     else:
         if variational:
             torch.autograd.gradcheck(get_energy, (dist_tensor,), rtol=4e-3)
