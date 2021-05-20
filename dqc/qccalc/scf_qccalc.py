@@ -1,6 +1,6 @@
 from __future__ import annotations
 from abc import abstractmethod, abstractproperty
-from typing import Optional, Dict, Any, List, Union
+from typing import Optional, Dict, Any, List, Union, Tuple
 import torch
 import xitorch as xt
 import xitorch.linalg
