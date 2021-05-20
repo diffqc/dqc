@@ -64,4 +64,4 @@ jobs:
       with:
         file: ./coverage.xml # optional
         flags: unittests # optional
-        name: codecov-xitorch # optional
+        name: codecov-dqc # optional
