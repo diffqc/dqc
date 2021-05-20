@@ -235,13 +235,6 @@ class HamiltonCGTO(BaseHamilton):
         # orb_weight: (*BW, norb)
         # return: (*BOW, nao, nao)
 
-        # pad if orb weight is too short
-        if orb_weight.shape[-1] < orb.shape[-1]:
-            dnorb = orb.shape[-1] - orb_weight.shape[-1]
-            zeros = torch.zeros((*orb_weight.shape[:-1], dnorb), dtype=orb_weight.dtype,
-                                device=orb_weight.device)
-            orb_weight = torch.cat((orb_weight, zeros), dim=-1)
-
         orb_w = orb * orb_weight.unsqueeze(-2)  # (*BOW, nao, norb)
         return torch.matmul(orb, orb_w.transpose(-2, -1))  # (*BOW, nao, nao)
 
@@ -317,7 +310,7 @@ class HamiltonCGTO(BaseHamilton):
             # positive.
             s1 = torch.sign(ao_orbq.sum(dim=-2, keepdim=True))  # (*BD, 1, norb)
             s2 = torch.sign(ao_orb_params.sum(dim=-2, keepdim=True))
-            penalty = torch.sum((ao_orbq * s1 - ao_orb_params * s2) ** 2) * with_penalty
+            penalty = torch.mean((ao_orbq * s1 - ao_orb_params * s2) ** 2) * with_penalty
             return dm, penalty
 
     def dm2ao_orb_params(self, dm: torch.Tensor, norb: int) -> torch.Tensor:
