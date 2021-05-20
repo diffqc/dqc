@@ -198,9 +198,18 @@ class BaseHamilton(xt.EditableModule):
         pass
 
     ############### free parameters for variational method ###############
+    @overload
+    def ao_orb_params2dm(self, ao_orb_params: torch.Tensor, orb_weight: torch.Tensor,
+                         with_penalty: None) -> torch.Tensor:
+        ...
+
+    @overload
+    def ao_orb_params2dm(self, ao_orb_params: torch.Tensor, orb_weight: torch.Tensor,
+                         with_penalty: float) -> Union[torch.Tensor, torch.Tensor]:
+        ...
+
     @abstractmethod
-    def ao_orb_params2dm(self, ao_orb_params: torch.Tensor, orb_weight: torch.Tensor) -> \
-            torch.Tensor:
+    def ao_orb_params2dm(self, ao_orb_params, orb_weight, with_penalty=None):
         """
         Convert the atomic orbital free parameters (parametrized in such a way so
         it is not bounded) to the density matrix.
@@ -211,11 +220,23 @@ class BaseHamilton(xt.EditableModule):
             The tensors that parametrized atomic orbital in an unbounded space.
         orb_weight: torch.Tensor
             The orbital weights.
+        with_penalty: float or None
+            If a float, it returns a tuple of tensors where the first element is
+            ``dm``, and the second element is the penalty multiplied by the penalty weights.
+            The penalty is to compensate the overparameterization of ``ao_orb_params``,
+            stabilizing the Hessian for gradient calculation.
 
         Returns
         -------
-        torch.Tensor
-            The density matrix from the orbital parameters.
+        torch.Tensor or tuple of torch.Tensor
+            The density matrix from the orbital parameters and (if ``with_penalty``)
+            the penalty of the overparameterization of ``ao_orb_params``.
+
+        Notes
+        -----
+        * The penalty should be 0 if ``ao_orb_params`` is from ``dm2ao_orb_params``.
+        * The density matrix should be recoverable when put through ``dm2ao_orb_params``
+          and ``ao_orb_params2dm``.
         """
         pass
 

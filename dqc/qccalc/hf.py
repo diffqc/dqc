@@ -117,14 +117,24 @@ class _HFEngine(BaseSCFEngine):
         dm = self.scp2dm(scp)
         return self.dm2scp(dm)
 
-    def aoparams2ene(self, aoparams: torch.Tensor) -> torch.Tensor:
+    def aoparams2ene(self, aoparams: torch.Tensor, with_penalty: Optional[float] = None) -> torch.Tensor:
         # calculate the energy from the atomic orbital params
         aop = self.unpack_aoparams(aoparams)  # tensor or SpinParam of tensor
-        dm = SpinParam.apply_fcn(
-            lambda aop, orb_weight: _symm(self._hamilton.ao_orb_params2dm(aop, orb_weight)),
+        dm_penalty = SpinParam.apply_fcn(
+            lambda aop, orb_weight: self._hamilton.ao_orb_params2dm(aop, orb_weight, with_penalty=with_penalty),
             aop, self._orb_weight
         )
-        return self.dm2energy(dm)
+        if with_penalty is not None:
+            dm = SpinParam.apply_fcn(lambda dm_penalty: dm_penalty[0], dm_penalty)
+            penalty = SpinParam.apply_fcn(lambda dm_penalty: dm_penalty[1], dm_penalty)
+        else:
+            dm = dm_penalty
+        ene = self.dm2energy(dm)
+        if with_penalty:
+            loss = ene + SpinParam.sum(penalty)
+        else:
+            loss = ene
+        return loss
 
     def pack_aoparams(self, aoparams: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
         # if polarized, then pack it by concatenating them in the last dimension

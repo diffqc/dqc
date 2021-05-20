@@ -120,26 +120,51 @@ class SCF_QCCalc(BaseQCCalc):
             h = system.get_hamiltonian()
             orb_weights = system.get_orbweight(polarized=self._polarized)
             norb = SpinParam.apply_fcn(lambda orb_weights: len(orb_weights), orb_weights)
-            norb_max = SpinParam.reduce(norb, max)
-            p0 = SpinParam.apply_fcn(
-                lambda dm: h.dm2ao_orb_params(SpinParam.sum(dm), norb=norb_max),
-                dm)
 
-            # concatenate the parameters if it is polarized
-            params0 = self._engine.pack_aoparams(p0)
+            def dm2params(dm: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
+                p = SpinParam.apply_fcn(
+                    lambda dm, norb: h.dm2ao_orb_params(SpinParam.sum(dm), norb=norb),
+                    dm, norb)
+                params = self._engine.pack_aoparams(p)
+                return params
+
+            def params2dm(params: torch.Tensor) -> Union[torch.Tensor, SpinParam[torch.Tensor]]:
+                p = self._engine.unpack_aoparams(params)
+                dm = SpinParam.apply_fcn(
+                    lambda p, orb_weights: h.ao_orb_params2dm(p, orb_weights),
+                    p, orb_weights)
+                return dm
+
+            params0 = dm2params(dm).detach()
+            # with torch.no_grad():
             min_params0: Union[torch.Tensor, SpinParam[torch.Tensor]] = xitorch.optimize.minimize(
                 fcn=self._engine.aoparams2ene,
                 # random noise to add the chance of it gets to the minimum, not
                 # a saddle point
                 y0=params0 + torch.randn_like(params0) * 0.01 / params0.numel(),
+                params=(None,),  # with_penalty
                 bck_options={**bck_options},
-                **fwd_options)
+                **fwd_options).detach()
 
-            min_p0 = self._engine.unpack_aoparams(min_params0)
+            if torch.is_grad_enabled():
+                # If the gradient is required, then put it through the minimization
+                # one more time with penalty on the parameters.
+                # The penalty is to keep the Hamiltonian invertible, stabilizing
+                # inverse.
+                # Without the penalty, the Hamiltonian could have 0 eigenvalues
+                # because of the overparameterization of the aoparams.
+                min_dm = params2dm(min_params0)
+                params0 = dm2params(min_dm)
+                min_params0 = xitorch.optimize.minimize(
+                    fcn=self._engine.aoparams2ene,
+                    y0=params0,
+                    params=(1e0,),  # with_penalty
+                    bck_options={**bck_options},
+                    method="gd",
+                    step=0,
+                    maxiter=0)
 
-            self._dm = SpinParam.apply_fcn(
-                lambda min_p0, orb_weights: h.ao_orb_params2dm(min_p0, orb_weights),
-                min_p0, orb_weights)
+            self._dm = params2dm(min_params0)
 
         self._has_run = True
         return self
@@ -240,7 +265,7 @@ class BaseSCFEngine(xt.EditableModule):
         pass
 
     @abstractmethod
-    def aoparams2ene(self, aoparams: torch.Tensor) -> torch.Tensor:
+    def aoparams2ene(self, aoparams: torch.Tensor, with_penalty: Optional[float] = None) -> torch.Tensor:
         """
         Calculate the energy from the given atomic orbital parameters.
         """

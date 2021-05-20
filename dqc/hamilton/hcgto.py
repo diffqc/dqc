@@ -291,14 +291,34 @@ class HamiltonCGTO(BaseHamilton):
         return torch.sum(self.grid.get_dvolume() * edens, dim=-1)
 
     ############### free parameters for variational method ###############
-    def ao_orb_params2dm(self, ao_orb_params: torch.Tensor, orb_weight: torch.Tensor) -> \
-            torch.Tensor:
+    @overload
+    def ao_orb_params2dm(self, ao_orb_params: torch.Tensor, orb_weight: torch.Tensor,
+                         with_penalty: None) -> torch.Tensor:
+        ...
+
+    @overload
+    def ao_orb_params2dm(self, ao_orb_params: torch.Tensor, orb_weight: torch.Tensor,
+                         with_penalty: float) -> Union[torch.Tensor, torch.Tensor]:
+        ...
+
+    def ao_orb_params2dm(self, ao_orb_params, orb_weight, with_penalty = None):
         # convert from atomic orbital parameters to density matrix
         # the atomic orbital parameter is the inverse QR of the orbital
         # ao_orb_params: (*BD, nao, norb)
-        ao_orbq, _ = torch.linalg.qr(ao_orb_params)
+        ao_orbq, _ = torch.linalg.qr(ao_orb_params)  # (*BD, nao, norb)
         ao_orb = self._inv_ovlp_sqrt @ ao_orbq
-        return self.ao_orb2dm(ao_orb, orb_weight)
+        dm = self.ao_orb2dm(ao_orb, orb_weight)
+        if with_penalty is None:
+            return dm
+        else:
+            # QR decomposition's solution is not unique in a way that every column
+            # can be multiplied by -1 and it still a solution
+            # So, to remove the non-uniqueness, we will make the sign of the sum
+            # positive.
+            s1 = torch.sign(ao_orbq.sum(dim=-2, keepdim=True))  # (*BD, 1, norb)
+            s2 = torch.sign(ao_orb_params.sum(dim=-2, keepdim=True))
+            penalty = torch.sum((ao_orbq * s1 - ao_orb_params * s2) ** 2) * with_penalty
+            return dm, penalty
 
     def dm2ao_orb_params(self, dm: torch.Tensor, norb: int) -> torch.Tensor:
         # convert back the density matrix to one solution in the parameters space

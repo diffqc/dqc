@@ -38,6 +38,7 @@ energies = [
 )
 def test_rhf_energy(atomzs, dist, energy_true, variational):
     # test to see if the energy calculated by DQC agrees with PySCF
+    torch.manual_seed(123)
 
     # only set debugging mode only in one case to save time
     if atomzs == [1, 1]:
@@ -65,7 +66,6 @@ def test_rhf_grad_pos(atomzs, dist, grad2, variational):
     bck_options = None if (not grad2 and not variational) else {
         "rtol": 1e-10,
         "atol": 1e-10,
-        "method": "bicgstab",
     }
     fwd_options = None if not variational else {
         "f_rtol": 1e-15,
@@ -160,12 +160,11 @@ def test_uhf_energy_same_as_rhf(atomzs, dist, energy_true, variational):
 )
 def test_uhf_energy_atoms(atomz, spin, energy_true, variational):
     # check the energy of atoms with non-0 spins
+    torch.manual_seed(123)
     poss = torch.tensor([[0.0, 0.0, 0.0]], dtype=dtype)
     mol = Mol(([atomz], poss), basis=basis, dtype=dtype, spin=spin)
     qc = HF(mol, restricted=False, variational=variational).run()
     ene = qc.energy()
-    from dqc.api import is_orb_min
-    print("%.14e" % ene, is_orb_min(qc))
     assert torch.allclose(ene, ene * 0 + energy_true, atol=0.0, rtol=1e-7)
 
 @pytest.mark.parametrize(
@@ -178,6 +177,7 @@ def test_uhf_energy_atoms(atomz, spin, energy_true, variational):
 def test_uhf_energy_mols(atomzs, dist, spin, energy_true, variational):
     # check the energy of molecules with non-0 spins
     # NOTE: O2 iteration gets into excited state (probably)
+    torch.manual_seed(123)
     poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist
     mol = Mol((atomzs, poss), basis=basis, dtype=dtype, spin=spin)
     qc = HF(mol, restricted=False, variational=variational).run()

@@ -172,8 +172,9 @@ def test_cgto_ao_params(system1):
 
     # regenerate dm
     ao_params = h.dm2ao_orb_params(dm, norb=len(orb_weights))
-    dm2 = h.ao_orb_params2dm(ao_params, orb_weights)
+    dm2, penalty = h.ao_orb_params2dm(ao_params, orb_weights, with_penalty=1.0)
     assert torch.allclose(dm, dm2)
+    assert torch.allclose(penalty, torch.zeros_like(penalty))
 
 def test_pbc_cgto_nuclattr(pbc_h1):
     import numpy as np
