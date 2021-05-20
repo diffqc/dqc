@@ -136,10 +136,19 @@ class Mol(BaseSystem):
 
         # orb_weights is specified, so calculate the spin and charge from it
         else:
-            assert isinstance(orb_weights, SpinParam)
+            if not isinstance(orb_weights, SpinParam):
+                raise TypeError("Specifying orb_weights must be in SpinParam type")
             assert orb_weights.u.ndim == 1
             assert orb_weights.d.ndim == 1
             assert len(orb_weights.u) == len(orb_weights.d)
+
+            # check if it is decreasing
+            orb_u_dec = torch.all(orb_weights.u[:-1] - orb_weights.u[1:] > -1e-4)
+            orb_d_dec = torch.all(orb_weights.d[:-1] - orb_weights.d[1:] > -1e-4)
+            if not (orb_u_dec and orb_d_dec):
+                # if not decreasing, the variational might give the wrong results
+                warnings.warn("The orbitals should be ordered in a non-increasing manner. "
+                              "Otherwise, some calculations might be wrong.")
 
             utot = orb_weights.u.sum()
             dtot = orb_weights.d.sum()

@@ -156,6 +156,25 @@ def test_cgto_vext(system1):
     a = hamilton1.get_vext(vext).fullmatrix()
     assert torch.allclose(torch.diagonal(a), torch.tensor(w, dtype=dtype))
 
+def test_cgto_ao_params(system1):
+    # check if dm2ao_orb_params and ao_orb_params2dm returns to the same dm
+    m = system1
+    h = m.get_hamiltonian()
+
+    orb_weights = torch.tensor([2.0, 1.0], dtype=dtype)
+    # TODO: test with orb_weights that are not ordered in a decreasing manner
+    nao = h.nao
+    norb = len(orb_weights)
+
+    # generating density matrix that fulfills the requirements
+    ao_params0 = torch.randn((nao, norb), dtype=dtype)
+    dm = h.ao_orb_params2dm(ao_params0, orb_weights)
+
+    # regenerate dm
+    ao_params = h.dm2ao_orb_params(dm, norb=len(orb_weights))
+    dm2 = h.ao_orb_params2dm(ao_params, orb_weights)
+    assert torch.allclose(dm, dm2)
+
 def test_pbc_cgto_nuclattr(pbc_h1):
     import numpy as np
     # nuc = pbc_h1.get_nuc()

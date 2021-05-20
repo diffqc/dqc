@@ -302,8 +302,10 @@ class HamiltonCGTO(BaseHamilton):
 
     def dm2ao_orb_params(self, dm: torch.Tensor, norb: int) -> torch.Tensor:
         # convert back the density matrix to one solution in the parameters space
+        # NOTE: this assumes that the orbital weights always decreasing in order
         mdmm = self._ovlp_sqrt @ dm @ self._ovlp_sqrt
         w, orbq = torch.linalg.eigh(mdmm)
+        # w is ordered increasingly, so we take the last parts
         orbq_params = orbq[..., -norb:]  # (nao, norb)
         return torch.flip(orbq_params, dims=(-1,))
 
