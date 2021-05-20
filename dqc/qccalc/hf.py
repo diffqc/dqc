@@ -119,13 +119,26 @@ class _HFEngine(BaseSCFEngine):
 
     def aoparams2ene(self, aoparams: torch.Tensor) -> torch.Tensor:
         # calculate the energy from the atomic orbital params
-        if isinstance(self._orb_weight, SpinParam):
-            dm_u = _symm(self._hamilton.ao_orb_params2dm(aoparams, self._orb_weight.u))
-            dm_d = _symm(self._hamilton.ao_orb_params2dm(aoparams, self._orb_weight.d))
-            dm = SpinParam(u=dm_u, d=dm_d)
-        else:
-            dm = _symm(self._hamilton.ao_orb_params2dm(aoparams, self._orb_weight))
+        aop = self.unpack_aoparams(aoparams)  # tensor or SpinParam of tensor
+        dm = SpinParam.apply_fcn(
+            lambda aop, orb_weight: _symm(self._hamilton.ao_orb_params2dm(aop, orb_weight)),
+            aop, self._orb_weight
+        )
         return self.dm2energy(dm)
+
+    def pack_aoparams(self, aoparams: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
+        # if polarized, then pack it by concatenating them in the last dimension
+        if isinstance(aoparams, SpinParam):
+            return torch.cat((aoparams.u, aoparams.d), dim=-1)
+        else:
+            return aoparams
+
+    def unpack_aoparams(self, aoparams: torch.Tensor) -> Union[torch.Tensor, SpinParam[torch.Tensor]]:
+        # if polarized, then construct the SpinParam (reverting the pack_aoparams)
+        if isinstance(self._norb, SpinParam):
+            return SpinParam(u=aoparams[..., :self._norb.u], d=aoparams[..., self._norb.u:])
+        else:
+            return aoparams
 
     def set_eigen_options(self, eigen_options: Dict[str, Any]) -> None:
         # set the eigendecomposition (diagonalization) option

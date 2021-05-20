@@ -155,7 +155,7 @@ def test_uhf_energy_same_as_rhf(atomzs, dist, energy_true, variational):
 
 @pytest.mark.parametrize(
     "atomz,spin,energy_true,variational",
-    # [(atomz, spin, energy, True) for ((atomz, spin), energy) in zip(u_atomzs_spins, u_atom_energies)] + \
+    [(atomz, spin, energy, True) for ((atomz, spin), energy) in zip(u_atomzs_spins, u_atom_energies)] + \
     [(atomz, spin, energy, False) for ((atomz, spin), energy) in zip(u_atomzs_spins, u_atom_energies)]
 )
 def test_uhf_energy_atoms(atomz, spin, energy_true, variational):
@@ -170,8 +170,8 @@ def test_uhf_energy_atoms(atomz, spin, energy_true, variational):
 
 @pytest.mark.parametrize(
     "atomzs,dist,spin,energy_true,variational",
-    # [(atomzs, dist, spin, energy, True) for ((atomzs, dist, spin), energy)
-    #     in zip(u_mols_dists_spins, u_mols_energies)] + \
+    [(atomzs, dist, spin, energy, True) for ((atomzs, dist, spin), energy)
+        in zip(u_mols_dists_spins, u_mols_energies)] + \
     [(atomzs, dist, spin, energy, False) for ((atomzs, dist, spin), energy)
         in zip(u_mols_dists_spins, u_mols_energies)]
 )

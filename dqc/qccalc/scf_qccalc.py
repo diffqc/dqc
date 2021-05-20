@@ -35,8 +35,6 @@ class SCF_QCCalc(BaseQCCalc):
         self._has_run = False
         self._variational = variational
 
-        if self._polarized and self._variational:
-            raise RuntimeError("Unrestricted and variational is not implemented")
 
     def get_system(self) -> BaseSystem:
         return self._engine.get_system()
@@ -123,9 +121,13 @@ class SCF_QCCalc(BaseQCCalc):
             orb_weights = system.get_orbweight(polarized=self._polarized)
             norb = SpinParam.apply_fcn(lambda orb_weights: len(orb_weights), orb_weights)
             norb_max = SpinParam.reduce(norb, max)
-            params0 = h.dm2ao_orb_params(SpinParam.sum(dm), norb=norb_max)
+            p0 = SpinParam.apply_fcn(
+                lambda dm: h.dm2ao_orb_params(SpinParam.sum(dm), norb=norb_max),
+                dm)
 
-            min_params0 = xitorch.optimize.minimize(
+            # concatenate the parameters if it is polarized
+            params0 = self._engine.pack_aoparams(p0)
+            min_params0: Union[torch.Tensor, SpinParam[torch.Tensor]] = xitorch.optimize.minimize(
                 fcn=self._engine.aoparams2ene,
                 # random noise to add the chance of it gets to the minimum, not
                 # a saddle point
@@ -133,9 +135,11 @@ class SCF_QCCalc(BaseQCCalc):
                 bck_options={**bck_options},
                 **fwd_options)
 
+            min_p0 = self._engine.unpack_aoparams(min_params0)
+
             self._dm = SpinParam.apply_fcn(
-                lambda orb_weights: h.ao_orb_params2dm(min_params0, orb_weights),
-                orb_weights)
+                lambda min_p0, orb_weights: h.ao_orb_params2dm(min_p0, orb_weights),
+                min_p0, orb_weights)
 
         self._has_run = True
         return self
@@ -239,6 +243,20 @@ class BaseSCFEngine(xt.EditableModule):
     def aoparams2ene(self, aoparams: torch.Tensor) -> torch.Tensor:
         """
         Calculate the energy from the given atomic orbital parameters.
+        """
+        pass
+
+    @abstractmethod
+    def pack_aoparams(self, aoparams: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
+        """
+        Pack the ao params into a single tensor.
+        """
+        pass
+
+    @abstractmethod
+    def unpack_aoparams(self, aoparams: torch.Tensor) -> Union[torch.Tensor, SpinParam[torch.Tensor]]:
+        """
+        Unpack the ao params into a tensor or SpinParam of tensor.
         """
         pass
 
