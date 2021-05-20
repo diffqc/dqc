@@ -156,7 +156,7 @@ class SCF_QCCalc(BaseQCCalc):
                 min_params0 = xitorch.optimize.minimize(
                     fcn=self._engine.aoparams2ene,
                     y0=params0,
-                    params=(1e0,),  # with_penalty
+                    params=(1e-1,),  # with_penalty
                     bck_options={**bck_options},
                     method="gd",
                     step=0,
