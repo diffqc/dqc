@@ -253,6 +253,10 @@ class _HFEngine(BaseSCFEngine):
             return self.getparamnames("dm2energy", prefix=prefix) + \
                 self._hamilton.getparamnames("ao_orb_params2dm", prefix=prefix + "_hamilton.") + \
                 params
+        elif methodname == "pack_aoparams":
+            return []
+        elif methodname == "unpack_aoparams":
+            return []
         elif methodname == "dm2energy":
             hprefix = prefix + "_hamilton."
             sprefix = prefix + "_system."
