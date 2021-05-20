@@ -270,6 +270,14 @@ class BaseSCFEngine(xt.EditableModule):
         pass
 
     @abstractmethod
+    def aoparams2dm(self, aoparams: torch.Tensor, with_penalty: Optional[float] = None) -> \
+            Tuple[Union[torch.Tensor, SpinParam[torch.Tensor]], Optional[torch.Tensor]]:
+        """
+        Calculate the density matrix and the penalty from the given atomic orbital parameters.
+        """
+        pass
+
+    @abstractmethod
     def pack_aoparams(self, aoparams: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
         """
         Pack the ao params into a single tensor.

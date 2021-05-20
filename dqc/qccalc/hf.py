@@ -119,6 +119,13 @@ class _HFEngine(BaseSCFEngine):
 
     def aoparams2ene(self, aoparams: torch.Tensor, with_penalty: Optional[float] = None) -> torch.Tensor:
         # calculate the energy from the atomic orbital params
+        dm, penalty = self.aoparams2dm(aoparams, with_penalty)
+        ene = self.dm2energy(dm)
+        return (ene + penalty) if penalty is not None else ene
+
+    def aoparams2dm(self, aoparams: torch.Tensor, with_penalty: Optional[float] = None) -> \
+            Tuple[Union[torch.Tensor, SpinParam[torch.Tensor]], Optional[torch.Tensor]]:
+        # convert the aoparams to density matrix and penalty factor
         aop = self.unpack_aoparams(aoparams)  # tensor or SpinParam of tensor
         dm_penalty = SpinParam.apply_fcn(
             lambda aop, orb_weight: self._hamilton.ao_orb_params2dm(aop, orb_weight, with_penalty=with_penalty),
@@ -126,15 +133,12 @@ class _HFEngine(BaseSCFEngine):
         )
         if with_penalty is not None:
             dm = SpinParam.apply_fcn(lambda dm_penalty: dm_penalty[0], dm_penalty)
-            penalty = SpinParam.apply_fcn(lambda dm_penalty: dm_penalty[1], dm_penalty)
+            penalty: Optional[torch.Tensor] = SpinParam.sum(
+                SpinParam.apply_fcn(lambda dm_penalty: dm_penalty[1], dm_penalty))
         else:
             dm = dm_penalty
-        ene = self.dm2energy(dm)
-        if with_penalty:
-            loss = ene + SpinParam.sum(penalty)
-        else:
-            loss = ene
-        return loss
+            penalty = None
+        return dm, penalty
 
     def pack_aoparams(self, aoparams: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
         # if polarized, then pack it by concatenating them in the last dimension
@@ -246,13 +250,15 @@ class _HFEngine(BaseSCFEngine):
         elif methodname == "dm2scp":
             return self.getparamnames("__dm2fock", prefix=prefix)
         elif methodname == "aoparams2ene":
+            return self.getparamnames("aoparams2dm", prefix=prefix) + \
+                self.getparamnames("dm2energy", prefix=prefix)
+        elif methodname == "aoparams2dm":
             if isinstance(self._orb_weight, SpinParam):
                 params = [prefix + "_orb_weight.u", prefix + "_orb_weight.d"]
             else:
                 params = [prefix + "_orb_weight"]
-            return self.getparamnames("dm2energy", prefix=prefix) + \
-                self._hamilton.getparamnames("ao_orb_params2dm", prefix=prefix + "_hamilton.") + \
-                params
+            return params + \
+                self._hamilton.getparamnames("ao_orb_params2dm", prefix=prefix + "_hamilton.")
         elif methodname == "pack_aoparams":
             return []
         elif methodname == "unpack_aoparams":
