@@ -20,7 +20,7 @@ setup(
     author_email='firman.kasim@gmail.com',
     license='Apache License 2.0',
     packages=find_packages(),
-    python_requires=">=3.6",
+    python_requires=">=3.7",
     install_requires=[
         "numpy>=1.8.2",
         "scipy>=0.15",
