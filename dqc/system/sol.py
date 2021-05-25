@@ -7,12 +7,13 @@ from dqc.hamilton.hcgto_pbc import HamiltonCGTO_PBC
 from dqc.system.base_system import BaseSystem
 from dqc.grid.base_grid import BaseGrid
 from dqc.grid.factory import get_predefined_grid
-from dqc.system.mol import _parse_moldesc, _parse_basis, _get_nelecs_spin, \
-                           _get_orb_weights, _normalize_diffparams, AtomZsType, AtomPosType
+from dqc.system.mol import _parse_basis, _get_nelecs_spin, \
+                           _get_orb_weights, AtomZsType, AtomPosType
 from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, ZType, BasisInpType, \
                                  SpinParam, DensityFitInfo
 from dqc.utils.safeops import safe_cdist
 from dqc.utils.periodictable import get_atom_mass
+from dqc.api.parser import parse_moldesc
 from dqc.hamilton.intor.lattice import Lattice
 from dqc.hamilton.intor.pbcintor import PBCIntOption
 from dqc.utils.cache import Cache
@@ -50,9 +51,6 @@ class Sol(BaseSystem):
     * orb_weights: SpinParam[torch.Tensor] or None
         Specifiying the orbital occupancy (or weights) directly. If specified,
         ``spin`` and ``charge`` arguments are ignored.
-    * diffparams: Union[str, List[str], None]
-        List of parameters that is required to be differentiable.
-        The parameter names that can be forced are: ``["atompos"]``
     * dtype: torch.dtype
         The data type of tensors in this class.
         Default: torch.float64
@@ -69,7 +67,6 @@ class Sol(BaseSystem):
                  grid: Union[int, str] = "sg3",
                  spin: Optional[ZType] = None,
                  lattsum_opt: Optional[Union[PBCIntOption, Dict]] = None,
-                 diffparams: Union[str, List[str], None] = [],
                  dtype: torch.dtype = torch.float64,
                  device: torch.device = torch.device('cpu'),
                  ):
@@ -79,16 +76,10 @@ class Sol(BaseSystem):
         self._grid: Optional[BaseGrid] = None
         charge = 0  # we can't have charged solids for now
 
-        # set up the diff params
-        accepted_diffparams = set(["atompos"])
-        self._diffparams = _normalize_diffparams(diffparams, accepted_diffparams)
-
         # get the AtomCGTOBasis & the hamiltonian
         # atomzs: (natoms,) dtype: torch.int or dtype for floating point
         # atompos: (natoms, ndim)
-        atomzs, atompos = _parse_moldesc(
-            soldesc, dtype, device,
-            pos_force_grad="atompos" in self._diffparams)
+        atomzs, atompos = parse_moldesc(soldesc, dtype, device)
         allbases = _parse_basis(atomzs, basis)  # list of list of CGTOBasis
         atombases = [AtomCGTOBasis(atomz=atz, bases=bas, pos=atpos)
                      for (atz, bas, atpos) in zip(atomzs, allbases, atompos)]
