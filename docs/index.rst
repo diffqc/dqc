@@ -23,7 +23,7 @@ DQC's example API:
     >>> mol = dqc.Mol((atomzs, atomposs), basis="3-21G")
     >>> qc = dqc.HF(mol).run()
     >>> ene = qc.energy()  # calculate the energy
-    >>> force = -torch.autograd.grad(ene, mol.atompos)[0]  # calculate the force
+    >>> force = -torch.autograd.grad(ene, atomposs)[0]  # calculate the force
 
 .. toctree::
    :maxdepth: 1
@@ -31,6 +31,7 @@ DQC's example API:
 
    getstart/installation
    getstart/contribute
+   getstart/tutorials
 
 .. toctree::
    :maxdepth: 1
@@ -38,8 +39,15 @@ DQC's example API:
 
    api/dqc_system/index
    api/dqc_qccalc/index
-   api/dqc_hamilton/index
    api/dqc_api/index
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Submodules
+
+   api/dqc_hamilton/index
+   api/dqc_xc/index
+   api/dqc_utils/index
 
 
 Indices and tables

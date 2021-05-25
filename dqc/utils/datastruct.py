@@ -77,6 +77,9 @@ class DensityFitInfo:
 
 @dataclass
 class SpinParam(Generic[T]):
+    """
+    Data structure to store different values for spin-up and spin-down electrons.
+    """
     u: T
     d: T
 
@@ -117,6 +120,9 @@ class SpinParam(Generic[T]):
 
 @dataclass
 class ValGrad:
+    """
+    Data structure that contains local information about density profiles.
+    """
     # data structure used as a umbrella class for density profiles and
     # the derivative of the potential w.r.t. density profiles
 

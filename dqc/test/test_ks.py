@@ -5,7 +5,7 @@ import pytest
 from dqc.qccalc.ks import KS
 from dqc.system.mol import Mol
 from dqc.system.sol import Sol
-from dqc.xc.base_xc import BaseXC
+from dqc.xc.custom_xc import CustomXC
 from dqc.utils.safeops import safepow, safenorm
 from dqc.utils.datastruct import ValGrad, CGTOBasis
 from dqc.utils.config import config
@@ -175,8 +175,9 @@ def test_rks_grad_vext(xc, atomzs, dist, vext_p):
     vext_params = torch.tensor(vext_p, dtype=dtype).requires_grad_()
     torch.autograd.gradcheck(get_energy, (vext_params,))
 
-class PseudoLDA(BaseXC):
+class PseudoLDA(CustomXC):
     def __init__(self, a, p):
+        super().__init__()
         self.a = a
         self.p = p
 
@@ -191,11 +192,9 @@ class PseudoLDA(BaseXC):
         else:
             return 0.5 * (self.get_edensityxc(densinfo.u * 2) + self.get_edensityxc(densinfo.d * 2))
 
-    def getparamnames(self, methodname, prefix=""):
-        return [prefix + "a", prefix + "p"]
-
-class PseudoPBE(BaseXC):
+class PseudoPBE(CustomXC):
     def __init__(self, kappa, mu):
+        super().__init__()
         self.kappa = kappa
         self.mu = mu
 
@@ -214,9 +213,6 @@ class PseudoPBE(BaseXC):
             return fx * e_unif
         else:
             return 0.5 * (self.get_edensityxc(densinfo.u * 2) + self.get_edensityxc(densinfo.d * 2))
-
-    def getparamnames(self, methodname, prefix=""):
-        return [prefix + "kappa", prefix + "mu"]
 
 @pytest.mark.parametrize(
     "xccls,xcparams,atomzs,dist",
@@ -237,7 +233,7 @@ def test_rks_grad_vxc(xccls, xcparams, atomzs, dist):
         ene = qc.energy()
         return ene
 
-    params = tuple(torch.tensor(p, dtype=dtype).requires_grad_() for p in xcparams)
+    params = tuple(torch.nn.Parameter(torch.tensor(p, dtype=dtype).requires_grad_()) for p in xcparams)
     torch.autograd.gradcheck(get_energy, params)
 
 ############### Unrestricted Kohn-Sham ###############
@@ -376,7 +372,7 @@ def test_uks_grad_vxc(xccls, xcparams, atomz):
         ene = qc.energy()
         return ene
 
-    params = tuple(torch.tensor(p, dtype=dtype).requires_grad_() for p in xcparams)
+    params = tuple(torch.nn.Parameter(torch.tensor(p, dtype=dtype).requires_grad_()) for p in xcparams)
     torch.autograd.gradcheck(get_energy, params)
 
 ############## density fit ##############

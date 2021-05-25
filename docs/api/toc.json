@@ -1,5 +1,5 @@
 {
-  "Systems": {
+  "Systems (dqc)": {
     "module": "dqc.system",
     "prefix": "dqc",
     "desc": "physical systems",
@@ -8,7 +8,7 @@
       "Sol": "periodic boundary system"
     }
   },
-  "QCCalc": {
+  "QCCalc (dqc)": {
     "module": "dqc.qccalc",
     "prefix": "dqc",
     "desc": "quantum chemistry calculations",
@@ -17,19 +17,36 @@
       "KS": "Kohn-Sham"
     }
   },
-  "Utils": {
+  "Other APIs (dqc)": {
     "module": "dqc.api",
     "prefix": "dqc",
     "desc": "utilities API",
     "api": "allfuncs"
   },
-  "Hamilton": {
+  "Hamilton (dqc.hamilton)": {
     "module": "dqc.hamilton",
     "prefix": "dqc.hamilton",
     "desc": "Hamiltonian objects",
     "api": {
       "HamiltonCGTO": "",
       "HamiltonCGTO_PBC": ""
+    }
+  },
+  "XC (dqc.xc)": {
+    "module": "dqc.xc",
+    "prefix": "dqc.xc",
+    "desc": "Custom xc functionals",
+    "api": {
+      "CustomXC": ""
+    }
+  },
+  "Data structures (dqc.utils)": {
+    "module": "dqc.utils",
+    "prefix": "dqc.utils",
+    "desc": "Data structures",
+    "api": {
+      "SpinParam": "",
+      "ValGrad": ""
     }
   }
 }
