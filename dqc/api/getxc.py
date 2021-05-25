@@ -7,7 +7,7 @@ except (ImportError, ModuleNotFoundError) as e:
 from dqc.xc.base_xc import BaseXC
 from dqc.xc.libxc import LibXCLDA, LibXCGGA, LibXCMGGA
 
-__all__ = ["get_libxc", "get_xc"]
+__all__ = ["get_xc"]
 
 def get_libxc(name: str) -> BaseXC:
     """
@@ -42,7 +42,7 @@ def get_xc(xcstr: str) -> BaseXC:
     Arguments
     ---------
     xcstr: str
-        The expression of the xc string, e.g. "lda_x + gga_c_pbe" where the
+        The expression of the xc string, e.g. ``"lda_x + gga_c_pbe"`` where the
         variable name will be replaced by the LibXC object
 
     Returns

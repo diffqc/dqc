@@ -1,7 +1,7 @@
 {
   "Systems": {
     "module": "dqc.system",
-    "prefix": "dqc.",
+    "prefix": "dqc",
     "desc": "physical systems",
     "api": {
       "Mol": "isolated molecules",
@@ -10,7 +10,7 @@
   },
   "QCCalc": {
     "module": "dqc.qccalc",
-    "prefix": "dqc.",
+    "prefix": "dqc",
     "desc": "quantum chemistry calculations",
     "api": {
       "HF": "Hartree-Fock",
@@ -19,8 +19,17 @@
   },
   "Utils": {
     "module": "dqc.api",
-    "prefix": "dqc.",
+    "prefix": "dqc",
     "desc": "utilities API",
     "api": "allfuncs"
+  },
+  "Hamilton": {
+    "module": "dqc.hamilton",
+    "prefix": "dqc.hamilton",
+    "desc": "Hamiltonian objects",
+    "api": {
+      "HamiltonCGTO": "",
+      "HamiltonCGTO_PBC": ""
+    }
   }
 }

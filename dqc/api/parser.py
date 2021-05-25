@@ -24,7 +24,7 @@ def parse_moldesc(moldesc: Union[str, Tuple[AtomZsType, AtomPosType]],
 
     Returns
     -------
-    tuple of tensors
+    tuple of 2 tensors
         The first element is the tensor of atomz, and the second element is the
         tensor of atomic positions.
     """

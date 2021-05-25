@@ -24,46 +24,41 @@ class Mol(BaseSystem):
 
     Arguments
     ---------
-    * moldesc: str or 2-elements tuple (atomzs, atompos)
+    * moldesc: str or 2-elements tuple
         Description of the molecule system.
         If string, it can be described like ``"H 1 0 0; H -1 0 0"``.
         If tuple, the first element of the tuple is the Z number of the atoms while
-        the second element is the position of the atoms.
-    * basis: str, CGTOBasis or list of str or CGTOBasis
+        the second element is the position of the atoms: ``(atomzs, atomposs)``.
+    * basis: str, CGTOBasis, list of str, or CGTOBasis
         The string describing the gto basis. If it is a list, then it must have
         the same length as the number of atoms.
     * grid: int
         Describe the grid.
         If it is an integer, then it uses the default grid with specified level
         of accuracy.
-        Default: 3
     * spin: int, float, torch.Tensor, or None
         The difference between spin-up and spin-down electrons.
-        It must be an integer or None.
-        If None, then it is ``num_electrons % 2``.
+        It must be an integer or ``None``.
+        If ``None``, then it is ``num_electrons % 2``.
         For floating point atomzs and/or charge, the ``spin`` must be specified.
-        Default: None
     * charge: int, float, or torch.Tensor
         The charge of the molecule.
-        Default: 0
     * orb_weights: SpinParam[torch.Tensor] or None
         Specifiying the orbital occupancy (or weights) directly. If specified,
         ``spin`` and ``charge`` arguments are ignored.
-    * efield: Union[torch.Tensor, Tuple[torch.Tensor, ...], None]
+    * efield: tensor, tuple of tensor, or None
         Uniform electric field of the system. If a tensor, then it is assumed
         to be a constant electric field with the energy is
-        calculated based on potential at (0, 0, 0) = 0.
-        If a tuple of tensor, then the first element will have a shape of (ndim,)
+        calculated based on potential at ``(0, 0, 0)`` is ``0``.
+        If a tuple of tensor, then the first element will have a shape of ``(ndim,)``
         representing the constant electric field, second element is the gradient
         of electric field with the last dimension is the direction of the electric
         field, third element is the gradgrad of electric field, etc.
-        If None, then the electric field is assumed to be 0.
+        If ``None``, then the electric field is assumed to be ``0``.
     * dtype: torch.dtype
         The data type of tensors in this class.
-        Default: torch.float64
     * device: torch.device
         The device on which the tensors in this class are stored.
-        Default: torch.device('cpu')
     """
 
     def __init__(self,
@@ -159,14 +154,14 @@ class Mol(BaseSystem):
         method: Optional[str]
             Density fitting method. Available methods in this class are:
 
-            * "coulomb": Minimizing the Coulomb inner product, i.e. min <p-p_fit|r_12|p-p_fit>
+            * ``"coulomb"``: Minimizing the Coulomb inner product, i.e. ``min <p-p_fit|r_12|p-p_fit>``
               Ref: Eichkorn, et al. Chem. Phys. Lett. 240 (1995) 283-290.
               (default)
-            * "overlap": Minimizing the overlap inner product, i.e. min <p-p_fit|p-p_fit>
+            * ``"overlap"``: Minimizing the overlap inner product, i.e. min <p-p_fit|p-p_fit>
 
         auxbasis: Optional[BasisInpType]
             Auxiliary basis for the density fit. If not specified, then it uses
-            "cc-pvtz-jkfit".
+            ``"cc-pvtz-jkfit"``.
         """
         if method is None:
             method = "coulomb"
@@ -187,6 +182,10 @@ class Mol(BaseSystem):
         return self
 
     def get_hamiltonian(self) -> BaseHamilton:
+        """
+        Returns the Hamiltonian that corresponds to the system, i.e.
+        :class:`~dqc.hamilton.HamiltonCGTO`
+        """
         return self._hamilton
 
     def set_cache(self, fname: str, paramnames: Optional[List[str]] = None) -> BaseSystem:
@@ -202,7 +201,7 @@ class Mol(BaseSystem):
         ---------
         fname: str
             The file to store the cache.
-        paramnames: Optional[List[str]]
+        paramnames: list of str or None
             List of parameter names to be read/write from the cache.
         """
         all_paramnames = self._cache.get_cacheable_params()

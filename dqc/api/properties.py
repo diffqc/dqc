@@ -24,13 +24,13 @@ def hessian_pos(qc: BaseQCCalc, unit: Optional[str] = None) -> torch.Tensor:
     qc: BaseQCCalc
         Quantum Chemistry calculation that has run.
 
-    unit: Optional[str]
-        The returned unit. If None, returns in atomic unit.
+    unit: str or None
+        The returned unit. If ``None``, returns in atomic unit.
 
     Returns
     -------
     torch.Tensor
-        Tensor with shape (natoms * ndim, natoms * ndim) represents the Hessian
+        Tensor with shape ``(natoms * ndim, natoms * ndim)`` represents the Hessian
         of the energy with respect to the atomic position
     """
     hess = _hessian_pos(qc)
@@ -47,19 +47,19 @@ def vibration(qc: BaseQCCalc, freq_unit: Optional[str] = "cm^-1",
     ---------
     qc: BaseQCCalc
         The qc calc object that has been executed.
-    freq_unit: Optional[str]
-        The returned unit for the frequency. If None, returns in atomic unit.
-    length_unit: Optional[str]
-        The returned unit for the normal mode coordinate. If None, returns in
+    freq_unit: str or None
+        The returned unit for the frequency. If ``None``, returns in atomic unit.
+    length_unit: str or None
+        The returned unit for the normal mode coordinate. If ``None``, returns in
         atomic unit
 
     Returns
     -------
     Tuple[torch.Tensor, torch.Tensor]
         Tuple of tensors where the first tensor is the frequency in atomic unit
-        with shape `(natoms * ndim)` sorted from the largest to smallest,
+        with shape ``(natoms * ndim)`` sorted from the largest to smallest,
         and the second tensor is the normal coordinate axes in atomic unit
-        with shape `(natoms * ndim, natoms * ndim)` where each column corresponds
+        with shape ``(natoms * ndim, natoms * ndim)`` where each column corresponds
         to each axis sorted from the largest frequency to smallest frequency.
     """
     freq, mode = _vibration(qc)
@@ -79,16 +79,16 @@ def ir_spectrum(qc: BaseQCCalc, freq_unit: Optional[str] = "cm^-1",
     ---------
     qc: BaseQCCalc
         The qc calc object that has been executed.
-    freq_unit: Optional[str]
-        The returned unit for the frequency. If None, returns in atomic unit.
-    ints_unit: Optional[str]
-        The returned unit for the intensity. If None, returns in atomic unit.
+    freq_unit: str or None
+        The returned unit for the frequency. If ``None``, returns in atomic unit.
+    ints_unit: str or None
+        The returned unit for the intensity. If ``None``, returns in atomic unit.
 
     Returns
     -------
     Tuple[torch.Tensor, torch.Tensor]
         Tuple of tensors where the first tensor is the frequency in the given unit
-        with shape `(nfreqs,)` sorted from the largest to smallest, and the second
+        with shape ``(nfreqs,)`` sorted from the largest to smallest, and the second
         tensor is the IR intensity with the same order as the frequency.
     """
     freq, ir_ints = _ir_spectrum(qc)
@@ -107,16 +107,16 @@ def raman_spectrum(qc: BaseQCCalc, freq_unit: Optional[str] = "cm^-1",
     ---------
     qc: BaseQCCalc
         The qc calc object that has been executed.
-    freq_unit: Optional[str]
-        The returned unit for the frequency. If None, returns in atomic unit.
-    ints_unit: Optional[str]
-        The returned unit for the Raman intensity. If None, returns in atomic unit.
+    freq_unit: str or None
+        The returned unit for the frequency. If ``None``, returns in atomic unit.
+    ints_unit: str or None
+        The returned unit for the Raman intensity. If ``None``, returns in atomic unit.
 
     Returns
     -------
     Tuple[torch.Tensor, torch.Tensor]
         Tuple of tensors where the first tensor is the frequency in the given unit
-        with shape `(nfreqs,)` sorted from the largest to smallest, and the second
+        with shape ``(nfreqs,)`` sorted from the largest to smallest, and the second
         tensor is the IR intensity with the same order as the frequency.
     """
     freq, raman_ints = _raman_spectrum(qc)
@@ -134,13 +134,13 @@ def edipole(qc: BaseQCCalc, unit: Optional[str] = "Debye") -> torch.Tensor:
     ---------
     qc: BaseQCCalc
         The qc calc object that has been executed.
-    unit: Optional[str]
-        The returned dipole unit. If None, returns in atomic unit.
+    unit: str or None
+        The returned dipole unit. If ``None``, returns in atomic unit.
 
     Returns
     -------
     torch.Tensor
-        Tensor representing the dipole moment in atomic unit with shape (ndim,)
+        Tensor representing the dipole moment in atomic unit with shape ``(ndim,)``
     """
     edip = _edipole(qc)
     edip = edipole_to(edip, unit)
@@ -155,13 +155,13 @@ def equadrupole(qc: BaseQCCalc, unit: Optional[str] = "Debye*Angst") -> torch.Te
     ---------
     qc: BaseQCCalc
         The qc calc object that has been executed.
-    unit: Optional[str]
-        The returned quadrupole unit. If None, returns in atomic unit.
+    unit: str or None
+        The returned quadrupole unit. If ``None``, returns in atomic unit.
 
     Returns
     -------
     torch.Tensor
-        Tensor representing the quadrupole moment in atomic unit in (ndim, ndim)
+        Tensor representing the quadrupole moment in atomic unit in ``(ndim, ndim)``
     """
     equad = _equadrupole(qc)
     equad = equadrupole_to(equad, unit)
@@ -182,7 +182,7 @@ def is_orb_min(qc: BaseQCCalc, threshold: float = -1e-3) -> bool:
     Returns
     -------
     bool
-        True if the state is minimum, otherwise returns False.
+        ``True`` if the state is minimum, otherwise returns ``False``.
     """
     eival = _lowest_eival_orb_hessian(qc)
     return bool(torch.all(eival > threshold))

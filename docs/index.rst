@@ -38,6 +38,7 @@ DQC's example API:
 
    api/dqc_system/index
    api/dqc_qccalc/index
+   api/dqc_hamilton/index
    api/dqc_api/index
 
 

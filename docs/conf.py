@@ -52,7 +52,7 @@ def format_api_display(api, desc, prefix):
     if desc == "":
         return api
     else:
-        return "{prefix}{api}: {desc} <{api}>".format(desc=desc, api=api, prefix=prefix)
+        return "{api}: {desc} <{api}>".format(desc=desc, api=api)
 
 for modname, module_details in api_toc.items():
     module = module_details["module"]
@@ -85,7 +85,7 @@ for modname, module_details in api_toc.items():
 
     pymod = importlib.import_module(module)
     for fn in api_names:
-        fullname = module + "." + fn
+        fullname = prefix + "." + fn
         isfn = inspect.isfunction(getattr(pymod, fn))
         fname = os.path.join(module_api_dir, fn+".rst")
         file_content = file_template.format(

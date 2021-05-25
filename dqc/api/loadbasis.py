@@ -20,11 +20,11 @@ def loadbasis(cmd: str, dtype: torch.dtype = _dtype,
         This can be a file path where the basis is stored or a
         string in format ``"atomz:basis"``, e.g. ``"1:6-311++G**"``.
     dtype: torch.dtype
-        Tensor data type for alphas and coeffs of the GTO basis
+        Tensor data type for ``alphas`` and ``coeffs`` of the GTO basis
     device: torch.device
-        Tensor device for alphas and coeffs
+        Tensor device for ``alphas`` and ``coeffs``
     requires_grad: bool
-        If True, the alphas and coeffs tensors become differentiable
+        If ``True``, the ``alphas`` and ``coeffs`` tensors become differentiable
 
     Returns
     -------

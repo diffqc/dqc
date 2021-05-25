@@ -26,37 +26,32 @@ class Sol(BaseSystem):
 
     Arguments
     ---------
-    * soldesc: str or 2-elements tuple (atomzs, atompos)
+    * soldesc: str or 2-elements tuple
         Description of the molecule system.
         If string, it can be described like ``"H 1 0 0; H -1 0 0"``.
         If tuple, the first element of the tuple is the Z number of the atoms while
-        the second element is the position of the atoms.
-    * basis: str, CGTOBasis or list of str or CGTOBasis
+        the second element is the position of the atoms: ``(atomzs, atomposs)``.
+    * basis: str, CGTOBasis, list of str, or CGTOBasis
         The string describing the gto basis. If it is a list, then it must have
         the same length as the number of atoms.
     * grid: int
         Describe the grid.
         If it is an integer, then it uses the default grid with specified level
         of accuracy.
-        Default: 3
     * spin: int, float, torch.Tensor, or None
         The difference between spin-up and spin-down electrons.
-        It must be an integer or None.
-        If None, then it is ``num_electrons % 2``.
+        It must be an integer or ``None``.
+        If ``None``, then it is ``num_electrons % 2``.
         For floating point atomzs and/or charge, the ``spin`` must be specified.
-        Default: None
     * charge: int, float, or torch.Tensor
         The charge of the molecule.
-        Default: 0
     * orb_weights: SpinParam[torch.Tensor] or None
         Specifiying the orbital occupancy (or weights) directly. If specified,
         ``spin`` and ``charge`` arguments are ignored.
     * dtype: torch.dtype
         The data type of tensors in this class.
-        Default: torch.float64
     * device: torch.device
         The device on which the tensors in this class are stored.
-        Default: torch.device('cpu')
     """
 
     def __init__(self,
@@ -117,12 +112,12 @@ class Sol(BaseSystem):
         method: Optional[str]
             Density fitting method. Available methods in this class are:
 
-            * "gdf": Density fit with gdf compensating charge to perform
+            * ``"gdf"``: Density fit with gdf compensating charge to perform
                 the lattice sum. Ref https://doi.org/10.1063/1.4998644 (default)
 
         auxbasis: Optional[BasisInpType]
             Auxiliary basis for the density fit. If not specified, then it uses
-            "cc-pvtz-jkfit".
+            ``"cc-pvtz-jkfit"``.
         """
         if method is None:
             method = "gdf"
@@ -144,6 +139,10 @@ class Sol(BaseSystem):
         return self
 
     def get_hamiltonian(self) -> BaseHamilton:
+        """
+        Returns the Hamiltonian that corresponds to the system, i.e.
+        :class:`~dqc.hamilton.HamiltonCGTO_PBC`
+        """
         return self._hamilton
 
     def set_cache(self, fname: str, paramnames: Optional[List[str]] = None) -> BaseSystem:
@@ -159,7 +158,7 @@ class Sol(BaseSystem):
         ---------
         fname: str
             The file to store the cache.
-        paramnames: Optional[List[str]]
+        paramnames: list of str or None
             List of parameter names to be read/write from the cache.
         """
         self._cache.set(fname, paramnames)
