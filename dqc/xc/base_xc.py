@@ -95,9 +95,11 @@ class BaseXC(xt.EditableModule):
                 else:
                     raise NotImplementedError("Default vxc for family %d is not implemented" % self.family)
 
-    @abstractmethod
     def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
-        pass
+        if methodname == "get_vxc":
+            return self.getparamnames("get_edensityxc", prefix=prefix)
+        else:
+            raise KeyError("Unknown methodname: %s" % methodname)
 
     @contextmanager
     def _enable_grad_densinfo(self, densinfo: Union[ValGrad, SpinParam[ValGrad]]) -> Iterator:

@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import pytest
 from dqc.api.getxc import get_libxc
-from dqc.xc.base_xc import BaseXC
+from dqc.xc.custom_xc import CustomXC
 from dqc.utils.datastruct import ValGrad, SpinParam
 from dqc.utils.safeops import safepow, safenorm
 
@@ -272,7 +272,7 @@ def test_libxc_mgga_value():
         scan_e_true(2 * rho_d, 2 * gradn_d, 2 * lapl_d, 2 * kin_d))
     assert torch.allclose(edens_pol, edens_pol_true)
 
-class PseudoLDA(BaseXC):
+class PseudoLDA(CustomXC):
     @property
     def family(self):
         return 1  # LDA
@@ -288,7 +288,7 @@ class PseudoLDA(BaseXC):
             ed = self.get_edensityxc(densinfo.d * 2)
             return 0.5 * (eu + ed)
 
-class PseudoPBE(BaseXC):
+class PseudoPBE(CustomXC):
     @property
     def family(self):
         return 2  # GGA
