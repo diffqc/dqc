@@ -21,9 +21,6 @@
     "module": "dqc.api",
     "prefix": "dqc.",
     "desc": "utilities API",
-    "api": {
-      "loadbasis": "",
-      "get_xc": ""
-    }
+    "api": "allfuncs"
   }
 }

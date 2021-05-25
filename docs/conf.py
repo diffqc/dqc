@@ -57,14 +57,23 @@ def format_api_display(api, desc, prefix):
 for modname, module_details in api_toc.items():
     module = module_details["module"]
     prefix = module_details["prefix"]
-    api_list = [format_api_display(api, desc, prefix) for (api, desc) in module_details["api"].items()]
+    api_details = module_details["api"]
+    if isinstance(api_details, dict):
+        api_list = [format_api_display(api, desc, prefix) for (api, desc) in api_details.items()]
+        api_names = list(api_details.keys())
+    elif api_details == "allfuncs":
+        all_apis = importlib.import_module(module)
+        api_names = [name for (name, fcn) in inspect.getmembers(all_apis) if inspect.isfunction(fcn)]
+        api_list = [format_api_display(name, "", prefix) for name in api_names]
+    else:
+        raise RuntimeError("Unknown api detail: %s" % api_details)
     module_dir_name = module.replace(".", "_")
     module_api_dir = os.path.join(api_dir, module_dir_name)
     if not os.path.exists(module_api_dir):
         os.mkdir(module_api_dir)
 
     # write the index.rst
-    api_list_str = ("\n"+module_api_list_indent).join(api_list)
+    api_list_str = ("\n" + module_api_list_indent).join(api_list)
     module_index_fname = os.path.join(module_api_dir, "index.rst")
     with open(module_index_fname, "w") as f:
         content = module_index_template.format(
@@ -75,7 +84,7 @@ for modname, module_details in api_toc.items():
         f.write(content)
 
     pymod = importlib.import_module(module)
-    for fn in module_details["api"]:
+    for fn in api_names:
         fullname = module + "." + fn
         isfn = inspect.isfunction(getattr(pymod, fn))
         fname = os.path.join(module_api_dir, fn+".rst")
