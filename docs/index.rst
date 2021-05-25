@@ -14,16 +14,16 @@ using PyTorch's autograd engine.
 
 DQC's example API:
 
-.. code-block:: python
+.. doctest:: python
 
-    import torch
-    from dqc import Mol, HF
-    # set up the H2 molecule, forcing the atom positions to be differentiable
-    mol = Mol("H -1 0 0; H 1 0 0", basis="3-21G", diffparams=["atompos"])
-    qc = HF(mol).run()
-    ene = qc.energy()  # calculate the energy
-    force = -torch.autograd.grad(ene, mol.atompos)[0]  # calculate the force
-
+    >>> import torch
+    >>> import dqc
+    >>> atomzs, atomposs = dqc.parse_moldesc("H -1 0 0; H 1 0 0")
+    >>> atomposs = atomposs.requires_grad_()  # mark atomposs as differentiable
+    >>> mol = dqc.Mol((atomzs, atomposs), basis="3-21G")
+    >>> qc = dqc.HF(mol).run()
+    >>> ene = qc.energy()  # calculate the energy
+    >>> force = -torch.autograd.grad(ene, mol.atompos)[0]  # calculate the force
 
 .. toctree::
    :maxdepth: 1
