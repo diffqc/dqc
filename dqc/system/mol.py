@@ -1,22 +1,20 @@
 from typing import List, Union, Optional, Tuple, Set, Dict
 import warnings
 import torch
-import numpy as np
 from dqc.hamilton.base_hamilton import BaseHamilton
 from dqc.hamilton.hcgto import HamiltonCGTO
 from dqc.system.base_system import BaseSystem
 from dqc.grid.base_grid import BaseGrid
 from dqc.grid.factory import get_predefined_grid
 from dqc.utils.datastruct import CGTOBasis, AtomCGTOBasis, SpinParam, ZType, \
-                                 is_z_float, BasisInpType, DensityFitInfo
+                                 is_z_float, BasisInpType, DensityFitInfo, \
+                                 AtomZsType, AtomPosType
 from dqc.utils.periodictable import get_atomz, get_atom_mass
 from dqc.utils.safeops import occnumber, safe_cdist
 from dqc.api.loadbasis import loadbasis
+from dqc.api.parser import parse_moldesc
 from dqc.utils.cache import Cache
 from dqc.utils.misc import logger
-
-AtomZsType  = Union[List[str], List[ZType], torch.Tensor]
-AtomPosType = Union[List[List[float]], np.ndarray, torch.Tensor]
 
 __all__ = ["Mol"]
 
@@ -104,9 +102,10 @@ class Mol(BaseSystem):
         # get the AtomCGTOBasis & the hamiltonian
         # atomzs: (natoms,) dtype: torch.int or dtype for floating point
         # atompos: (natoms, ndim)
-        atomzs, atompos = _parse_moldesc(
-            moldesc, dtype, device,
-            pos_force_grad="atompos" in self._diffparams)
+        atomzs, atompos = parse_moldesc(
+            moldesc, dtype=dtype, device=device)
+        if "atompos" in self._diffparams:
+            atompos.requires_grad_()
         atomzs_int = torch.round(atomzs).to(torch.int) if atomzs.is_floating_point() else atomzs
         allbases = _parse_basis(atomzs_int, basis)  # list of list of CGTOBasis
         atombases = [AtomCGTOBasis(atomz=atz, bases=bas, pos=atpos)

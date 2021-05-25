@@ -1,5 +1,6 @@
 from __future__ import annotations
 import torch
+import numpy as np
 from dataclasses import dataclass
 from typing import Optional, Union, List, TypeVar, Generic, Callable, overload, Dict
 from dqc.utils.misc import gaussian_int
@@ -12,6 +13,9 @@ P = TypeVar('P')
 
 # type of the atom Z
 ZType = Union[int, float, torch.Tensor]
+# input types
+AtomZsType  = Union[List[str], List[ZType], torch.Tensor]
+AtomPosType = Union[List[List[float]], np.ndarray, torch.Tensor]
 
 def is_z_float(a: ZType):
     # returns if the given z-type is a floating point
