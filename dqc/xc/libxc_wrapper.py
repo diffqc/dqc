@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import Mapping, Tuple, Optional, Union, Iterator, List
 import torch
 import numpy as np
