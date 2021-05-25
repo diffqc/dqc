@@ -1,7 +1,11 @@
 from typing import Mapping, Tuple, Optional, Union, Iterator, List
 import torch
 import numpy as np
-import pylibxc
+import warnings
+try:
+    import pylibxc
+except (ImportError, ModuleNotFoundError) as e:
+    warnings.warn("Failed to import pylibxc. Might not be able to use xc.")
 
 ############################ libxc with derivative ############################
 

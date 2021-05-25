@@ -1,5 +1,9 @@
 import re
-import pylibxc
+import warnings
+try:
+    import pylibxc
+except (ImportError, ModuleNotFoundError) as e:
+    warnings.warn("Failed to import pylibxc. Might not be able to use xc.")
 from dqc.xc.base_xc import BaseXC
 from dqc.xc.libxc import LibXCLDA, LibXCGGA, LibXCMGGA
 

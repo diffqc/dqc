@@ -1,5 +1,9 @@
+import warnings
 import torch
-import pylibxc
+try:
+    import pylibxc
+except (ImportError, ModuleNotFoundError) as e:
+    warnings.warn("Failed to import pylibxc. Might not be able to use xc.")
 from typing import List, Tuple, Union, overload, Optional
 from dqc.xc.base_xc import BaseXC
 from dqc.xc.libxc_wrapper import CalcLDALibXCPol, CalcLDALibXCUnpol, \
