@@ -1,4 +1,4 @@
-from typing import List, Union, Optional, Tuple, Set, Dict
+from typing import List, Union, Optional, Tuple, Dict
 import warnings
 import torch
 from dqc.hamilton.base_hamilton import BaseHamilton
