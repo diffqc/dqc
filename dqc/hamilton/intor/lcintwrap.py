@@ -376,9 +376,9 @@ class LibcintWrapper(object):
     def _nao_at_shell(self, sh: int) -> int:
         # returns the number of atomic orbital at the given shell index
         if self.spherical:
-            op = CINT.CINTcgto_spheric
+            op = CINT().CINTcgto_spheric
         else:
-            op = CINT.CINTcgto_cart
+            op = CINT().CINTcgto_cart
         bas = self.atm_bas_env[1]
         return op(int2ctypes(sh), np2ctypes(bas))
 

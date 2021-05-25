@@ -1,6 +1,7 @@
 import os
 import ctypes
 import numpy as np
+from typing import Dict, Optional, Any, Callable
 
 # contains functions and constants that are used specifically for
 # dqc.hamilton.intor files (no dependance on other files in dqc.hamilton.intor
@@ -18,11 +19,22 @@ _libcgto_path = os.path.join(_curpath, "../../../lib/libcgto.so")
 _libcpbc_path = os.path.join(_curpath, "../../../lib/libpbc.so")
 # _libcvhf_path = os.path.join(_curpath, "../../../lib/libcvhf.so")
 _libcsymm_path = os.path.join(_curpath, "../../../lib/libsymm.so")
-CINT = ctypes.cdll.LoadLibrary(_libcint_path)
-CGTO = ctypes.cdll.LoadLibrary(_libcgto_path)
-CPBC = ctypes.cdll.LoadLibrary(_libcpbc_path)
-# CVHF = ctypes.cdll.LoadLibrary(_libcvhf_path)
-CSYMM = ctypes.cdll.LoadLibrary(_libcsymm_path)
+
+_libs: Dict[str, Any] = {}
+
+def _library_loader(name: str, path: str) -> Callable:
+    # load the library and cache the handler
+    def fcn():
+        if name not in _libs:
+            _libs[name] = ctypes.cdll.LoadLibrary(path)
+        return _libs[name]
+    return fcn
+
+CINT = _library_loader("CINT", _libcint_path)
+CGTO = _library_loader("CGTO", _libcgto_path)
+CPBC = _library_loader("CPBC", _libcpbc_path)
+# CVHF = _library_loader("CVHF", _libcvhf_path)
+CSYMM = _library_loader("CSYMM", _libcsymm_path)
 
 c_null_ptr = ctypes.POINTER(ctypes.c_void_p)
 

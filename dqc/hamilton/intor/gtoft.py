@@ -87,14 +87,14 @@ def gto_ft_evaluator(wrapper: LibcintWrapper, gvgrid: torch.Tensor) -> torch.Ten
     dtype = wrapper.dtype
     device = wrapper.device
 
-    fill = CGTO.GTO_ft_fill_s1
+    fill = CGTO().GTO_ft_fill_s1
     if wrapper.spherical:
-        intor = CGTO.GTO_ft_ovlp_sph
+        intor = CGTO().GTO_ft_ovlp_sph
     else:
-        intor = CGTO.GTO_ft_ovlp_cart
-    fn = CGTO.GTO_ft_fill_drv
+        intor = CGTO().GTO_ft_ovlp_cart
+    fn = CGTO().GTO_ft_fill_drv
 
-    eval_gz = CGTO.GTO_Gv_general
+    eval_gz = CGTO().GTO_Gv_general
     p_gxyzT = c_null_ptr()
     p_gs = (ctypes.c_int * 3)(0, 0, 0)
     p_b = (ctypes.c_double * 1)(0)

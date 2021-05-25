@@ -583,7 +583,7 @@ class _Int4cFunction(torch.autograd.Function):
 class _cintoptHandler(ctypes.c_void_p):
     def __del__(self):
         try:
-            CGTO.CINTdel_optimizer(ctypes.byref(self))
+            CGTO().CINTdel_optimizer(ctypes.byref(self))
         except AttributeError:
             pass
 
@@ -599,7 +599,7 @@ class Intor(object):
 
         # get the operator
         opname = int_nmgr.get_intgl_name(wrapper0.spherical)
-        self.op = getattr(CINT, opname)
+        self.op = getattr(CINT(), opname)
         self.optimizer = _get_intgl_optimizer(opname, self.atm, self.bas, self.env)
 
         # prepare the output
@@ -623,7 +623,7 @@ class Intor(object):
 
     def _int2c(self) -> torch.Tensor:
         # performing 2-centre integrals with libcint
-        drv = CGTO.GTOint2c
+        drv = CGTO().GTOint2c
         outshape = self.outshape
         out = np.empty((*outshape[:-2], outshape[-1], outshape[-2]), dtype=np.float64)
         drv(self.op,
@@ -645,8 +645,8 @@ class Intor(object):
 
     def _int3c(self) -> torch.Tensor:
         # performing 3-centre integrals with libcint
-        drv = CGTO.GTOnr3c_drv
-        fill = CGTO.GTOnr3c_fill_s1
+        drv = CGTO().GTOnr3c_drv
+        fill = CGTO().GTOnr3c_fill_s1
         # TODO: create optimizer without the 3rd index like in
         # https://github.com/pyscf/pyscf/blob/e833b9a4fd5fb24a061721e5807e92c44bb66d06/pyscf/gto/moleintor.py#L538
         outsh = self.outshape
@@ -671,8 +671,8 @@ class Intor(object):
 
         out = np.empty(outshape, dtype=np.float64)
 
-        drv = CGTO.GTOnr2e_fill_drv
-        fill = getattr(CGTO, "GTOnr2e_fill_%s" % symm.code)
+        drv = CGTO().GTOnr2e_fill_drv
+        fill = getattr(CGTO(), "GTOnr2e_fill_%s" % symm.code)
         prescreen = ctypes.POINTER(ctypes.c_void_p)()
         drv(self.op, fill, prescreen,
             out.ctypes.data_as(ctypes.c_void_p),
@@ -699,7 +699,7 @@ def _get_intgl_optimizer(opname: str,
     # setup the optimizer
     cintopt = ctypes.POINTER(ctypes.c_void_p)()
     optname = opname.replace("_cart", "").replace("_sph", "") + "_optimizer"
-    copt = getattr(CINT, optname)
+    copt = getattr(CINT(), optname)
     copt(ctypes.byref(cintopt),
          np2ctypes(atm), int2ctypes(atm.shape[0]),
          np2ctypes(bas), int2ctypes(bas.shape[0]),

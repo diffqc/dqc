@@ -58,7 +58,7 @@ class S4Symmetry(BaseSymmetry):
         self.__check_orig_shape(orig_shape)
 
         out = np.zeros(orig_shape, dtype=arr.dtype)
-        fcn = CSYMM.fills4
+        fcn = CSYMM().fills4
         fcn(np2ctypes(out), np2ctypes(arr),
             int2ctypes(orig_shape[-4]), int2ctypes(orig_shape[-2]))
         return out

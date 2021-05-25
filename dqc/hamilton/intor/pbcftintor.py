@@ -195,10 +195,10 @@ class PBCFTIntor(object):
         out = np.empty(outshape, dtype=np.complex128)
 
         # do the integration
-        cintor = getattr(CGTO, self.opname)
-        eval_gz = CPBC.GTO_Gv_general
-        fill = CPBC.PBC_ft_fill_ks1
-        drv = CPBC.PBC_ft_latsum_drv
+        cintor = getattr(CGTO(), self.opname)
+        eval_gz = CPBC().GTO_Gv_general
+        fill = CPBC().PBC_ft_fill_ks1
+        drv = CPBC().PBC_ft_latsum_drv
         p_gxyzT = c_null_ptr()
         p_mesh = (ctypes.c_int * 3)(0, 0, 0)
         p_b = (ctypes.c_double * 1)(0)

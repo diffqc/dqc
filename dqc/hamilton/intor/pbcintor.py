@@ -344,8 +344,8 @@ class PBCIntor(object):
         out = np.empty(outshape, dtype=np.complex128)
 
         # TODO: add symmetry here
-        fill = CPBC.PBCnr2c_fill_ks1
-        fintor = getattr(CGTO, self.opname)
+        fill = CPBC().PBCnr2c_fill_ks1
+        fintor = getattr(CGTO(), self.opname)
         # TODO: use proper optimizers
         cintopt = _get_intgl_optimizer(self.opname, atm, bas, env)
         cpbcopt = c_null_ptr()
@@ -359,7 +359,7 @@ class PBCIntor(object):
                           "it might causes segfault")
 
         # perform the integration
-        drv = CPBC.PBCnr2c_drv
+        drv = CPBC().PBCnr2c_drv
         drv(fintor, fill, out.ctypes.data_as(ctypes.c_void_p),
             int2ctypes(nkpts), int2ctypes(self.ncomp), int2ctypes(len(self.ls)),
             np2ctypes(self.ls),
@@ -423,9 +423,9 @@ class PBCIntor(object):
         cpbcopt = c_null_ptr()
 
         # do the integration
-        drv = CPBC.PBCnr3c_drv
-        fill = CPBC.PBCnr3c_fill_kks1  # TODO: optimize the kk-type and symmetry
-        fintor = getattr(CPBC, self.opname)
+        drv = CPBC().PBCnr3c_drv
+        fill = CPBC().PBCnr3c_fill_kks1  # TODO: optimize the kk-type and symmetry
+        fintor = getattr(CPBC(), self.opname)
         drv(fintor, fill, np2ctypes(out),
             int2ctypes(nkpts_ij),
             int2ctypes(nkpts),

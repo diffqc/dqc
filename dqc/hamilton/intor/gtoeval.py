@@ -220,7 +220,7 @@ def gto_evaluator(wrapper: LibcintWrapper, shortname: str, rgrid: torch.Tensor,
     c_ngrid = ctypes.c_int(ngrid)
 
     # evaluate the orbital
-    operator = getattr(CGTO, opname)
+    operator = getattr(CGTO(), opname)
     operator.restype = ctypes.c_double
     atm, bas, env = wrapper.atm_bas_env
     operator(c_ngrid, c_shls,
