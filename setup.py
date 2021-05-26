@@ -1,5 +1,6 @@
 import os
 import sys
+import shutil
 from setuptools import setup, find_packages, Extension
 from setuptools.command.build_ext import build_ext
 
@@ -15,6 +16,13 @@ with open(verfile, "r") as fp:
 
 ############## build extensions ##############
 ext_name = "_dqc_lib_placeholder"
+def get_all_libraries(ext=".so"):
+    res = []
+    for root, dirs, files in os.walk("dqc"):
+        for file in files:
+            if ext in file:
+                 res.append(os.path.relpath(os.path.join(root, file)))
+    return res
 
 class CMakeBuildExt(build_ext):
     def run(self):
@@ -28,6 +36,12 @@ class CMakeBuildExt(build_ext):
             msg = "Cannot install the extension. Some features might be missing. "
             msg += "Please fix the bug and rerun it with 'python setup.py build_ext'"
             warnings.warn(msg)
+
+        # copy all the libraries to build_lib
+        lib_paths = get_all_libraries(ext=".so")
+        for src_lib_path in lib_paths:
+            dst_lib_path = os.path.join(self.build_lib, src_lib_path)
+            shutil.copyfile(src_lib_path, dst_lib_path)
 
     def construct_extension(self):
         # libraries from PySCF
