@@ -27,7 +27,7 @@ setup(
         "matplotlib>=1.5.3",
         "basis_set_exchange",
         "h5py>=3.1.0",
-        "xitorch @ git+https://github.com/xitorch/xitorch.git",
+        "xitorch >= 0.3",
         "torch>=1.8",  # ideally the nightly build
     ],
     classifiers=[
