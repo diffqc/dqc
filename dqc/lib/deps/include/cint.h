@@ -4,7 +4,7 @@
  * Parameters and function signature for libcint.
  */
 
-#define CINT_VERSION    4.0.2
+#define CINT_VERSION    4.0.7
 
 /* #undef I8 */
 #ifdef I8
@@ -115,15 +115,17 @@
 #if !defined HAVE_DEFINED_CINTOPT_H
 #define HAVE_DEFINED_CINTOPT_H
 typedef struct {
-    FINT **index_xyz_array; // ANG_MAX**4 pointers to index_xyz
-    FINT *prim_offset;
-    FINT *non0ctr;
-    FINT **non0idx;
-    double **non0coeff;
-    double **expij;
-    double **rij;
-    FINT **cceij;
-    FINT tot_prim;
+    double rij[3];
+    double eij;
+    double cceij;
+} PairData;
+typedef struct {
+    FINT **index_xyz_array; // LMAX1**4 pointers to index_xyz
+    FINT **non0ctr;
+    FINT **sortedidx;
+    FINT nbas;
+    double **log_max_coeff;
+    PairData **pairdata;  // NULL indicates not-initialized, NO_VALUE can be skipped
 } CINTOpt;
 #endif
 

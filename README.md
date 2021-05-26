@@ -27,21 +27,4 @@ After you got the requirements, then you can install dqc from terminal by:
     git submodule sync
     git submodule update --init --recursive
     python -m pip install -e .
-
-Then, install the libraries by:
-
-    # installing libraries from PySCF
-    cd lib
-    mkdir build; cd build
-    cmake ..
-    make
-
-    # installing libcint
-    cd ../libcint
-    mkdir build; cd build
-    cmake ..
-    make
-
-    # installing libxc
-    cd ../../../submodules/libxc/
-    python setup.py install
+    python setup.py build_ext

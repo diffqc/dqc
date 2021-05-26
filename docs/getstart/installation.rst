@@ -21,23 +21,4 @@ To do this, type in your terminal:
     git submodule sync
     git submodule update --init --recursive
     python -m pip install -e .
-
-Then, to install the C-libraries, type:
-
-.. code-block::
-
-    # installing libraries from PySCF
-    cd lib
-    mkdir build; cd build
-    cmake ..
-    make
-
-    # installing libcint
-    cd ../libcint
-    mkdir build; cd build
-    cmake ..
-    make
-
-    # installing libxc
-    cd ../../../submodules/libxc/
-    python setup.py install
+    python setup.py build_ext

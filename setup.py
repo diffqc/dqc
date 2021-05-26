@@ -1,5 +1,7 @@
 import os
-from setuptools import setup, find_packages
+import sys
+from setuptools import setup, find_packages, Extension
+from setuptools.command.build_ext import build_ext
 
 module_name = "dqc"
 file_dir = os.path.dirname(os.path.realpath(__file__))
@@ -11,8 +13,45 @@ version = {"__file__": verfile}
 with open(verfile, "r") as fp:
     exec(fp.read(), version)
 
-build_version = "DQC_BUILD" in os.environ
+############## build extensions ##############
+ext_name = "_dqc_lib_placeholder"
 
+class CMakeBuildExt(build_ext):
+    def run(self):
+        extension = self.extensions[0]
+        assert extension.name == ext_name
+
+        # libraries from PySCF
+        self.announce('Compiling libraries from PySCF', level=3)
+        lib_dir = os.path.join(file_dir, "dqc", "lib")
+        build_dir = self.build_temp
+        self.build_cmake(lib_dir, build_dir)
+
+        # install libxc from submodule
+        libxc_dir = os.path.join(file_dir, "submodules", "libxc")
+        libxc_fname = "setup.py"
+        self.python_install(libxc_dir, libxc_fname, "install")
+
+    def build_cmake(self, lib_dir, build_dir):
+        self.announce("Configuring cmake", level=3)
+        cmd = ['cmake', f'-S{lib_dir}', f'-B{build_dir}']
+        self.spawn(cmd)
+
+        self.announce("Building binaries", level=3)
+        cmd = ['cmake', '--build', build_dir]
+        self.spawn(cmd)
+
+    def python_install(self, dir, fname, mode):
+        curpath = os.getcwd()
+        try:
+            os.chdir(dir)
+            self.announce(f"Installing {fname}")
+            cmd = [sys.executable, fname, mode]
+            self.spawn(cmd)
+        finally:
+            os.chdir(curpath)
+
+build_version = "DQC_BUILD" in os.environ
 setup(
     name=module_name,
     version=version["get_version"](build_version=build_version),
@@ -32,6 +71,8 @@ setup(
         "xitorch >= 0.3",
         "torch>=1.8",  # ideally the nightly build
     ],
+    ext_modules=[Extension(ext_name, [])],
+    cmdclass={'build_ext': CMakeBuildExt},
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Science/Research",

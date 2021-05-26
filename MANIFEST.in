@@ -1,0 +1,9 @@
+include MANIFEST.in
+include README.md setup.py LICENSE NOTICE
+
+global-exclude *.py[cod]
+recursive-include dqc/lib *.so
+recursive-include submodules *.so *.egg
+
+recursive-exclude dqc/lib *.c *.h
+recursive-exclude dqc/lib *.cl

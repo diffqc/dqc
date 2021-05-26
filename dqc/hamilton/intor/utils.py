@@ -14,7 +14,7 @@ NDIM = 3
 
 # libraries
 _curpath = os.path.dirname(os.path.abspath(__file__))
-_libcint_path = os.path.join(_curpath, "../../lib/libcint/build/libcint.so")
+_libcint_path = os.path.join(_curpath, "../../lib/deps/lib/libcint.so")
 _libcgto_path = os.path.join(_curpath, "../../lib/libcgto.so")
 _libcpbc_path = os.path.join(_curpath, "../../lib/libpbc.so")
 # _libcvhf_path = os.path.join(_curpath, "../../lib/libcvhf.so")

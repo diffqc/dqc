@@ -10,8 +10,8 @@ CMakeCache.txt
 CMakeFiles
 Makefile
 cmake_install.cmake
-lib/deps
-lib/config.h
+dqc/lib/deps
+dqc/lib/config.h
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -20,6 +20,7 @@ __pycache__/
 
 # C extensions
 *.so
+*.so.*
 
 # Distribution / packaging
 .Python
