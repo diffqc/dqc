@@ -86,7 +86,7 @@ include(ExternalProject)
 option(BUILD_LIBCINT "Using libcint for analytical gaussian integral" ON)
 option(WITH_F12 "Compling F12 integrals" ON)
 if(BUILD_LIBCINT)
-if(NOT EXISTS "${PROJECT_SOURCE_DIR}/deps/include/cint.h")
+#if(NOT EXISTS "${PROJECT_SOURCE_DIR}/deps/include/cint.h")
   ExternalProject_Add(libcint
     SOURCE_DIR ${PROJECT_SOURCE_DIR}/libcint
     PREFIX ${PROJECT_BINARY_DIR}/deps
@@ -98,7 +98,7 @@ if(NOT EXISTS "${PROJECT_SOURCE_DIR}/deps/include/cint.h")
             -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
             -DBLAS_LIBRARIES=${BLAS_LIBRARIES}
   )
-endif()
+#endif()
 endif()
 include_directories(${PROJECT_SOURCE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/deps/include)
