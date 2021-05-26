@@ -79,6 +79,24 @@ class DensityFitInfo:
 class SpinParam(Generic[T]):
     """
     Data structure to store different values for spin-up and spin-down electrons.
+
+    Attributes
+    ----------
+    u: any type
+        The parameters that corresponds to the spin-up electrons.
+    d: any type
+        The parameters that corresponds to the spin-down electrons.
+
+    Example
+    -------
+    .. jupyter-execute::
+
+        import torch
+        import dqc.utils
+        dens_u = torch.ones(1)
+        dens_d = torch.zeros(1)
+        sp = dqc.utils.SpinParam(u=dens_u, d=dens_d)
+        print(sp.u)
     """
     u: T
     d: T
@@ -122,6 +140,20 @@ class SpinParam(Generic[T]):
 class ValGrad:
     """
     Data structure that contains local information about density profiles.
+
+    Attributes
+    ----------
+    value: torch.Tensor
+        Tensors containing the value of the local information.
+    grad: torch.Tensor or None
+        If tensor, it represents the gradient of the local information with shape
+        ``(..., 3)`` where ``...`` should be the same shape as ``value``.
+    lapl: torch.Tensor or None
+        If tensor, represents the laplacian value of the local information.
+        It should have the same shape as ``value``.
+    kin: torch.Tensor or None
+        If tensor, represents the local kinetic energy density.
+        It should have the same shape as ``value``.
     """
     # data structure used as a umbrella class for density profiles and
     # the derivative of the potential w.r.t. density profiles
