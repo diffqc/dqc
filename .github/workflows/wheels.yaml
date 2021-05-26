@@ -21,6 +21,8 @@ jobs:
       # Used to host cibuildwheel
       - name: Set up Python
         uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
 
       - name: Install cmake
         uses: jwlawson/actions-setup-cmake@v1.8
@@ -42,7 +44,7 @@ jobs:
       - name: Build wheels
         run: python -m cibuildwheel --output-dir wheelhouse
         env:
-          CIBW_BUILD: cp3*-*
+          CIBW_BUILD: cp39-*
 
       - uses: actions/upload-artifact@v2
         with:
