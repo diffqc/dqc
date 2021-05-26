@@ -14,8 +14,7 @@ The documentation can be found at: https://dqc.readthedocs.io/
 
 * [python](https://www.python.org) 3.7 or newer
 * [pip](https://pip.pypa.io/en/stable/installing/)
-* [pytorch](https://pytorch.org) 1.7.1 or newer (I used the nightly build which is for
-  version 1.8.0, but I think 1.7.1 should work as well)
+* [pytorch](https://pytorch.org) 1.8 or newer
 * [cmake](https://cmake.org/) 2.8 or newer
 
 ## Installation
