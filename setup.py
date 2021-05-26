@@ -11,9 +11,11 @@ version = {"__file__": verfile}
 with open(verfile, "r") as fp:
     exec(fp.read(), version)
 
+build_version = "DQC_BUILD" in os.environ
+
 setup(
     name=module_name,
-    version=version["get_version"](),
+    version=version["get_version"](build_version=build_version),
     description='Differentiable Quantum Chemistry',
     url='https://github.com/mfkasim1/dqc/',
     author='mfkasim1',
