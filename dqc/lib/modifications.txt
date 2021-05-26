@@ -1,0 +1,5 @@
+This lib directory contains libraries from PySCF. The modifications made:
+* Modifying CMakeLists.txt so only include gto, np_helper, vhf, and pbc
+* In the code generator, added:
+  * Higher derivatives for nabla (nabla^2, nabla^3)
+  * Laplacian (nabla dot nabla) and the derivatives of it
