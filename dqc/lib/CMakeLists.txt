@@ -241,3 +241,6 @@ endif() # ENABLE_TBLIS
 if(EXISTS "${PROJECT_SOURCE_DIR}/cmake.user.inc")
   include("${PROJECT_SOURCE_DIR}/cmake.user.inc")
 endif()
+
+# cgto requires libcint to be built first
+add_dependencies(cgto libcint)

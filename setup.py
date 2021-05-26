@@ -38,7 +38,7 @@ class CMakeBuildExt(build_ext):
         self.spawn(cmd)
 
         self.announce("Building binaries", level=3)
-        cmd = ['cmake', '--build', build_dir]
+        cmd = ['cmake', '--build', build_dir, '-j']
         self.spawn(cmd)
 
     def python_install(self, dir, fname, mode):
