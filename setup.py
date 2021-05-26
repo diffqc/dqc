@@ -21,6 +21,15 @@ class CMakeBuildExt(build_ext):
         extension = self.extensions[0]
         assert extension.name == ext_name
 
+        try:
+            self.construct_extension()
+        except:
+            import warnings
+            msg = "Cannot install the extension. Some features might be missing. "
+            msg += "Please fix the bug and rerun it with 'python setup.py build_ext'"
+            warnings.warn(msg)
+
+    def construct_extension(self):
         # libraries from PySCF
         self.announce('Compiling libraries from PySCF', level=3)
         lib_dir = os.path.join(file_dir, "dqc", "lib")
