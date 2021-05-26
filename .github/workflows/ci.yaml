@@ -33,6 +33,7 @@ jobs:
         cmake-version: '3.18.x'
     - name: Build DQC
       run: |
+        chmod +x .github/workflows/build.sh
         ./.github/workflows/build.sh
     # - name: Install python dependencies
     #   run: |
