@@ -6,3 +6,4 @@ Tutorials
 
    tutes/force
    tutes/xcgrad
+   tutes/alchem
