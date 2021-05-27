@@ -28,7 +28,9 @@ class CMakeBuildExt(build_ext):
     def run(self):
         extension = self.extensions[0]
         assert extension.name == ext_name
+        self.build_extension(self.extensions[0])
 
+    def build_extension(self, ext):
         try:
             self.construct_extension()
         except:
