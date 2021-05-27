@@ -53,11 +53,6 @@ class CMakeBuildExt(build_ext):
         build_dir = self.build_temp
         self.build_cmake(lib_dir, build_dir)
 
-        # install libxc from submodule
-        libxc_dir = os.path.join(file_dir, "submodules", "libxc")
-        libxc_fname = "setup.py"
-        self.python_install(libxc_dir, libxc_fname, "install")
-
     def build_cmake(self, lib_dir, build_dir):
         self.announce("Configuring cmake", level=3)
         cmd = ['cmake', f'-S{lib_dir}', f'-B{build_dir}']
@@ -94,6 +89,7 @@ setup(
         "matplotlib>=1.5.3",
         "basis_set_exchange",
         "h5py>=3.1.0",
+        "pylibxc2>=6.0.0",
         "xitorch >= 0.3",
         "torch>=1.8",  # ideally the nightly build
     ],

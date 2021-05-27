@@ -1,3 +1,0 @@
-[submodule "submodules/libxc"]
-	path = submodules/libxc
-	url = https://gitlab.com/libxc/libxc/
