@@ -16,7 +16,7 @@ To do this, type in your terminal:
 
 .. code-block::
 
-    git clone --recursive https://github.com/mfkasim1/dqc
+    git clone --recursive https://github.com/diffqc/dqc
     cd dqc
     git submodule sync
     git submodule update --init --recursive

@@ -82,7 +82,7 @@ setup(
     name=module_name,
     version=version["get_version"](build_version=build_version),
     description='Differentiable Quantum Chemistry',
-    url='https://github.com/mfkasim1/dqc/',
+    url='https://github.com/diffqc/dqc/',
     author='mfkasim1',
     author_email='firman.kasim@gmail.com',
     license='Apache License 2.0',
