@@ -41,6 +41,7 @@ class CMakeBuildExt(build_ext):
         lib_paths = get_all_libraries(ext=".so")
         for src_lib_path in lib_paths:
             dst_lib_path = os.path.join(self.build_lib, src_lib_path)
+            os.makedirs(os.path.dirname(dst_lib_path), exist_ok=True)
             shutil.copyfile(src_lib_path, dst_lib_path)
 
     def construct_extension(self):
