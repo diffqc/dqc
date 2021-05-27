@@ -37,7 +37,7 @@ jobs:
         ./.github/workflows/build.sh
     - name: Run test
       run: |
-        pytest dqc/test/ --cov=./ --cov-report=xml
+        pytest dqc/test/ --cov=./ --cov-report=xml --durations=10
     - name: Run examples
       run: |
         for f in examples/*.py; do echo "$f"; python "$f"; done
