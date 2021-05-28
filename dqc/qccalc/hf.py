@@ -275,7 +275,7 @@ class _HFEngine(BaseSCFEngine):
                 params = [prefix + "_orb_weight.u", prefix + "_orb_weight.d"]
             else:
                 params = [prefix + "_orb_weight"]
-            return self.getparamnames("__diagonalize", prefix=prefix) + \
+            return self.getparamnames("diagonalize", prefix=prefix) + \
                 self._hamilton.getparamnames("ao_orb2dm", prefix=prefix + "_hamilton.") + \
                 params
         elif methodname == "__dm2fock":
@@ -285,7 +285,7 @@ class _HFEngine(BaseSCFEngine):
             hprefix = prefix + "_hamilton."
             return self._hamilton.getparamnames("get_elrep", prefix=hprefix) + \
                 self._hamilton.getparamnames("get_exchange", prefix=hprefix)
-        elif methodname == "__diagonalize":
+        elif methodname == "diagonalize":
             return self._hamilton.getparamnames("get_overlap", prefix=prefix + "_hamilton.")
         else:
             raise KeyError("Method %s has no paramnames set" % methodname)
