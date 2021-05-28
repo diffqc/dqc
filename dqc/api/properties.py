@@ -12,7 +12,7 @@ from dqc.utils.units import length_to, freq_to, edipole_to, equadrupole_to, ir_i
                             raman_ints_to
 
 __all__ = ["hessian_pos", "vibration", "edipole", "equadrupole", "is_orb_min",
-           "lowest_eival_orb_hessian"]
+           "lowest_eival_orb_hessian", "ir_spectrum", "raman_spectrum"]
 
 # This file contains functions to calculate the perturbation properties of systems.
 
