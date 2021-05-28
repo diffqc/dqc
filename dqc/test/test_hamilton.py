@@ -154,7 +154,8 @@ def test_cgto_vext(system1):
     w = 3.0
     vext = torch.ones((ngrid, ), dtype=dtype) * w
     a = hamilton1.get_vext(vext).fullmatrix()
-    assert torch.allclose(torch.diagonal(a), torch.tensor(w, dtype=dtype))
+    assert torch.allclose(torch.diagonal(a), torch.tensor(w, dtype=dtype),
+                          rtol=4e-5)
 
 def test_cgto_ao_params(system1):
     # check if dm2ao_orb_params and ao_orb_params2dm returns to the same dm

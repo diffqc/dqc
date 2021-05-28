@@ -297,6 +297,13 @@ class HamiltonCGTO_PBC(HamiltonCGTO):
             return [prefix + "basis", prefix + "grad_basis"]
         elif methodname == "_get_lapl_dens_at_grid":
             return [prefix + "basis", prefix + "lapl_basis"]
+        elif methodname == "_dm2densinfo":
+            params = [prefix + "basis"]
+            if self.xcfamily == 2 or self.xcfamily == 4:
+                params += [prefix + "grad_basis"]
+            if self.xcfamily == 4:
+                params += [prefix + "lapl_basis"]
+            return params
         else:
             return super().getparamnames(methodname, prefix=prefix)
 

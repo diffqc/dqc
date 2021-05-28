@@ -84,23 +84,41 @@ def test_mol_cache():
     if os.path.exists(cache_fname):
         os.remove(cache_fname)
 
-    moldesc = "H 0 0 0"
+    moldesc = "H 0 0 0; H 1 0 0"
     mol = Mol(moldesc, basis="3-21G").set_cache(cache_fname)
     h = mol.get_hamiltonian()
     h.build()
+    olp1 = h.get_overlap().fullmatrix()
 
     # read the stored file
     with h5py.File(cache_fname, "r") as f:
         olp_cache = torch.as_tensor(f["hamilton/overlap"])
 
-    olp = h.get_overlap().fullmatrix()
-    assert torch.allclose(olp, olp_cache)
+    # test with a new exact same system, for sanity check
+    mol_copy = Mol(moldesc, basis="3-21G").set_cache(cache_fname)
+    h_copy = mol_copy.get_hamiltonian()
+    h_copy.build()
+    olp1_copy = h_copy.get_overlap().fullmatrix()
+    assert torch.allclose(olp1, olp1_copy)
 
-    # Try again with different atom, if cache is set, then it should be same
+    # store a different cache into the same file, to make sure the next
+    # mol loads from it
+    with h5py.File(cache_fname, "w") as f:
+        olp_cache2 = 2 * olp_cache
+        f["hamilton/overlap"] = olp_cache2
+
+    # the same exact system, but the cache has been altered
+    mol = Mol(moldesc, basis="3-21G").set_cache(cache_fname)
+    h = mol.get_hamiltonian()
+    h.build()
+    olp2 = h.get_overlap().fullmatrix()
+    assert not torch.allclose(olp1, olp2)
+
+    # Try again with different positions, if cache is set, then it should be same
     # as previous (although it is a wrong result)
     # It must raise a warning for different system
     with pytest.warns(UserWarning, match=r"Mismatch [ \w]*cached signature[ \w]*"):
-        moldesc1 = "Li 0 0 0"
+        moldesc1 = "H 1 0 0; H 0.5 0 0"
         mol1 = Mol(moldesc1, basis="3-21G").set_cache(cache_fname, ["hamilton.overlap"])
         h1 = mol1.get_hamiltonian()
         h1.build()
@@ -108,9 +126,6 @@ def test_mol_cache():
     # remove the cache
     if os.path.exists(cache_fname):
         os.remove(cache_fname)
-
-    olp1 = h1.get_overlap().fullmatrix()
-    assert torch.allclose(olp, olp1)
 
 def test_sol_cache():
 

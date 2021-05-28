@@ -5,6 +5,7 @@ import dqc.hamilton.intor as intor
 from dqc.df.base_df import BaseDF
 from dqc.df.dfmol import DFMol
 from dqc.hamilton.base_hamilton import BaseHamilton
+from dqc.hamilton.orbconverter import OrbitalOrthogonalizer
 from dqc.utils.datastruct import AtomCGTOBasis, ValGrad, SpinParam, DensityFitInfo
 from dqc.grid.base_grid import BaseGrid
 from dqc.xc.base_xc import BaseXC
@@ -14,6 +15,14 @@ from dqc.utils.config import config
 from dqc.utils.misc import logger
 
 class HamiltonCGTO(BaseHamilton):
+    """
+    Hamiltonian object of contracted Gaussian type-orbital.
+    This class orthogonalizes the basis by taking the weighted eigenvectors of
+        the overlap matrix, i.e. the eigenvectors divided by square root of the
+        eigenvalues.
+    The advantage of doing this is making the overlap matrix in Roothan's equation
+        identity and it could handle overcomplete basis.
+    """
     def __init__(self, atombases: List[AtomCGTOBasis], spherical: bool = True,
                  df: Optional[DensityFitInfo] = None,
                  efield: Optional[Tuple[torch.Tensor, ...]] = None,
@@ -21,13 +30,14 @@ class HamiltonCGTO(BaseHamilton):
         self.atombases = atombases
         self.spherical = spherical
         self.libcint_wrapper = intor.LibcintWrapper(atombases, spherical)
+        self._orthozer = OrbitalOrthogonalizer(intor.overlap(self.libcint_wrapper))
         self.dtype = self.libcint_wrapper.dtype
         self.device = self.libcint_wrapper.device
         self._dfoptions = df
         if df is None:
             self._df: Optional[DFMol] = None
         else:
-            self._df = DFMol(df, wrapper=self.libcint_wrapper)
+            self._df = DFMol(df, wrapper=self.libcint_wrapper, orthozer=self._orthozer)
 
         self._efield = efield
         self.is_grid_set = False
@@ -78,14 +88,6 @@ class HamiltonCGTO(BaseHamilton):
             self.nucl_mat = nucl_mat
             self.kinnucl_mat = kin_mat + nucl_mat
 
-            # calculate the sqrt of the overlap matrix and its inverse
-            ovlp = self.olp_mat
-            ovlp_eival, ovlp_eivec = xt.linalg.symeig(xt.LinearOperator.m(ovlp, is_hermitian=True))
-            ovlp_sqrt = (ovlp_eivec * (ovlp_eival ** 0.5)) @ ovlp_eivec.transpose(-2, -1).conj()
-            inv_ovlp_sqrt = (ovlp_eivec * (ovlp_eival ** -0.5)) @ ovlp_eivec.transpose(-2, -1).conj()
-            self._ovlp_sqrt = ovlp_sqrt
-            self._inv_ovlp_sqrt = inv_ovlp_sqrt
-
             # electric field integral
             if self._efield is not None:
                 # (ndim, nao, nao)
@@ -100,10 +102,19 @@ class HamiltonCGTO(BaseHamilton):
             if self._df is None:
                 logger.log("Calculating the electron repulsion matrix")
                 self.el_mat = self._cache.cache("elrep", lambda: intor.elrep(self.libcint_wrapper))  # (nao^4)
+                # TODO: decide whether to precompute the 2-eris in the new basis
+                # based on the memory
+                self.el_mat = self._orthozer.convert4(self.el_mat)
             else:
                 logger.log("Building the density fitting matrices")
                 self._df.build()
             self.is_built = True
+
+            # orthogonalize the matrices
+            self.olp_mat = self._orthozer.convert2(self.olp_mat)  # (nao2, nao2)
+            self.kinnucl_mat = self._orthozer.convert2(self.kinnucl_mat)
+            self.nucl_mat = self._orthozer.convert2(self.nucl_mat)
+
             logger.log("Setting up the Hamiltonian done")
 
         return self
@@ -204,6 +215,7 @@ class HamiltonCGTO(BaseHamilton):
         if not self.is_ao_set:
             raise RuntimeError("Please call `setup_grid(grid, xc)` to call this function")
         mat = torch.einsum("...r,rb,rc->...bc", vext, self.basis_dvolume, self.basis)  # (*BR, nao, nao)
+        mat = self._orthozer.convert2(mat)
         mat = (mat + mat.transpose(-2, -1)) * 0.5  # ensure the symmetricity and reduce numerical instability
         return xt.LinearOperator.m(mat, is_hermitian=True)
 
@@ -299,7 +311,7 @@ class HamiltonCGTO(BaseHamilton):
         # the atomic orbital parameter is the inverse QR of the orbital
         # ao_orb_params: (*BD, nao, norb)
         ao_orbq, _ = torch.linalg.qr(ao_orb_params)  # (*BD, nao, norb)
-        ao_orb = self._inv_ovlp_sqrt @ ao_orbq
+        ao_orb = ao_orbq
         dm = self.ao_orb2dm(ao_orb, orb_weight)
         if with_penalty is None:
             return dm
@@ -316,7 +328,7 @@ class HamiltonCGTO(BaseHamilton):
     def dm2ao_orb_params(self, dm: torch.Tensor, norb: int) -> torch.Tensor:
         # convert back the density matrix to one solution in the parameters space
         # NOTE: this assumes that the orbital weights always decreasing in order
-        mdmm = self._ovlp_sqrt @ dm @ self._ovlp_sqrt
+        mdmm = dm
         w, orbq = torch.linalg.eigh(mdmm)
         # w is ordered increasingly, so we take the last parts
         orbq_params = orbq[..., -norb:]  # (nao, norb)
@@ -333,7 +345,9 @@ class HamiltonCGTO(BaseHamilton):
         batchshape = dm.shape[:-2]
 
         # dm @ ao will be used in every case
-        dmdmt = (dm + dm.transpose(-2, -1)) * 0.5  # (*BD, nao, nao)
+        dmdmt = (dm + dm.transpose(-2, -1)) * 0.5  # (*BD, nao2, nao2)
+        # convert it back to dm in the cgto basis
+        dmdmt = self._orthozer.unconvert_dm(dmdmt)
 
         # prepare the densinfo components
         dens = torch.empty((*batchshape, ngrid), dtype=self.dtype, device=self.device)
@@ -442,6 +456,7 @@ class HamiltonCGTO(BaseHamilton):
                 mat += torch.einsum("...r,rb,rc->...bc", lapl_kin_dvol, grad_basis2, grad_basis2)
 
         # construct the Hermitian linear operator
+        mat = self._orthozer.convert2(mat)
         mat = (mat + mat.transpose(-2, -1)) * 0.5
         vxc_linop = xt.LinearOperator.m(mat, is_hermitian=True)
         return vxc_linop
@@ -463,7 +478,7 @@ class HamiltonCGTO(BaseHamilton):
         elif methodname == "ao_orb2dm":
             return []
         elif methodname == "ao_orb_params2dm":
-            return [prefix + "_inv_ovlp_sqrt"] + self.getparamnames("ao_orb2dm", prefix=prefix)
+            return self.getparamnames("ao_orb2dm", prefix=prefix)
         elif methodname == "get_e_hcore":
             return [prefix + "kinnucl_mat"]
         elif methodname == "get_e_elrep":
@@ -476,7 +491,8 @@ class HamiltonCGTO(BaseHamilton):
                 self.xc.getparamnames("get_edensityxc", prefix=prefix + "xc.") + \
                 self.grid.getparamnames("get_dvolume", prefix=prefix + "grid.")
         elif methodname == "get_vext":
-            return [prefix + "basis_dvolume", prefix + "basis"]
+            return [prefix + "basis_dvolume", prefix + "basis"] + \
+                self._orthozer.getparamnames("convert2", prefix=prefix + "_orthozer.")
         elif methodname == "get_grad_vext":
             return [prefix + "basis_dvolume", prefix + "grad_basis"]
         elif methodname == "get_lapl_kin_vext":
@@ -488,14 +504,16 @@ class HamiltonCGTO(BaseHamilton):
                 self.getparamnames("_get_vxc_from_potinfo", prefix=prefix) + \
                 self.xc.getparamnames("get_vxc", prefix=prefix + "xc.")
         elif methodname == "_dm2densinfo":
-            params = [prefix + "basis"]
+            params = [prefix + "basis"] + \
+                self._orthozer.getparamnames("unconvert_dm", prefix=prefix + "_orthozer.")
             if self.xcfamily == 2 or self.xcfamily == 4:
                 params += [prefix + "grad_basis"]
             if self.xcfamily == 4:
                 params += [prefix + "lapl_basis"]
             return params
         elif methodname == "_get_vxc_from_potinfo":
-            params = [prefix + "basis", prefix + "basis_dvolume"]
+            params = [prefix + "basis", prefix + "basis_dvolume"] + \
+                self._orthozer.getparamnames("convert2", prefix=prefix + "_orthozer.")
             if self.xcfamily in [2, 4]:
                 params += [prefix + "grad_basis"]
             if self.xcfamily == 4:
