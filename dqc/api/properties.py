@@ -11,7 +11,8 @@ from dqc.utils.datastruct import SpinParam
 from dqc.utils.units import length_to, freq_to, edipole_to, equadrupole_to, ir_ints_to, \
                             raman_ints_to
 
-__all__ = ["hessian_pos", "vibration", "edipole", "equadrupole", "is_orb_min"]
+__all__ = ["hessian_pos", "vibration", "edipole", "equadrupole", "is_orb_min",
+           "lowest_eival_orb_hessian"]
 
 # This file contains functions to calculate the perturbation properties of systems.
 
@@ -167,6 +168,64 @@ def equadrupole(qc: BaseQCCalc, unit: Optional[str] = "Debye*Angst") -> torch.Te
     equad = equadrupole_to(equad, unit)
     return equad
 
+@memoize_method
+def lowest_eival_orb_hessian(qc: BaseQCCalc) -> torch.Tensor:
+    """
+    Get the lowest eigenvalue of the orbital Hessian
+
+    Arguments
+    ---------
+    qc: BaseQCCalc
+        The qc calc object that has been executed.
+
+    Returns
+    -------
+    torch.Tensor
+        A single-element tensor representing the lowest eigenvalue of the
+        Hessian of energy with respect to orbital parameters.
+        It is useful to check the convergence stability whether it ends up
+        in a ground state or an excited state.
+    """
+    # check if the orbital is in the ground state
+    dm = qc.aodm()
+    polarized = isinstance(dm, SpinParam)
+    system = qc.get_system()
+    h = system.get_hamiltonian()
+
+    # (nao, norb)
+    orb_weights = system.get_orbweight(polarized=polarized)
+    norb = SpinParam.apply_fcn(lambda orb_weights: len(orb_weights), orb_weights)
+    norb_max = SpinParam.reduce(norb, max)
+    orb_p = SpinParam.apply_fcn(
+        lambda dm, norb: h.dm2ao_orb_params(dm, norb=norb), dm, norb)  # (*, nao, norb1), (*, nao, norb2)
+
+    # concatenate the parameters in -1 dim if it is polarized
+    if isinstance(orb_p, SpinParam):
+        orb_params = torch.cat((orb_p.u, orb_p.d), dim=-1).detach().requires_grad_()
+    else:
+        orb_params = orb_p.detach().requires_grad_()
+
+    # now reconstruct the orbital from the orbital parameters (just to construct
+    # the graph)
+    def get_ene(orb_params):
+        if polarized:
+            orb_p = SpinParam(u=orb_params[..., :norb.u], d=orb_params[..., norb.u:])
+        else:
+            orb_p = orb_params
+        dm2 = SpinParam.apply_fcn(
+            lambda orb_p, orb_weights: h.ao_orb_params2dm(orb_p, orb_weights),
+            orb_p, orb_weights)
+        ene = qc.dm2energy(dm2)
+        return ene
+
+    # construct the hessian of the energy w.r.t. orb_params
+    hess = xt.grad.hess(get_ene, (orb_params,), idxs=0)
+    assert isinstance(hess, xt.LinearOperator)
+
+    # get the lowest eigenvalue
+    eival, eivec = xt.linalg.symeig(hess, neig=1, mode="lowest")
+    return eival
+
 def is_orb_min(qc: BaseQCCalc, threshold: float = -1e-3) -> bool:
     """
     Check the stability of the SCF if it is the minimum, not a saddle point.
@@ -184,7 +243,7 @@ def is_orb_min(qc: BaseQCCalc, threshold: float = -1e-3) -> bool:
     bool
         ``True`` if the state is minimum, otherwise returns ``False``.
     """
-    eival = _lowest_eival_orb_hessian(qc)
+    eival = lowest_eival_orb_hessian(qc)
     return bool(torch.all(eival > threshold))
 
 @memoize_method
@@ -329,48 +388,6 @@ def _equadrupole(qc: BaseQCCalc) -> torch.Tensor:
     ion_quadrupole = torch.einsum("ad,ae,a->de", atompos, atompos, atomzs)
 
     return quadrupole + ion_quadrupole
-
-@memoize_method
-def _lowest_eival_orb_hessian(qc: BaseQCCalc) -> torch.Tensor:
-    # check if the orbital is in the ground state
-    dm = qc.aodm()
-    polarized = isinstance(dm, SpinParam)
-    system = qc.get_system()
-    h = system.get_hamiltonian()
-
-    # (nao, norb)
-    orb_weights = system.get_orbweight(polarized=polarized)
-    norb = SpinParam.apply_fcn(lambda orb_weights: len(orb_weights), orb_weights)
-    norb_max = SpinParam.reduce(norb, max)
-    orb_p = SpinParam.apply_fcn(
-        lambda dm, norb: h.dm2ao_orb_params(dm, norb=norb), dm, norb)  # (*, nao, norb1), (*, nao, norb2)
-
-    # concatenate the parameters in -1 dim if it is polarized
-    if isinstance(orb_p, SpinParam):
-        orb_params = torch.cat((orb_p.u, orb_p.d), dim=-1).detach().requires_grad_()
-    else:
-        orb_params = orb_p.detach().requires_grad_()
-
-    # now reconstruct the orbital from the orbital parameters (just to construct
-    # the graph)
-    def get_ene(orb_params):
-        if polarized:
-            orb_p = SpinParam(u=orb_params[..., :norb.u], d=orb_params[..., norb.u:])
-        else:
-            orb_p = orb_params
-        dm2 = SpinParam.apply_fcn(
-            lambda orb_p, orb_weights: h.ao_orb_params2dm(orb_p, orb_weights),
-            orb_p, orb_weights)
-        ene = qc.dm2energy(dm2)
-        return ene
-
-    # construct the hessian of the energy w.r.t. orb_params
-    hess = xt.grad.hess(get_ene, (orb_params,), idxs=0)
-    assert isinstance(hess, xt.LinearOperator)
-
-    # get the lowest eigenvalue
-    eival, eivec = xt.linalg.symeig(hess, neig=1, mode="lowest")
-    return eival
 
 ########### helper functions ###########
 
