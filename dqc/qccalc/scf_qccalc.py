@@ -139,7 +139,7 @@ class SCF_QCCalc(BaseQCCalc):
                 fcn=self._engine.aoparams2ene,
                 # random noise to add the chance of it gets to the minimum, not
                 # a saddle point
-                y0=params0 + torch.randn_like(params0) * 0.1 / params0.numel(),
+                y0=params0 + torch.randn_like(params0) * 0.03 / params0.numel(),
                 params=(None,),  # with_penalty
                 bck_options={**bck_options},
                 **fwd_options).detach()
