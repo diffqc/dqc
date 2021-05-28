@@ -24,7 +24,5 @@ After you got the requirements, then you can install dqc from terminal by:
 
     git clone --recursive https://github.com/diffqc/dqc
     cd dqc
-    git submodule sync
-    git submodule update --init --recursive
     python -m pip install -e .
     python setup.py build_ext
