@@ -1,5 +1,6 @@
 cmake_minimum_required (VERSION 2.6)
 project (cint C)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(cint_VERSION_MAJOR "4")
 set(cint_VERSION_MINOR "0")
 set(cint_VERSION_PATCH "7")
@@ -15,7 +16,7 @@ set(CMAKE_VERBOSE_MAKEFILE OFF)
 
 if (${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}.${CMAKE_PATCH_VERSION} VERSION_GREATER 2.8.3)
   if (${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}.${CMAKE_PATCH_VERSION} VERSION_GREATER 3.0.0)
-    cmake_policy(SET CMP0042 NEW) 
+    cmake_policy(SET CMP0042 NEW)
   endif()
   include(GNUInstallDirs)
 else ()
@@ -54,7 +55,7 @@ configure_file(
   "${PROJECT_SOURCE_DIR}/include/cint.h.in"
   "${PROJECT_BINARY_DIR}/include/cint.h")
 
-set(cintSrc 
+set(cintSrc
   src/c2f.c src/cart2sph.c src/cint1e.c src/cint2e.c src/cint_bas.c
   src/fblas.c src/g1e.c src/g2e.c src/misc.c src/optimizer.c
   src/rys_roots.c
