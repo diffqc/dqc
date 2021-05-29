@@ -53,10 +53,8 @@ def get_version(build_version=False):
         return VERSION
 
     # unreleased version
-    GIT_REVISION = _get_git_version()
+    GIT_REVISION_SHORT = _get_git_version()[:7]
     if build_version:
-        import datetime as dt
-        date = dt.date.strftime(dt.datetime.now(), "%Y%m%d%H%M%S")
-        return VERSION + ".dev" + date
+        return VERSION + ".dev" + int(GIT_REVISION_SHORT, 16)
     else:
-        return VERSION + ".dev0+" + GIT_REVISION[:7]
+        return VERSION + ".dev0+" + GIT_REVISION_SHORT
