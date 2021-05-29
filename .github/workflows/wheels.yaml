@@ -96,20 +96,20 @@ jobs:
           python -c "print('dqc==', end='')" > version.txt
           python dqc/_version.py >> version.txt
 
-      - name: Install from TestPyPI
-        run: |
-          python -m pip install -i https://test.pypi.org/simple/ -r version.txt
-
       - name: Install test requirements
         run: |
           python -m pip install -r test-requirements.txt
+
+      - name: Install from TestPyPI
+        run: |
+          python -m pip install -i https://test.pypi.org/simple/ -r version.txt
 
       - name: Run a single test
         run: |
           python -m pytest dqc/test/test_ks.py::test_uks_energy_same_as_rks
 
   publish:
-    name: Publish to TestPyPI
+    name: Publish to PyPI
     needs: [build_wheels]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags')
