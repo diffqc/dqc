@@ -15,6 +15,7 @@
 cmake_minimum_required (VERSION 2.8)
 project (pyscf)
 
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 if (NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE RELWITHDEBINFO)
 endif()
