@@ -55,7 +55,7 @@ def get_version(build_version=False):
     # unreleased version
     GIT_REVISION_SHORT = _get_git_version()[:7]
     if build_version:
-        return VERSION + ".dev" + int(GIT_REVISION_SHORT, 16)
+        return VERSION + ".dev" + str(int(GIT_REVISION_SHORT, 16))
     else:
         return VERSION + ".dev0+" + GIT_REVISION_SHORT
 
