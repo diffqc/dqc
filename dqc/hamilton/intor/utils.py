@@ -31,7 +31,7 @@ def _library_loader(name: str, path: str) -> Callable:
             try:
                 _libs[name] = ctypes.cdll.LoadLibrary(path)
             except OSError:
-                path = cypes.util.find_library(name)
+                path = ctypes.util.find_library(name)
                 _libs[name] = ctypes.cdll.LoadLibrary(path)
         return _libs[name]
     return fcn
