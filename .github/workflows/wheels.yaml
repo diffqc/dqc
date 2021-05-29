@@ -41,7 +41,7 @@ jobs:
           CIBW_BUILD_VERBOSITY: 3
           CIBW_ENVIRONMENT: "DQC_BUILD=1"
           CIBW_BEFORE_TEST: python -m pip install pytest
-          CIBW_TEST_COMMAND: pwd; ls; python -m pytest dqc/test/test_ks.py::test_uks_energy_same_as_rks
+          CIBW_TEST_COMMAND: python -m pytest {project}/dqc/test/test_ks.py::test_uks_energy_same_as_rks
 
       - uses: actions/upload-artifact@v2
         with:
