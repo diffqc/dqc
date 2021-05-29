@@ -39,7 +39,7 @@ jobs:
         run: |
           python -m cibuildwheel --output-dir wheelhouse
         env:
-          CIBW_BEFORE_BUILD: python -m pip install cmake
+          CIBW_BEFORE_BUILD: python -m pip install cmake; cmake --version; yum install -y openblas-devel.x86_64 gcc
           CIBW_BUILD: cp3*-*
           CIBW_BUILD_VERBOSITY: 3
           CIBW_ENVIRONMENT: "DQC_BUILD=1"
