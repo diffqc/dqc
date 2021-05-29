@@ -1,6 +1,7 @@
 import os
 import sys
 import ctypes
+import ctypes.util
 import numpy as np
 from typing import Dict, Any, Callable
 
@@ -30,9 +31,11 @@ def _library_loader(name: str, path: str) -> Callable:
         if name not in _libs:
             try:
                 _libs[name] = ctypes.cdll.LoadLibrary(path)
-            except OSError:
-                path = ctypes.util.find_library(name)
-                _libs[name] = ctypes.cdll.LoadLibrary(path)
+            except OSError as e:
+                path2 = ctypes.util.find_library(name)
+                if path2 is None:
+                    raise e
+                _libs[name] = ctypes.cdll.LoadLibrary(path2)
         return _libs[name]
     return fcn
 
