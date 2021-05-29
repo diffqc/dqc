@@ -50,9 +50,9 @@ class CMakeBuildExt(build_ext):
 
     def construct_extension(self):
         # libraries from PySCF
-        self.announce('Compiling libraries from PySCF', level=3)
         lib_dir = os.path.join(file_dir, "dqc", "lib")
         build_dir = self.build_temp
+        self.announce(f'Compiling libraries from PySCF from {lib_dir} to {build_dir}', level=3)
         self.build_cmake(lib_dir, build_dir)
 
     def build_cmake(self, lib_dir, build_dir):
