@@ -28,15 +28,19 @@ def _library_loader(name: str, path: str) -> Callable:
     # load the library and cache the handler
     def fcn():
         if name not in _libs:
-            _libs[name] = ctypes.cdll.LoadLibrary(path)
+            try:
+                _libs[name] = ctypes.cdll.LoadLibrary(path)
+            except OSError:
+                path = cypes.util.find_library(name)
+                _libs[name] = ctypes.cdll.LoadLibrary(path)
         return _libs[name]
     return fcn
 
-CINT = _library_loader("CINT", _libcint_path)
-CGTO = _library_loader("CGTO", _libcgto_path)
-CPBC = _library_loader("CPBC", _libcpbc_path)
+CINT = _library_loader("cint", _libcint_path)
+CGTO = _library_loader("cgto", _libcgto_path)
+CPBC = _library_loader("cpbc", _libcpbc_path)
 # CVHF = _library_loader("CVHF", _libcvhf_path)
-CSYMM = _library_loader("CSYMM", _libcsymm_path)
+CSYMM = _library_loader("symm", _libcsymm_path)
 
 c_null_ptr = ctypes.POINTER(ctypes.c_void_p)
 
