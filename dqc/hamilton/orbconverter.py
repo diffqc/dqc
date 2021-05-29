@@ -13,6 +13,9 @@ class OrbitalOrthogonalizer(xt.EditableModule):
         orthozer = ovlp_eivec[..., acc_idx] * (ovlp_eival[acc_idx]) ** (-0.5)  # (nao, nao2)
         self._orthozer = orthozer
 
+    def nao(self) -> int:
+        return self._orthozer.shape[-1]
+
     def convert2(self, mat: torch.Tensor) -> torch.Tensor:
         """
         Convert the last 2 dimensions of the matrix with shape (..., nao, nao)

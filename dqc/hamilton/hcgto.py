@@ -56,7 +56,7 @@ class HamiltonCGTO(BaseHamilton):
 
     @property
     def nao(self) -> int:
-        return self.libcint_wrapper.nao()
+        return self._orthozer.nao()
 
     @property
     def kpts(self) -> torch.Tensor:
