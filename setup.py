@@ -40,9 +40,11 @@ class CMakeBuildExt(build_ext):
             warnings.warn(msg)
 
         # copy all the libraries to build_lib
+        self.announce(f"Moving the libraries to {self.build_lib}")
         lib_paths = get_all_libraries(ext=".so")
         for src_lib_path in lib_paths:
             dst_lib_path = os.path.join(self.build_lib, src_lib_path)
+            self.announce(f"Moving from {src_lib_path} to {dst_lib_path}")
             os.makedirs(os.path.dirname(dst_lib_path), exist_ok=True)
             shutil.copyfile(src_lib_path, dst_lib_path)
 
