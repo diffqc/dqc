@@ -1,4 +1,5 @@
 import os
+import sys
 import ctypes
 import numpy as np
 from typing import Dict, Any, Callable
@@ -13,12 +14,13 @@ __all__ = ["NDIM", "CINT", "CGTO", "CPBC", "CSYMM", "c_null_ptr", "np2ctypes", "
 NDIM = 3
 
 # libraries
+_ext = "dylib" if sys.platform == "darwin" else "so"
 _curpath = os.path.dirname(os.path.abspath(__file__))
-_libcint_path = os.path.join(_curpath, "../../lib/deps/lib/libcint.so")
-_libcgto_path = os.path.join(_curpath, "../../lib/libcgto.so")
-_libcpbc_path = os.path.join(_curpath, "../../lib/libpbc.so")
-# _libcvhf_path = os.path.join(_curpath, "../../lib/libcvhf.so")
-_libcsymm_path = os.path.join(_curpath, "../../lib/libsymm.so")
+_libcint_path = os.path.join(_curpath, f"../../lib/deps/lib/libcint.{_ext}")
+_libcgto_path = os.path.join(_curpath, f"../../lib/libcgto.{_ext}")
+_libcpbc_path = os.path.join(_curpath, f"../../lib/libpbc.{_ext}")
+# _libcvhf_path = os.path.join(_curpath, "../../lib/libcvhf.{_ext}")
+_libcsymm_path = os.path.join(_curpath, f"../../lib/libsymm.{_ext}")
 
 _libs: Dict[str, Any] = {}
 
