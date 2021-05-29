@@ -41,7 +41,7 @@ jobs:
         env:
           CIBW_BEFORE_BUILD: python -m pip install cmake
           CIBW_BUILD: cp3*-*
-          CIBW_VERBOSE: 3
+          CIBW_BUILD_VERBOSITY: 3
           CIBW_ENVIRONMENT: "DQC_BUILD=1"
 
       - uses: actions/upload-artifact@v2
