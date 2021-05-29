@@ -74,10 +74,9 @@ class CMakeBuildExt(build_ext):
         finally:
             os.chdir(curpath)
 
-build_version = "DQC_BUILD" in os.environ
 setup(
     name=module_name,
-    version=version["get_version"](build_version=build_version),
+    version=version["get_version"](),
     description='Differentiable Quantum Chemistry',
     url='https://github.com/diffqc/dqc/',
     author='mfkasim1',

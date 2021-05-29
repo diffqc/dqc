@@ -48,17 +48,13 @@ def _get_git_version():
     os.chdir(cwd)
     return res
 
-def get_version(build_version=False):
+def get_version():
     if ISRELEASED:
         return VERSION
 
     # unreleased version
     GIT_REVISION_SHORT = _get_git_version()[:7]
-    if build_version:
-        return VERSION + ".dev" + str(int(GIT_REVISION_SHORT, 16))
-    else:
-        return VERSION + ".dev0+" + GIT_REVISION_SHORT
+    return VERSION + ".dev" + str(int(GIT_REVISION_SHORT, 16))
 
 if __name__ == "__main__":
-    build_version = "DQC_BUILD" in os.environ
-    print(get_version(build_version=build_version))
+    print(get_version())
