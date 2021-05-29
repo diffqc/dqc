@@ -39,7 +39,7 @@ jobs:
         run: |
           python -m cibuildwheel --output-dir wheelhouse
         env:
-          CIBW_BEFORE_BUILD: python -m pip install cmake . -v -v -v; pwd
+          CIBW_BEFORE_BUILD: python -m pip install numpy cmake . -v
           CIBW_BUILD: cp3*-*
           CIBW_BUILD_VERBOSITY: 3
           CIBW_ENVIRONMENT: "DQC_BUILD=1"
