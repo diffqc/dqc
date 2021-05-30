@@ -44,14 +44,14 @@ class CMakeBuildExt(build_ext):
             msg += "Please fix the bug and rerun it with 'python setup.py build_ext'"
             warnings.warn(msg)
 
-        # # copy all the libraries to build_lib
-        # self.announce(f"Moving the libraries to {self.build_lib}", level=3)
-        # lib_paths = get_all_libraries(ext=".so") + get_all_libraries(ext=".dylib")
-        # for src_lib_path in lib_paths:
-        #     dst_lib_path = os.path.join(self.build_lib, src_lib_path)
-        #     self.announce(f"Moving from {src_lib_path} to {dst_lib_path}", level=3)
-        #     os.makedirs(os.path.dirname(dst_lib_path), exist_ok=True)
-        #     shutil.copyfile(src_lib_path, dst_lib_path)
+        # copy all the libraries to build_lib
+        self.announce(f"Moving the libraries to {self.build_lib}", level=3)
+        lib_paths = get_all_libraries(ext=".so") + get_all_libraries(ext=".dylib")
+        for src_lib_path in lib_paths:
+            dst_lib_path = os.path.join(self.build_lib, src_lib_path)
+            self.announce(f"Moving from {src_lib_path} to {dst_lib_path}", level=3)
+            os.makedirs(os.path.dirname(dst_lib_path), exist_ok=True)
+            shutil.copyfile(src_lib_path, dst_lib_path)
 
     def construct_extension(self):
         # libraries from PySCF
