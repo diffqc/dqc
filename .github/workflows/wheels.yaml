@@ -109,7 +109,9 @@ jobs:
 
       - name: Run a single test
         run: |
-          python -m pytest dqc/test/test_ks.py::test_uks_energy_same_as_rks
+          cd dqc/test/
+          python -m pytest test_ks.py::test_uks_energy_same_as_rks
+          cd ../../
 
   publish:
     name: Publish to PyPI
