@@ -2,7 +2,7 @@ include MANIFEST.in
 include README.md setup.py LICENSE NOTICE
 
 global-exclude *.py[cod]
-recursive-include dqc/lib *.so *.so.* *.dylib *.dylib.*
+# recursive-include dqc/lib *.so *.so.* *.dylib *.dylib.*
 
 recursive-exclude dqc/lib *.c *.h
 recursive-exclude dqc/lib *.cl
