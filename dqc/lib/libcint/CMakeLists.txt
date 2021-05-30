@@ -144,7 +144,8 @@ add_library(cint ${cintSrc})
 set_target_properties(cint PROPERTIES
   VERSION ${cint_VERSION}
   SOVERSION ${cint_SOVERSION}
-  LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
+  # LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}
+)
 target_link_libraries(cint ${BLAS_LIBRARIES})
 if(QUADMATH_FOUND)
   target_link_libraries(cint quadmath)

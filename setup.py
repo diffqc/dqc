@@ -6,6 +6,7 @@ from setuptools import setup, find_packages, Extension
 from setuptools.command.build_ext import build_ext
 
 module_name = "dqc"
+ext_name = "dqc.lib.pyscflibs"
 file_dir = os.path.dirname(os.path.realpath(__file__))
 absdir = lambda p: os.path.join(file_dir, p)
 
@@ -20,7 +21,6 @@ cmd = [sys.executable, verfile]
 sp.run(cmd)
 
 ############## build extensions ##############
-ext_name = "_dqc_lib_placeholder"
 def get_all_libraries(ext=".so"):
     res = []
     for root, dirs, files in os.walk("dqc"):
@@ -29,6 +29,11 @@ def get_all_libraries(ext=".so"):
                  res.append(os.path.relpath(os.path.join(root, file)))
     return res
 
+class CMakeExtension(Extension):
+    def __init__(self, name, sourcedir=''):
+        Extension.__init__(self, name, sources=[])
+        self.sourcedir = os.path.abspath(sourcedir)
+
 class CMakeBuildExt(build_ext):
     def run(self):
         extension = self.extensions[0]
@@ -36,48 +41,34 @@ class CMakeBuildExt(build_ext):
         self.build_extension(self.extensions[0])
 
     def build_extension(self, ext):
-        try:
-            self.construct_extension()
-        except:
-            import warnings
-            msg = "Cannot install the extension. Some features might be missing. "
-            msg += "Please fix the bug and rerun it with 'python setup.py build_ext'"
-            warnings.warn(msg)
+        if "NO_DQC_EXT_NEEDED" in os.environ:
+            try:
+                self.construct_extension(ext)
+            except:
+                import warnings
+                msg = "Cannot install the extension. Some features might be missing. "
+                msg += "Please fix the bug and rerun it with 'python setup.py build_ext'"
+                warnings.warn(msg)
+        else:
+            self.construct_extension(ext)
 
-        # copy all the libraries to build_lib
-        self.announce(f"Moving the libraries to {self.build_lib}", level=3)
-        lib_paths = get_all_libraries(ext=".so") + get_all_libraries(ext=".dylib")
-        for src_lib_path in lib_paths:
-            dst_lib_path = os.path.join(self.build_lib, src_lib_path)
-            self.announce(f"Moving from {src_lib_path} to {dst_lib_path}", level=3)
-            os.makedirs(os.path.dirname(dst_lib_path), exist_ok=True)
-            shutil.copyfile(src_lib_path, dst_lib_path)
-
-    def construct_extension(self):
+    def construct_extension(self, ext):
         # libraries from PySCF
         lib_dir = os.path.join(file_dir, "dqc", "lib")
         build_dir = self.build_temp
         self.announce(f'Compiling libraries from PySCF from {lib_dir} to {build_dir}', level=3)
-        self.build_cmake(lib_dir, build_dir)
+        self.build_cmake(ext, lib_dir, build_dir)
 
-    def build_cmake(self, lib_dir, build_dir):
+    def build_cmake(self, ext, lib_dir, build_dir):
+        extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
         self.announce("Configuring cmake", level=3)
-        cmd = ['cmake', f'-S{lib_dir}', f'-B{build_dir}']
+        cmake_args = ['-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=' + extdir]
+        cmd = ['cmake', f'-S{lib_dir}', f'-B{build_dir}'] + cmake_args
         self.spawn(cmd)
 
         self.announce("Building binaries", level=3)
         cmd = ['cmake', '--build', build_dir, '-j']
         self.spawn(cmd)
-
-    def python_install(self, dir, fname, mode):
-        curpath = os.getcwd()
-        try:
-            os.chdir(dir)
-            self.announce(f"Installing {fname}")
-            cmd = [sys.executable, fname, mode]
-            self.spawn(cmd)
-        finally:
-            os.chdir(curpath)
 
 vers = version["get_version"]()
 setup(
@@ -100,7 +91,7 @@ setup(
         "xitorch >= 0.3",
         "torch>=1.8",  # ideally the nightly build
     ],
-    ext_modules=[Extension(ext_name, [])],
+    ext_modules=[CMakeExtension(ext_name, '')],
     cmdclass={'build_ext': CMakeBuildExt},
     classifiers=[
         "Development Status :: 3 - Alpha",

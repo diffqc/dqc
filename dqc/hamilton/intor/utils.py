@@ -16,7 +16,7 @@ NDIM = 3
 
 # libraries
 _ext = "dylib" if sys.platform == "darwin" else "so"
-_libcint_relpath = f"../../lib/deps/lib/libcint.{_ext}"
+_libcint_relpath = f"../../lib/libcint.{_ext}"
 _libcgto_relpath = f"../../lib/libcgto.{_ext}"
 _libcpbc_relpath = f"../../lib/libpbc.{_ext}"
 # _libcvhf_relpath = f"../../lib/libcvhf.{_ext}"
