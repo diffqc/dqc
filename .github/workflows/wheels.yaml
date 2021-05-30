@@ -101,7 +101,7 @@ jobs:
       - name: Install test requirements
         run: |
           python -m pip install -r test-requirements.txt
-          sleep 60
+          sleep 90
 
       - name: Install from TestPyPI
         run: |
@@ -110,6 +110,7 @@ jobs:
       - name: Run a single test
         run: |
           cd dqc/test/
+          python -c "import dqc; print(dqc.__file__)"
           python -m pytest test_ks.py::test_uks_energy_same_as_rks
           cd ../../
 
