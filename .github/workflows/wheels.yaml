@@ -78,6 +78,7 @@ jobs:
       matrix:
         os: [ubuntu-20.04, macOS-10.15]
         python-version: [3.7, 3.8, 3.9]
+      fail-fast: false
     env:
       DQC_BUILD: 1
     if: ${{ !(startsWith(github.ref, 'refs/tags')) }}
@@ -100,6 +101,7 @@ jobs:
       - name: Install test requirements
         run: |
           python -m pip install -r test-requirements.txt
+          sleep 60
 
       - name: Install from TestPyPI
         run: |
