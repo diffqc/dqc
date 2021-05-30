@@ -104,15 +104,7 @@ jobs:
 
       - name: Install from TestPyPI
         run: |
-          max_retry=5
-          counter=0
-          until python -m pip install -i https://test.pypi.org/simple/ -r version.txt 2> /dev/null
-          do
-             sleep 30
-             [[ counter -eq $max_retry ]] && echo "Failed!" && exit 1
-             echo "Trying again. Try #$counter"
-             ((counter++))
-          done
+          python .github/workflows/wheels_install_test_pypi.py
 
       - name: Run a single test
         # not using pytest because pytest imports dqc from the local directory
