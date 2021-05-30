@@ -9,21 +9,21 @@ VERSION = '%d.%d.%d' % (MAJOR, MINOR, MICRO)
 
 # Return the git revision as a string
 # taken from numpy/numpy
-def git_version():
-    def _minimal_ext_cmd(cmd):
-        # construct minimal environment
-        env = {}
-        for k in ['SYSTEMROOT', 'PATH', 'HOME']:
-            v = os.environ.get(k)
-            if v is not None:
-                env[k] = v
-        # LANGUAGE is used on win32
-        env['LANGUAGE'] = 'C'
-        env['LANG'] = 'C'
-        env['LC_ALL'] = 'C'
-        out = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, env=env).communicate()[0]
-        return out
+def _minimal_ext_cmd(cmd):
+    # construct minimal environment
+    env = {}
+    for k in ['SYSTEMROOT', 'PATH', 'HOME']:
+        v = os.environ.get(k)
+        if v is not None:
+            env[k] = v
+    # LANGUAGE is used on win32
+    env['LANGUAGE'] = 'C'
+    env['LANG'] = 'C'
+    env['LC_ALL'] = 'C'
+    out = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, env=env).communicate()[0]
+    return out
 
+def git_version():
     try:
         out = _minimal_ext_cmd(['git', 'rev-parse', 'HEAD'])
         GIT_REVISION = out.strip().decode('ascii')
@@ -32,7 +32,16 @@ def git_version():
 
     return GIT_REVISION
 
-def _get_git_version():
+def git_count():
+    try:
+        out = _minimal_ext_cmd(["git", "rev-list", "--count", "HEAD"])
+        GIT_COUNT = out.strip().decode("ascii")
+    except OSError:
+        GIT_COUNT = "Unknown"
+
+    return GIT_COUNT
+
+def _get_git_cmd(fcn):
     cwd = os.getcwd()
 
     # go to the main directory
@@ -42,7 +51,7 @@ def _get_git_version():
     os.chdir(maindir)
 
     # get git version
-    res = git_version()
+    res = fcn()
 
     # restore the cwd
     os.chdir(cwd)
@@ -53,8 +62,12 @@ def get_version():
         return VERSION
 
     # unreleased version
-    GIT_REVISION_SHORT = _get_git_version()[:7]
-    return VERSION + ".dev" + str(int(GIT_REVISION_SHORT, 16))
+    ngit_short = 7  # how many letters should be included from the git version
+    GIT_REVISION_SHORT = _get_git_cmd(git_version)[:ngit_short]
+    GIT_COUNT = _get_git_cmd(git_count)
+    num_int_git_short = len(str(int("f" * ngit_short, 16)))
+    git_rev_format = f"%0{num_int_git_short}d"
+    return VERSION + ".dev" + GIT_COUNT + (git_rev_format % int(GIT_REVISION_SHORT, 16))
 
 if __name__ == "__main__":
     print(get_version())
