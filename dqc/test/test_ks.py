@@ -516,18 +516,10 @@ def test_pbc_rks_energy(xc, atomzs, spin, alattice, energy_true, grid):
 if __name__ == "__main__":
     import time
     xc = "lda_x"
-    basis = "3-21G"
-    atomzs = [3]
-    spin = 1
-    alattice = np.array([[1., 1., -1.], [-1., 1., 1.], [1., -1., 1.]]) * 0.5 * 6.6329387300636
-    grid = "sg2"
-
-    # test to see if the energy calculated by DQC agrees with PySCF
-    # for this test only we test for different types of grids to see if any error is raised
-    alattice = torch.as_tensor(alattice, dtype=dtype)
-    poss = torch.tensor([[0.0, 0.0, 0.0]], dtype=dtype)
-    mol = Sol((atomzs, poss), basis="3-21G", spin=spin, alattice=alattice, dtype=dtype, grid=grid)
-    mol.densityfit(method="gdf", auxbasis="def2-sv(p)-jkfit")
+    energy_true = -0.979143262
+    atomzs = [1, 1]
+    poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * 1.0
+    mol = Mol((atomzs, poss), basis="6-311++G**", dtype=dtype)
     qc = KS(mol, xc=xc, restricted=False).run()
     ene = qc.energy()
     assert torch.allclose(ene, ene * 0 + energy_true)

@@ -107,10 +107,11 @@ jobs:
           python -m pip install -i https://test.pypi.org/simple/ -r version.txt
 
       - name: Run a single test
+        # not using pytest because pytest imports dqc from the local directory
         run: |
           cd dqc/test/
           python -c "import dqc; print(dqc.__file__)"
-          python -m pytest test_ks.py::test_uks_energy_same_as_rks
+          python test_ks.py
           cd ../../
 
   publish:
