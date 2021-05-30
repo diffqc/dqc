@@ -34,8 +34,9 @@ jobs:
         run: |
           python -m cibuildwheel --output-dir wheelhouse
         env:
+          CIBW_MANYLINUX_X86_64_IMAGE: manylinux2_24
           CIBW_BEFORE_BUILD: python -m pip install cmake
-          CIBW_BEFORE_BUILD_LINUX: yum install -y openblas-devel.x86_64 gcc
+          CIBW_BEFORE_BUILD_LINUX: apt-get install -y openblas-devel.x86_64 gcc
           CIBW_BEFORE_BUILD_MACOS: brew install openblas gcc
           CIBW_ARCHS: x86_64
           CIBW_BUILD: cp3*-*
@@ -44,7 +45,6 @@ jobs:
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: auditwheel -v repair -w {dest_dir} {wheel}
           # CIBW_BEFORE_TEST: python -m pip install pytest
           # CIBW_TEST_COMMAND: python {project}/dqc/test/test_ks.py
-          CIBW_MANYLINUX_X86_64_IMAGE: manylinux2010
 
       - uses: actions/upload-artifact@v2
         with:
