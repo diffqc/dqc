@@ -106,7 +106,7 @@ jobs:
         run: |
           max_retry=5
           counter=0
-          until python -m pip install -i https://test.pypi.org/simple/ -r version.txt
+          until python -m pip install -i https://test.pypi.org/simple/ -r version.txt 2> /dev/null
           do
              sleep 30
              [[ counter -eq $max_retry ]] && echo "Failed!" && exit 1
