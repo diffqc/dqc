@@ -20,7 +20,7 @@ _libcint_relpath = f"../../lib/deps/lib/libcint.{_ext}"
 _libcgto_relpath = f"../../lib/libcgto.{_ext}"
 _libcpbc_relpath = f"../../lib/libpbc.{_ext}"
 # _libcvhf_relpath = f"../../lib/libcvhf.{_ext}"
-_libcsymm_path = f"../../lib/libsymm.{_ext}"
+_libcsymm_relpath = f"../../lib/libsymm.{_ext}"
 
 _libs: Dict[str, Any] = {}
 
