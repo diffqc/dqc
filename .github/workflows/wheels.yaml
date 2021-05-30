@@ -41,8 +41,8 @@ jobs:
           CIBW_BUILD: cp3*-*
           CIBW_BUILD_VERBOSITY: 3
           CIBW_ENVIRONMENT: "DQC_BUILD=1"
-          CIBW_BEFORE_TEST: python -m pip install pytest
-          CIBW_TEST_COMMAND: python -m pytest {project}/dqc/test/test_ks.py::test_uks_energy_same_as_rks
+          # CIBW_BEFORE_TEST: python -m pip install pytest
+          # CIBW_TEST_COMMAND: python -m pytest {project}/dqc/test/test_ks.py::test_uks_energy_same_as_rks
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
 
       - uses: actions/upload-artifact@v2
@@ -69,49 +69,49 @@ jobs:
           password: ${{ secrets.TEST_PYPI_API_TOKEN }}
           repository_url: https://test.pypi.org/legacy/
 
-  # test_published:
-  #   name: Test the wheels from TestPyPI
-  #   needs: [publish_test]
-  #   runs-on: ${{ matrix.os }}
-  #   strategy:
-  #     matrix:
-  #       os: [ubuntu-20.04, macOS-10.15]
-  #       python-version: [3.7, 3.8, 3.9]
-  #     fail-fast: false
-  #   env:
-  #     DQC_BUILD: 1
-  #   if: ${{ !(startsWith(github.ref, 'refs/tags')) }}
-  #
-  #   steps:
-  #     - name: Checkout repo and submodules
-  #       uses: actions/checkout@v2
-  #
-  #     - name: Set up Python ${{ matrix.python-version }}
-  #       uses: actions/setup-python@v2
-  #       with:
-  #         python-version: ${{ matrix.python-version }}
-  #
-  #     - name: Get versioning
-  #       run: |
-  #         python dqc/_version.py
-  #         python -c "print('dqc==', end='')" > version.txt
-  #         python dqc/_version.py >> version.txt
-  #
-  #     - name: Install test requirements
-  #       run: |
-  #         python -m pip install -r test-requirements.txt
-  #         sleep 90
-  #
-  #     - name: Install from TestPyPI
-  #       run: |
-  #         python -m pip install -i https://test.pypi.org/simple/ -r version.txt
-  #
-  #     - name: Run a single test
-  #       run: |
-  #         cd dqc/test/
-  #         python -c "import dqc; print(dqc.__file__)"
-  #         python -m pytest test_ks.py::test_uks_energy_same_as_rks
-  #         cd ../../
+  test_published:
+    name: Test the wheels from TestPyPI
+    needs: [publish_test]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-20.04, macOS-10.15]
+        python-version: [3.7, 3.8, 3.9]
+      fail-fast: false
+    env:
+      DQC_BUILD: 1
+    if: ${{ !(startsWith(github.ref, 'refs/tags')) }}
+
+    steps:
+      - name: Checkout repo and submodules
+        uses: actions/checkout@v2
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Get versioning
+        run: |
+          python dqc/_version.py
+          python -c "print('dqc==', end='')" > version.txt
+          python dqc/_version.py >> version.txt
+
+      - name: Install test requirements
+        run: |
+          python -m pip install -r test-requirements.txt
+          sleep 90
+
+      - name: Install from TestPyPI
+        run: |
+          python -m pip install -i https://test.pypi.org/simple/ -r version.txt
+
+      - name: Run a single test
+        run: |
+          cd dqc/test/
+          python -c "import dqc; print(dqc.__file__)"
+          python -m pytest test_ks.py::test_uks_energy_same_as_rks
+          cd ../../
 
   publish:
     name: Publish to PyPI
