@@ -41,6 +41,7 @@ jobs:
           CIBW_BUILD: cp3*-*
           CIBW_BUILD_VERBOSITY: 3
           CIBW_ENVIRONMENT: "DQC_BUILD=1"
+          CIBW_REPAIR_WHEEL_COMMAND_LINUX: auditwheel -v repair -w {dest_dir} {wheel}
           # CIBW_BEFORE_TEST: python -m pip install pytest
           # CIBW_TEST_COMMAND: python -m pytest {project}/dqc/test/test_ks.py::test_uks_energy_same_as_rks
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
