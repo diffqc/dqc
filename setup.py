@@ -94,7 +94,6 @@ setup(
     install_requires=[
         "numpy>=1.8.2",
         "scipy>=0.15",
-        "matplotlib>=1.5.3",
         "basis_set_exchange",
         "h5py>=3.1.0",
         "pylibxc2>=6.0.0",
