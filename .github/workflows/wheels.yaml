@@ -34,9 +34,9 @@ jobs:
         run: |
           python -m cibuildwheel --output-dir wheelhouse
         env:
-          CIBW_MANYLINUX_X86_64_IMAGE: manylinux2_24
+          CIBW_MANYLINUX_X86_64_IMAGE: quay.io/pypa/manylinux2014_x86_64:latest
           CIBW_BEFORE_BUILD: python -m pip install cmake
-          CIBW_BEFORE_BUILD_LINUX: apt-get install -y openblas-devel.x86_64 gcc
+          CIBW_BEFORE_BUILD_LINUX: yum install -y openblas-devel.x86_64 gcc
           CIBW_BEFORE_BUILD_MACOS: brew install openblas gcc
           CIBW_ARCHS: x86_64
           CIBW_BUILD: cp3*-*
