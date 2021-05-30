@@ -51,7 +51,7 @@ class CMakeBuildExt(build_ext):
             dst_lib_path = os.path.join(self.build_lib, src_lib_path)
             self.announce(f"Moving from {src_lib_path} to {dst_lib_path}", level=3)
             os.makedirs(os.path.dirname(dst_lib_path), exist_ok=True)
-            shutil.move(src_lib_path, dst_lib_path)
+            shutil.copyfile(src_lib_path, dst_lib_path)
 
     def construct_extension(self):
         # libraries from PySCF
