@@ -89,7 +89,7 @@ setup(
     author_email='firman.kasim@gmail.com',
     license='Apache License 2.0',
     packages=find_packages(),
-    package_data={module_name: ["_version.txt"]},
+    package_data={module_name: ["_version.txt", "datasets/lebedevquad/lebedev_*.txt"]},
     python_requires=">=3.7",
     install_requires=[
         "numpy>=1.8.2",
