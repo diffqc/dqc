@@ -1,5 +1,6 @@
 import os
 import sys
+import subprocess as sp
 import shutil
 from setuptools import setup, find_packages, Extension
 from setuptools.command.build_ext import build_ext
@@ -13,6 +14,10 @@ verfile = os.path.abspath(os.path.join(module_name, "_version.py"))
 version = {"__file__": verfile}
 with open(verfile, "r") as fp:
     exec(fp.read(), version)
+
+# execute _version.py to create _version.txt
+cmd = [sys.executable, verfile]
+sp.run(cmd)
 
 ############## build extensions ##############
 ext_name = "_dqc_lib_placeholder"
@@ -74,15 +79,17 @@ class CMakeBuildExt(build_ext):
         finally:
             os.chdir(curpath)
 
+vers = version["get_version"]()
 setup(
     name=module_name,
-    version=version["get_version"](),
+    version=vers,
     description='Differentiable Quantum Chemistry',
     url='https://github.com/diffqc/dqc/',
     author='mfkasim1',
     author_email='firman.kasim@gmail.com',
     license='Apache License 2.0',
     packages=find_packages(),
+    package_data={module_name: ["_version.txt"]},
     python_requires=">=3.7",
     install_requires=[
         "numpy>=1.8.2",

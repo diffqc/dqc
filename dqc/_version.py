@@ -58,16 +58,29 @@ def _get_git_cmd(fcn):
     return res
 
 def get_version():
+    fdir = os.path.dirname(os.path.abspath(__file__))
+    fname = os.path.join(fdir, "_version.txt")
+    if os.path.exists(fname):
+        with open(fname, "r") as f:
+            version = f.read().strip()
+            return version
+
     if ISRELEASED:
-        return VERSION
+        version = VERSION
 
     # unreleased version
-    ngit_short = 7  # how many letters should be included from the git version
-    GIT_REVISION_SHORT = _get_git_cmd(git_version)[:ngit_short]
-    GIT_COUNT = _get_git_cmd(git_count)
-    num_int_git_short = len(str(int("f" * ngit_short, 16)))
-    git_rev_format = f"%0{num_int_git_short}d"
-    return VERSION + ".dev" + GIT_COUNT + (git_rev_format % int(GIT_REVISION_SHORT, 16))
+    else:
+        ngit_short = 7  # how many letters should be included from the git version
+        GIT_REVISION = _get_git_cmd(git_version)
+        GIT_REVISION_SHORT = GIT_REVISION[:ngit_short]
+        GIT_COUNT = _get_git_cmd(git_count)
+        num_int_git_short = len(str(int("f" * ngit_short, 16)))
+        git_rev_format = f"%0{num_int_git_short}d"
+        version = VERSION + ".dev" + GIT_COUNT + (git_rev_format % int(GIT_REVISION_SHORT, 16))
+
+    with open(fname, "w") as f:
+        f.write(version)
+    return version
 
 if __name__ == "__main__":
     print(get_version())

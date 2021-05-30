@@ -1,3 +1,6 @@
+# misc files
+_version.txt
+
 # profiling files
 profile.sh
 profile.prof
