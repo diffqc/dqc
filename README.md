@@ -22,7 +22,6 @@ The documentation can be found at: https://dqc.readthedocs.io/
 First, you need to install the requirements above.
 After you got the requirements, then you can install dqc from terminal by:
 
-    git clone --recursive https://github.com/diffqc/dqc
+    git clone https://github.com/diffqc/dqc
     cd dqc
     python -m pip install -e .
-    python setup.py build_ext

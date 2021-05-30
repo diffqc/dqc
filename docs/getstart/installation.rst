@@ -16,7 +16,6 @@ To do this, type in your terminal:
 
 .. code-block::
 
-    git clone --recursive https://github.com/diffqc/dqc
+    git clone https://github.com/diffqc/dqc
     cd dqc
     python -m pip install -e .
-    python setup.py build_ext
