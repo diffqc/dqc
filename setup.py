@@ -90,6 +90,7 @@ setup(
         "pylibxc2>=6.0.0",
         "xitorch >= 0.3",
         "torch>=1.8",  # ideally the nightly build
+        "cmake>=3.0.0",
     ],
     ext_modules=[CMakeExtension(ext_name, '')],
     cmdclass={'build_ext': CMakeBuildExt},
@@ -101,8 +102,9 @@ setup(
         "Topic :: Scientific/Engineering :: Mathematics",
         "License :: OSI Approved :: Apache Software License",
 
-        "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
     ],
     keywords="project library deep-learning dft quantum-chemistry",
     zip_safe=False

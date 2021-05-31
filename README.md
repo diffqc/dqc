@@ -12,10 +12,7 @@ The documentation can be found at: https://dqc.readthedocs.io/
 
 ## Requirements
 
-* [python](https://www.python.org) 3.7 or newer
-* [pip](https://pip.pypa.io/en/stable/installing/)
-* [pytorch](https://pytorch.org) 1.8 or newer
-* [cmake](https://cmake.org/) 2.8 or newer
+* [python](https://www.python.org) 3.7 or newer with [pip](https://pip.pypa.io/en/stable/installing/)
 
 ## Installation
 

@@ -4,9 +4,7 @@ Installation
 Requirements
 ------------
 
-* python >= 3.7
-* pytorch >= 1.8 (install `here <https://pytorch.org/>`_)
-* cmake >= 3.18
+* python >= 3.7 with pip
 
 Installation
 ------------
