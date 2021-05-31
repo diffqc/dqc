@@ -1,5 +1,6 @@
 import os
 import sys
+import re
 import subprocess as sp
 import shutil
 from setuptools import setup, find_packages, Extension
