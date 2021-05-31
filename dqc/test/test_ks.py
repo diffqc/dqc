@@ -2,6 +2,7 @@ from itertools import product
 import numpy as np
 import torch
 import pytest
+import xitorch as xt
 from dqc.qccalc.ks import KS
 from dqc.system.mol import Mol
 from dqc.system.sol import Sol
@@ -235,6 +236,25 @@ def test_rks_grad_vxc(xccls, xcparams, atomzs, dist):
 
     params = tuple(torch.nn.Parameter(torch.tensor(p, dtype=dtype).requires_grad_()) for p in xcparams)
     torch.autograd.gradcheck(get_energy, params)
+
+@pytest.mark.parametrize(
+    "atomzs,dist,restricted",
+    [(*atomzs_poss[0], False)] + [(*atomzs_poss[0], True)]
+)
+def test_no_xc(atomzs, dist, restricted):
+    # check if xc == None produces the same result as "0*lda"
+    with xt.enable_debug():
+        poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist
+
+        mol1 = Mol((atomzs, poss), basis="3-21G", dtype=dtype)
+        qc1 = KS(mol1, xc="0*lda_x", restricted=restricted).run()
+        ene1 = qc1.energy()
+
+        mol2 = Mol((atomzs, poss), basis="3-21G", dtype=dtype)
+        qc2 = KS(mol2, xc=None, restricted=restricted).run()
+        ene2 = qc2.energy()
+
+        assert torch.allclose(ene1, ene2)
 
 ############### Unrestricted Kohn-Sham ###############
 u_atomzs_spins = [
