@@ -109,7 +109,7 @@ setup(
         "pylibxc2>=6.0.0",
         "xitorch >= 0.3",
         "torch>=1.8",  # ideally the nightly build
-        "cmake>=3.0.0",
+        # "cmake>=3.0.0",
     ],
     ext_modules=[CMakeExtension(ext_name, '')],
     cmdclass={'build_ext': CMakeBuildExt},

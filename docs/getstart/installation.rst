@@ -5,6 +5,7 @@ Requirements
 ------------
 
 * python >= 3.7 with pip
+* cmake >= 3.18
 
 Installation
 ------------
