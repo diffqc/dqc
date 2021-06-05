@@ -6,6 +6,7 @@ from dqc.df.base_df import BaseDF
 from dqc.df.dfmol import DFMol
 from dqc.hamilton.base_hamilton import BaseHamilton
 from dqc.hamilton.orbconverter import OrbitalOrthogonalizer, IdentityOrbConverter
+from dqc.hamilton.orbparams import QROrbParams
 from dqc.utils.datastruct import AtomCGTOBasis, ValGrad, SpinParam, DensityFitInfo
 from dqc.grid.base_grid import BaseGrid
 from dqc.xc.base_xc import BaseXC
@@ -40,6 +41,9 @@ class HamiltonCGTO(BaseHamilton):
             self._orthozer = OrbitalOrthogonalizer(ovlp)
         else:
             self._orthozer = IdentityOrbConverter(ovlp)
+
+        # set up the orbital parameterized
+        self._orbparam = QROrbParams
 
         # set up the density matrix
         self._dfoptions = df
@@ -321,19 +325,17 @@ class HamiltonCGTO(BaseHamilton):
         # convert from atomic orbital parameters to density matrix
         # the atomic orbital parameter is the inverse QR of the orbital
         # ao_orb_params: (*BD, nao, norb)
-        ao_orbq, _ = torch.linalg.qr(ao_orb_params)  # (*BD, nao, norb)
+        out = self._orbparam.params2orb(ao_orb_params, with_penalty=with_penalty)
+        if with_penalty is None:
+            ao_orbq = out
+        else:
+            ao_orbq, penalty = out
+
         ao_orb = self._orthozer.convert_ortho_orb(ao_orbq)
         dm = self.ao_orb2dm(ao_orb, orb_weight)
         if with_penalty is None:
             return dm
         else:
-            # QR decomposition's solution is not unique in a way that every column
-            # can be multiplied by -1 and it still a solution
-            # So, to remove the non-uniqueness, we will make the sign of the sum
-            # positive.
-            s1 = torch.sign(ao_orbq.sum(dim=-2, keepdim=True))  # (*BD, 1, norb)
-            s2 = torch.sign(ao_orb_params.sum(dim=-2, keepdim=True))
-            penalty = torch.mean((ao_orbq * s1 - ao_orb_params * s2) ** 2) * with_penalty
             return dm, penalty
 
     def dm2ao_orb_params(self, dm: torch.Tensor, norb: int) -> torch.Tensor:
@@ -343,7 +345,8 @@ class HamiltonCGTO(BaseHamilton):
         w, orbq = torch.linalg.eigh(mdmm)
         # w is ordered increasingly, so we take the last parts
         orbq_params = orbq[..., -norb:]  # (nao, norb)
-        return torch.flip(orbq_params, dims=(-1,))
+        orbq_params = torch.flip(orbq_params, dims=(-1,))
+        return self._orbparam.orb2params(orbq_params)
 
     ################ misc ################
     def _dm2densinfo(self, dm: torch.Tensor) -> ValGrad:
