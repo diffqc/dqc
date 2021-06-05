@@ -131,7 +131,8 @@ class _HFEngine(BaseSCFEngine):
         aop = self.unpack_aoparams(aoparams)  # tensor or SpinParam of tensor
         aoc = self.unpack_aoparams(aocoeffs)  # tensor or SpinParam of tensor
         dm_penalty = SpinParam.apply_fcn(
-            lambda aop, aoc, orb_weight: self._hamilton.ao_orb_params2dm(aop, aoc, orb_weight, with_penalty=with_penalty),
+            lambda aop, aoc, orb_weight:
+                self._hamilton.ao_orb_params2dm(aop, aoc, orb_weight, with_penalty=with_penalty),
             aop, aoc, self._orb_weight
         )
         if with_penalty is not None:

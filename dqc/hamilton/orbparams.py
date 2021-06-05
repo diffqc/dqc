@@ -12,11 +12,12 @@ class BaseOrbParams(object):
 
     @overload
     @staticmethod
-    def params2orb(params: torch.Tensor, coeffs: torch.Tensor, with_penalty: float) -> Tuple[torch.Tensor, torch.Tensor]:
+    def params2orb(params: torch.Tensor, coeffs: torch.Tensor, with_penalty: float) \
+            -> Tuple[torch.Tensor, torch.Tensor]:
         ...
 
     @staticmethod
-    def params2orb(params, with_penalty):
+    def params2orb(params, coeffs, with_penalty):
         """
         Convert the parameters & coefficients to the orthogonal orbitals.
         ``params`` is the tensor to be optimized in variational method, while
@@ -41,7 +42,8 @@ class QROrbParams(BaseOrbParams):
 
     @overload
     @staticmethod
-    def params2orb(params: torch.Tensor, coeffs: torch.Tensor, with_penalty: float) -> Tuple[torch.Tensor, torch.Tensor]:
+    def params2orb(params: torch.Tensor, coeffs: torch.Tensor, with_penalty: float) \
+            -> Tuple[torch.Tensor, torch.Tensor]:
         ...
 
     @staticmethod

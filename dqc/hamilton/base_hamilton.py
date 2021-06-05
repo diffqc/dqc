@@ -2,7 +2,7 @@ from __future__ import annotations
 import torch
 import xitorch as xt
 from abc import abstractmethod, abstractproperty
-from typing import List, Optional, Union, overload
+from typing import List, Optional, Union, overload, Tuple
 from dqc.grid.base_grid import BaseGrid
 from dqc.xc.base_xc import BaseXC
 from dqc.df.base_df import BaseDF
