@@ -199,17 +199,19 @@ class BaseHamilton(xt.EditableModule):
 
     ############### free parameters for variational method ###############
     @overload
-    def ao_orb_params2dm(self, ao_orb_params: torch.Tensor, orb_weight: torch.Tensor,
+    def ao_orb_params2dm(self, ao_orb_params: torch.Tensor, ao_orb_coeffs: torch.Tensor,
+                         orb_weight: torch.Tensor,
                          with_penalty: None) -> torch.Tensor:
         ...
 
     @overload
-    def ao_orb_params2dm(self, ao_orb_params: torch.Tensor, orb_weight: torch.Tensor,
+    def ao_orb_params2dm(self, ao_orb_params: torch.Tensor, ao_orb_coeffs: torch.Tensor,
+                         orb_weight: torch.Tensor,
                          with_penalty: float) -> Union[torch.Tensor, torch.Tensor]:
         ...
 
     @abstractmethod
-    def ao_orb_params2dm(self, ao_orb_params, orb_weight, with_penalty=None):
+    def ao_orb_params2dm(self, ao_orb_params, ao_orb_coeffs, orb_weight, with_penalty=None):
         """
         Convert the atomic orbital free parameters (parametrized in such a way so
         it is not bounded) to the density matrix.
@@ -217,7 +219,11 @@ class BaseHamilton(xt.EditableModule):
         Arguments
         ---------
         ao_orb_params: torch.Tensor
-            The tensors that parametrized atomic orbital in an unbounded space.
+            The tensor that parametrized atomic orbital in an unbounded space.
+        ao_orb_coeffs: torch.Tensor
+            The tensor that helps ``ao_orb_params`` in describing the orbital.
+            The difference with ``ao_orb_params`` is that ``ao_orb_coeffs`` is
+            not differentiable and not to be optimized in variational method.
         orb_weight: torch.Tensor
             The orbital weights.
         with_penalty: float or None
@@ -241,7 +247,7 @@ class BaseHamilton(xt.EditableModule):
         pass
 
     @abstractmethod
-    def dm2ao_orb_params(self, dm: torch.Tensor, norb: int) -> torch.Tensor:
+    def dm2ao_orb_params(self, dm: torch.Tensor, norb: int) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Convert from the density matrix to the orbital parameters.
         The map is not one-to-one, but instead one-to-many where there might
@@ -258,8 +264,9 @@ class BaseHamilton(xt.EditableModule):
 
         Returns
         -------
-        torch.Tensor
-            The atomic orbital parameters.
+        tuple of 2 torch.Tensor
+            The atomic orbital parameters for the first returned value and the
+            atomic orbital coefficients for the second value.
         """
         pass
 

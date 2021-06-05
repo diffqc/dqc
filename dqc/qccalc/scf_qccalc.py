@@ -120,27 +120,36 @@ class SCF_QCCalc(BaseQCCalc):
             orb_weights = system.get_orbweight(polarized=self._polarized)
             norb = SpinParam.apply_fcn(lambda orb_weights: len(orb_weights), orb_weights)
 
-            def dm2params(dm: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
-                p = SpinParam.apply_fcn(
-                    lambda dm, norb: h.dm2ao_orb_params(SpinParam.sum(dm), norb=norb),
-                    dm, norb)
+            def dm2params(dm: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> \
+                    Tuple[torch.Tensor, torch.Tensor]:
+                pc = SpinParam.apply_fcn(
+                     lambda dm, norb: h.dm2ao_orb_params(SpinParam.sum(dm), norb=norb),
+                     dm, norb)
+                p = SpinParam.apply_fcn(lambda pc: pc[0], pc)
+                c = SpinParam.apply_fcn(lambda pc: pc[1], pc)
                 params = self._engine.pack_aoparams(p)
-                return params
+                coeffs = self._engine.pack_aoparams(c)
+                return params, coeffs
 
-            def params2dm(params: torch.Tensor) -> Union[torch.Tensor, SpinParam[torch.Tensor]]:
+            def params2dm(params: torch.Tensor, coeffs: torch.Tensor) \
+                    -> Union[torch.Tensor, SpinParam[torch.Tensor]]:
                 p: Union[torch.Tensor, SpinParam[torch.Tensor]] = self._engine.unpack_aoparams(params)
+                c: Union[torch.Tensor, SpinParam[torch.Tensor]] = self._engine.unpack_aoparams(coeffs)
+
                 dm = SpinParam.apply_fcn(
-                    lambda p, orb_weights: h.ao_orb_params2dm(p, orb_weights, with_penalty=None),
-                    p, orb_weights)
+                    lambda p, c, orb_weights: h.ao_orb_params2dm(p, c, orb_weights, with_penalty=None),
+                    p, c, orb_weights)
                 return dm
 
-            params0 = dm2params(dm).detach()
+            params0, coeffs0 = dm2params(dm)
+            params0 = params0.detach()
+            coeffs0 = coeffs0.detach()
             min_params0: torch.Tensor = xitorch.optimize.minimize(
                 fcn=self._engine.aoparams2ene,
                 # random noise to add the chance of it gets to the minimum, not
                 # a saddle point
                 y0=params0 + torch.randn_like(params0) * 0.03 / params0.numel(),
-                params=(None,),  # with_penalty
+                params=(coeffs0, None,),  # coeffs & with_penalty
                 bck_options={**bck_options},
                 **fwd_options).detach()
 
@@ -151,18 +160,18 @@ class SCF_QCCalc(BaseQCCalc):
                 # inverse.
                 # Without the penalty, the Hamiltonian could have 0 eigenvalues
                 # because of the overparameterization of the aoparams.
-                min_dm = params2dm(min_params0)
-                params0 = dm2params(min_dm)
+                min_dm = params2dm(min_params0, coeffs0)
+                params0, coeffs0 = dm2params(min_dm)
                 min_params0 = xitorch.optimize.minimize(
                     fcn=self._engine.aoparams2ene,
                     y0=params0,
-                    params=(1e-1,),  # with_penalty
+                    params=(coeffs0, 1e-1,),  # coeffs & with_penalty
                     bck_options={**bck_options},
                     method="gd",
                     step=0,
                     maxiter=0)
 
-            self._dm = params2dm(min_params0)
+            self._dm = params2dm(min_params0, coeffs0)
 
         self._has_run = True
         return self
@@ -263,17 +272,20 @@ class BaseSCFEngine(xt.EditableModule):
         pass
 
     @abstractmethod
-    def aoparams2ene(self, aoparams: torch.Tensor, with_penalty: Optional[float] = None) -> torch.Tensor:
+    def aoparams2ene(self, aoparams: torch.Tensor, aocoeffs: torch.Tensor,
+                     with_penalty: Optional[float] = None) -> torch.Tensor:
         """
-        Calculate the energy from the given atomic orbital parameters.
+        Calculate the energy from the given atomic orbital parameters and coefficients.
         """
         pass
 
     @abstractmethod
-    def aoparams2dm(self, aoparams: torch.Tensor, with_penalty: Optional[float] = None) -> \
+    def aoparams2dm(self, aoparams: torch.Tensor, aocoeffs: torch.Tensor,
+                    with_penalty: Optional[float] = None) -> \
             Tuple[Union[torch.Tensor, SpinParam[torch.Tensor]], Optional[torch.Tensor]]:
         """
-        Calculate the density matrix and the penalty from the given atomic orbital parameters.
+        Calculate the density matrix and the penalty from the given atomic
+        orbital parameters and coefficients.
         """
         pass
 

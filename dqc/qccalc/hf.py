@@ -117,19 +117,22 @@ class _HFEngine(BaseSCFEngine):
         dm = self.scp2dm(scp)
         return self.dm2scp(dm)
 
-    def aoparams2ene(self, aoparams: torch.Tensor, with_penalty: Optional[float] = None) -> torch.Tensor:
+    def aoparams2ene(self, aoparams: torch.Tensor, aocoeffs: torch.Tensor,
+                     with_penalty: Optional[float] = None) -> torch.Tensor:
         # calculate the energy from the atomic orbital params
-        dm, penalty = self.aoparams2dm(aoparams, with_penalty)
+        dm, penalty = self.aoparams2dm(aoparams, aocoeffs, with_penalty)
         ene = self.dm2energy(dm)
         return (ene + penalty) if penalty is not None else ene
 
-    def aoparams2dm(self, aoparams: torch.Tensor, with_penalty: Optional[float] = None) -> \
+    def aoparams2dm(self, aoparams: torch.Tensor, aocoeffs: torch.Tensor,
+                    with_penalty: Optional[float] = None) -> \
             Tuple[Union[torch.Tensor, SpinParam[torch.Tensor]], Optional[torch.Tensor]]:
         # convert the aoparams to density matrix and penalty factor
         aop = self.unpack_aoparams(aoparams)  # tensor or SpinParam of tensor
+        aoc = self.unpack_aoparams(aocoeffs)  # tensor or SpinParam of tensor
         dm_penalty = SpinParam.apply_fcn(
-            lambda aop, orb_weight: self._hamilton.ao_orb_params2dm(aop, orb_weight, with_penalty=with_penalty),
-            aop, self._orb_weight
+            lambda aop, aoc, orb_weight: self._hamilton.ao_orb_params2dm(aop, aoc, orb_weight, with_penalty=with_penalty),
+            aop, aoc, self._orb_weight
         )
         if with_penalty is not None:
             dm = SpinParam.apply_fcn(lambda dm_penalty: dm_penalty[0], dm_penalty)

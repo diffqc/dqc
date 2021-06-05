@@ -196,30 +196,36 @@ def lowest_eival_orb_hessian(qc: BaseQCCalc) -> torch.Tensor:
     orb_weights = system.get_orbweight(polarized=polarized)
     norb = SpinParam.apply_fcn(lambda orb_weights: len(orb_weights), orb_weights)
     norb_max = SpinParam.reduce(norb, max)
-    orb_p = SpinParam.apply_fcn(
+    orb_pc = SpinParam.apply_fcn(
         lambda dm, norb: h.dm2ao_orb_params(dm, norb=norb), dm, norb)  # (*, nao, norb1), (*, nao, norb2)
+    orb_p = SpinParam.apply_fcn(lambda orb_pc: orb_pc[0], orb_pc)
+    orb_c = SpinParam.apply_fcn(lambda orb_pc: orb_pc[1], orb_pc)
 
     # concatenate the parameters in -1 dim if it is polarized
     if isinstance(orb_p, SpinParam):
         orb_params = torch.cat((orb_p.u, orb_p.d), dim=-1).detach().requires_grad_()
+        orb_coeffs = torch.cat((orb_c.u, orb_c.d), dim=-1).detach().requires_grad_()
     else:
         orb_params = orb_p.detach().requires_grad_()
+        orb_coeffs = orb_c.detach().requires_grad_()
 
     # now reconstruct the orbital from the orbital parameters (just to construct
     # the graph)
-    def get_ene(orb_params):
+    def get_ene(orb_params, orb_coeffs):
         if polarized:
             orb_p = SpinParam(u=orb_params[..., :norb.u], d=orb_params[..., norb.u:])
+            orb_c = SpinParam(u=orb_coeffs[..., :norb.u], d=orb_coeffs[..., norb.u:])
         else:
             orb_p = orb_params
+            orb_c = orb_coeffs
         dm2 = SpinParam.apply_fcn(
-            lambda orb_p, orb_weights: h.ao_orb_params2dm(orb_p, orb_weights),
-            orb_p, orb_weights)
+            lambda orb_p, orb_c, orb_weights: h.ao_orb_params2dm(orb_p, orb_c, orb_weights),
+            orb_p, orb_c, orb_weights)
         ene = qc.dm2energy(dm2)
         return ene
 
     # construct the hessian of the energy w.r.t. orb_params
-    hess = xt.grad.hess(get_ene, (orb_params,), idxs=0)
+    hess = xt.grad.hess(get_ene, (orb_params, orb_coeffs), idxs=0)
     assert isinstance(hess, xt.LinearOperator)
 
     # get the lowest eigenvalue

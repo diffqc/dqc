@@ -135,16 +135,18 @@ class _KSEngine(BaseSCFEngine):
         dm = self.scp2dm(scp)
         return self.dm2scp(dm)
 
-    def aoparams2ene(self, aoparams: torch.Tensor, with_penalty: Optional[float] = None) -> torch.Tensor:
+    def aoparams2ene(self, aoparams: torch.Tensor, aocoeffs: torch.Tensor,
+                     with_penalty: Optional[float] = None) -> torch.Tensor:
         # calculate the energy from the atomic orbital params
-        dm, penalty = self.aoparams2dm(aoparams, with_penalty)
+        dm, penalty = self.aoparams2dm(aoparams, aocoeffs, with_penalty)
         ene = self.dm2energy(dm)
         return (ene + penalty) if penalty is not None else ene
 
-    def aoparams2dm(self, aoparams: torch.Tensor, with_penalty: Optional[float] = None) -> \
+    def aoparams2dm(self, aoparams: torch.Tensor, aocoeffs: torch.Tensor,
+                    with_penalty: Optional[float] = None) -> \
             Tuple[Union[torch.Tensor, SpinParam[torch.Tensor]], Optional[torch.Tensor]]:
         # calculate the density matrix and the penalty factor
-        return self.hf_engine.aoparams2dm(aoparams, with_penalty)
+        return self.hf_engine.aoparams2dm(aoparams, aocoeffs, with_penalty)
 
     def pack_aoparams(self, aoparams: Union[torch.Tensor, SpinParam[torch.Tensor]]) -> torch.Tensor:
         # pack the aoparams from tensor or SpinParam into a single tensor

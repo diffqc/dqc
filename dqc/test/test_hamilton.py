@@ -163,11 +163,12 @@ def test_cgto_ao_params(system1):
 
     # generating density matrix that fulfills the requirements
     ao_params0 = torch.randn((nao, norb), dtype=dtype)
-    dm = h.ao_orb_params2dm(ao_params0, orb_weights)
+    ao_coeffs0 = torch.tensor([], dtype=dtype)
+    dm = h.ao_orb_params2dm(ao_params0, ao_coeffs0, orb_weights)
 
     # regenerate dm
-    ao_params = h.dm2ao_orb_params(dm, norb=len(orb_weights))
-    dm2, penalty = h.ao_orb_params2dm(ao_params, orb_weights, with_penalty=1.0)
+    ao_params, ao_coeffs = h.dm2ao_orb_params(dm, norb=len(orb_weights))
+    dm2, penalty = h.ao_orb_params2dm(ao_params, ao_coeffs, orb_weights, with_penalty=1.0)
     assert torch.allclose(dm, dm2)
     assert torch.allclose(penalty, torch.zeros_like(penalty))
 

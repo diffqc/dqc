@@ -312,20 +312,22 @@ class HamiltonCGTO(BaseHamilton):
 
     ############### free parameters for variational method ###############
     @overload
-    def ao_orb_params2dm(self, ao_orb_params: torch.Tensor, orb_weight: torch.Tensor,
+    def ao_orb_params2dm(self, ao_orb_params: torch.Tensor, ao_orb_coeffs: torch.Tensor,
+                         orb_weight: torch.Tensor,
                          with_penalty: None) -> torch.Tensor:
         ...
 
     @overload
-    def ao_orb_params2dm(self, ao_orb_params: torch.Tensor, orb_weight: torch.Tensor,
+    def ao_orb_params2dm(self, ao_orb_params: torch.Tensor, ao_orb_coeffs: torch.Tensor,
+                         orb_weight: torch.Tensor,
                          with_penalty: float) -> Union[torch.Tensor, torch.Tensor]:
         ...
 
-    def ao_orb_params2dm(self, ao_orb_params, orb_weight, with_penalty=None):
+    def ao_orb_params2dm(self, ao_orb_params, ao_orb_coeffs, orb_weight, with_penalty=None):
         # convert from atomic orbital parameters to density matrix
         # the atomic orbital parameter is the inverse QR of the orbital
         # ao_orb_params: (*BD, nao, norb)
-        out = self._orbparam.params2orb(ao_orb_params, with_penalty=with_penalty)
+        out = self._orbparam.params2orb(ao_orb_params, ao_orb_coeffs, with_penalty=with_penalty)
         if with_penalty is None:
             ao_orbq = out
         else:
@@ -338,7 +340,7 @@ class HamiltonCGTO(BaseHamilton):
         else:
             return dm, penalty
 
-    def dm2ao_orb_params(self, dm: torch.Tensor, norb: int) -> torch.Tensor:
+    def dm2ao_orb_params(self, dm: torch.Tensor, norb: int) -> Tuple[torch.Tensor, torch.Tensor]:
         # convert back the density matrix to one solution in the parameters space
         # NOTE: this assumes that the orbital weights always decreasing in order
         mdmm = self._orthozer.unconvert_to_ortho_dm(dm)
