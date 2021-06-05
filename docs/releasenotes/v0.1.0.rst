@@ -1,0 +1,16 @@
+Release notes v0.1.0
+====================
+
+First release of DQC:
+
+* Hartree-Fock (HF) calculation on isolated molecules (restricted + unrestricted)
+  using linear combinations of contracted gaussian orbitals
+* Kohn-Sham DFT (KS) calculation on isolated molecules (restricted + unrestricted)
+  using linear combinations of contracted gaussian orbitals
+* Various perturbation properties: Raman activity, IR intensity, vibrational
+  frequency and normal modes, and SCF convergence stability check
+* (experimental) Direct minimization of orbitals to solve HF and KS-DFT equation
+* Fractional Z systems
+* Differentiability with respect to: atomic numbers, electron occupation numbers,
+  atomic positions, basis contracted coefficients and exponential factors, xc
+  functional parameters, external potential.
