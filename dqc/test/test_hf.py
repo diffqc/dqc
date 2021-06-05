@@ -54,6 +54,27 @@ def test_rhf_energy(atomzs, dist, energy_true, variational):
         xt.set_debug_mode(False)
 
 @pytest.mark.parametrize(
+    "atomzs,dist,energy_true,variational",
+    [(*atomz_pos, energy, False) for (atomz_pos, energy) in zip(atomzs_poss[:1], energies[:1])] +
+    [(*atomz_pos, energy, True) for (atomz_pos, energy) in zip(atomzs_poss[:1], energies[:1])]
+)
+def test_rhf_energy_overcomplete(atomzs, dist, energy_true, variational):
+    # test to see if the energy calculated by DQC agrees with PySCF with
+    # overcomplete basis
+    torch.manual_seed(123)
+
+    # double the basis to make it overcomplete
+    basis0 = loadbasis(f"{atomzs[0]}:{basis}") * 2
+    basis1 = loadbasis(f"{atomzs[1]}:{basis}") * 2
+
+    poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist
+    # orthogonalize_basis = True to handle overcomplete
+    mol = Mol((atomzs, poss), basis=[basis0, basis1], dtype=dtype, orthogonalize_basis=True)
+    qc = HF(mol, restricted=True, variational=variational).run()
+    ene = qc.energy()
+    assert torch.allclose(ene, ene * 0 + energy_true, rtol=1e-7)
+
+@pytest.mark.parametrize(
     "atomzs,dist,grad2,variational",
     [(*atomz_pos, grad2, varnal) for (atomz_pos, grad2, varnal) in \
         product(atomzs_poss, [False, True], [False, True])]

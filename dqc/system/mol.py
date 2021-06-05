@@ -32,6 +32,10 @@ class Mol(BaseSystem):
     * basis: str, CGTOBasis, list of str, or CGTOBasis
         The string describing the gto basis. If it is a list, then it must have
         the same length as the number of atoms.
+    * orthogonalize_basis: bool
+        If True, orthogonalize the basis in the hamiltonian calculation.
+        If False, then use the raw basis, this might not work with over-complete
+        basis.
     * grid: int
         Describe the grid.
         If it is an integer, then it uses the default grid with specified level
@@ -65,6 +69,7 @@ class Mol(BaseSystem):
                  moldesc: Union[str, Tuple[AtomZsType, AtomPosType]],
                  basis: BasisInpType,
                  *,
+                 orthogonalize_basis: bool = True,
                  grid: Union[int, str] = "sg3",
                  spin: Optional[ZType] = None,
                  charge: ZType = 0,
@@ -97,7 +102,9 @@ class Mol(BaseSystem):
                      for (atz, bas, atpos) in zip(atomzs, allbases, atompos)]
         self._atombases = atombases
         self._hamilton = HamiltonCGTO(atombases, efield=self._preproc_efield,
-                                      cache=self._cache.add_prefix("hamilton"))
+                                      cache=self._cache.add_prefix("hamilton"),
+                                      orthozer=orthogonalize_basis)
+        self._orthogonalize_basis = orthogonalize_basis
         self._atompos = atompos  # (natoms, ndim)
         self._atomzs = atomzs  # (natoms,) int-type or dtype if floating point
         self._atomzs_int = atomzs_int  # (natoms,) int-type rounded from atomzs
@@ -178,7 +185,8 @@ class Mol(BaseSystem):
         # change the hamiltonian to have density fit
         df = DensityFitInfo(method=method, auxbases=atomauxbases)
         self._hamilton = HamiltonCGTO(self._atombases, df=df, efield=self._preproc_efield,
-                                      cache=self._cache.add_prefix("hamilton"))
+                                      cache=self._cache.add_prefix("hamilton"),
+                                      orthozer=self._orthogonalize_basis)
         return self
 
     def get_hamiltonian(self) -> BaseHamilton:

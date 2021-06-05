@@ -14,12 +14,13 @@ from pyscf.pbc.dft import numint as pbc_numint
 dtype = torch.float64
 cdtype = torch.complex128
 
-@pytest.fixture
-def system1():
+@pytest.fixture(params=[{"basis_ortho": False}, {"basis_ortho": True}])
+def system1(request):
     poss = torch.tensor([[0.0, 0.0, 0.8], [0.0, 0.0, -0.8]], dtype=dtype)
     moldesc = ([1, 1], poss)
     # untruncated grid is required to pass the hamiltonian tests
-    m = Mol(moldesc, basis="6-311++G**", dtype=dtype, grid=4)
+    m = Mol(moldesc, basis="6-311++G**", dtype=dtype, grid=4,
+            orthogonalize_basis=request.param["basis_ortho"])
     m.setup_grid()
     hamilton = m.get_hamiltonian()
     hamilton.build()

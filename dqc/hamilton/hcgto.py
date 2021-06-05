@@ -5,7 +5,7 @@ import dqc.hamilton.intor as intor
 from dqc.df.base_df import BaseDF
 from dqc.df.dfmol import DFMol
 from dqc.hamilton.base_hamilton import BaseHamilton
-from dqc.hamilton.orbconverter import OrbitalOrthogonalizer
+from dqc.hamilton.orbconverter import OrbitalOrthogonalizer, IdentityOrbConverter
 from dqc.utils.datastruct import AtomCGTOBasis, ValGrad, SpinParam, DensityFitInfo
 from dqc.grid.base_grid import BaseGrid
 from dqc.xc.base_xc import BaseXC
@@ -26,13 +26,22 @@ class HamiltonCGTO(BaseHamilton):
     def __init__(self, atombases: List[AtomCGTOBasis], spherical: bool = True,
                  df: Optional[DensityFitInfo] = None,
                  efield: Optional[Tuple[torch.Tensor, ...]] = None,
-                 cache: Optional[Cache] = None) -> None:
+                 cache: Optional[Cache] = None,
+                 orthozer: bool = True) -> None:
         self.atombases = atombases
         self.spherical = spherical
         self.libcint_wrapper = intor.LibcintWrapper(atombases, spherical)
-        self._orthozer = OrbitalOrthogonalizer(intor.overlap(self.libcint_wrapper))
         self.dtype = self.libcint_wrapper.dtype
         self.device = self.libcint_wrapper.device
+
+        # set up the orbital converter
+        ovlp = intor.overlap(self.libcint_wrapper)
+        if orthozer:
+            self._orthozer = OrbitalOrthogonalizer(ovlp)
+        else:
+            self._orthozer = IdentityOrbConverter(ovlp)
+
+        # set up the density matrix
         self._dfoptions = df
         if df is None:
             self._df: Optional[DFMol] = None
@@ -311,7 +320,7 @@ class HamiltonCGTO(BaseHamilton):
         # the atomic orbital parameter is the inverse QR of the orbital
         # ao_orb_params: (*BD, nao, norb)
         ao_orbq, _ = torch.linalg.qr(ao_orb_params)  # (*BD, nao, norb)
-        ao_orb = ao_orbq
+        ao_orb = self._orthozer.convert_ortho_orb(ao_orbq)
         dm = self.ao_orb2dm(ao_orb, orb_weight)
         if with_penalty is None:
             return dm
@@ -328,7 +337,7 @@ class HamiltonCGTO(BaseHamilton):
     def dm2ao_orb_params(self, dm: torch.Tensor, norb: int) -> torch.Tensor:
         # convert back the density matrix to one solution in the parameters space
         # NOTE: this assumes that the orbital weights always decreasing in order
-        mdmm = dm
+        mdmm = self._orthozer.unconvert_to_ortho_dm(dm)
         w, orbq = torch.linalg.eigh(mdmm)
         # w is ordered increasingly, so we take the last parts
         orbq_params = orbq[..., -norb:]  # (nao, norb)
@@ -478,7 +487,8 @@ class HamiltonCGTO(BaseHamilton):
         elif methodname == "ao_orb2dm":
             return []
         elif methodname == "ao_orb_params2dm":
-            return self.getparamnames("ao_orb2dm", prefix=prefix)
+            return self.getparamnames("ao_orb2dm", prefix=prefix) + \
+                self._orthozer.getparamnames("convert_ortho_orb", prefix=prefix + "_orthozer.")
         elif methodname == "get_e_hcore":
             return [prefix + "kinnucl_mat"]
         elif methodname == "get_e_elrep":
