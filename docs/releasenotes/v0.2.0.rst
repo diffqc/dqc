@@ -1,0 +1,12 @@
+Release notes v0.2.0
+====================
+
+New features
+------------
+
+* Options in ``Mol`` to use orthogonalized basis or non-orthogonalized basis.
+
+Bug fixes
+---------
+
+* Fixing bug in evaluating the density profile using orthogonalized basis.
