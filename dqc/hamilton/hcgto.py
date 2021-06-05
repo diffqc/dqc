@@ -19,10 +19,10 @@ class HamiltonCGTO(BaseHamilton):
     """
     Hamiltonian object of contracted Gaussian type-orbital.
     This class orthogonalizes the basis by taking the weighted eigenvectors of
-        the overlap matrix, i.e. the eigenvectors divided by square root of the
-        eigenvalues.
+    the overlap matrix, i.e. the eigenvectors divided by square root of the
+    eigenvalues.
     The advantage of doing this is making the overlap matrix in Roothan's equation
-        identity and it could handle overcomplete basis.
+    identity and it could handle overcomplete basis.
     """
     def __init__(self, atombases: List[AtomCGTOBasis], spherical: bool = True,
                  df: Optional[DensityFitInfo] = None,
