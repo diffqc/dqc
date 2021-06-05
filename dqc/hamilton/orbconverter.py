@@ -112,7 +112,7 @@ class OrbitalOrthogonalizer(BaseOrbConverter):
         basis with shape (..., nao2, nao2) to the original orbital basis
         (..., nao, nao)
         """
-        dm = torch.einsum("...kl,ik,jl->ij", dm, self._orthozer, self._orthozer.conj())
+        dm = torch.einsum("...kl,ik,jl->...ij", dm, self._orthozer, self._orthozer.conj())
         return dm
 
     def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:

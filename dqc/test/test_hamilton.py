@@ -5,6 +5,7 @@ from dqc.system.mol import Mol
 from dqc.hamilton.hcgto_pbc import HamiltonCGTO_PBC
 from dqc.hamilton.intor.lattice import Lattice
 from dqc.api.loadbasis import loadbasis
+from dqc.qccalc.hf import HF
 from dqc.utils.datastruct import DensityFitInfo, AtomCGTOBasis
 
 import pyscf
@@ -19,7 +20,7 @@ def system1(request):
     poss = torch.tensor([[0.0, 0.0, 0.8], [0.0, 0.0, -0.8]], dtype=dtype)
     moldesc = ([1, 1], poss)
     # untruncated grid is required to pass the hamiltonian tests
-    m = Mol(moldesc, basis="6-311++G**", dtype=dtype, grid=4,
+    m = Mol(moldesc, basis="3-21G", dtype=dtype, grid=3,
             orthogonalize_basis=request.param["basis_ortho"])
     m.setup_grid()
     hamilton = m.get_hamiltonian()
@@ -90,24 +91,19 @@ def test_cgto_ao2dm(system1):
 
 def test_cgto_dm2grid(system1):
     # test the function aodm2dens in hamilton cgto
+    # using converged HF system to make it independent of the definition of dm
+    # in DQC and PySCF
 
     torch.manual_seed(123)
+    qc = HF(system1).run()
+    dm1 = qc.aodm()
     hamilton1 = system1.get_hamiltonian()
     nao = hamilton1.nao
-    nb = 4
+    nb = 2
 
     # prepare the density matrix
-    # 0: zeros
-    # 1: half of 2nd row (random symmetric)
-    # 2: double the 1st row (random symmetric)
-    # 3: eye
-    dm = torch.rand((nb, nao, nao), dtype=dtype)
-    dm = dm + dm.transpose(-2, -1)  # (nb, nao, nao)
-    dm[0] = 0
-    dm[2] = 2 * dm[1]
-    dm[3] = 0
-    dm3_diag = dm[3].diagonal(dim1=-2, dim2=-1)
-    dm3_diag[:] = 1.0
+    dm = torch.zeros((nb, nao, nao), dtype=dtype)
+    dm[1] = dm1
 
     # prepare the grids
     # 0th row: middle point between two atoms
@@ -123,24 +119,21 @@ def test_cgto_dm2grid(system1):
     ngrid = grids.shape[0]
 
     # # pyscf code to obtain the actual results
-    # from pyscf import gto
+    # from pyscf import gto, scf
     # from pyscf.dft import numint
-    # mol = gto.M(atom="H 0 0 0.8; H 0 0 -0.8", basis="6-311++G**", unit="Bohr")
+    # mol = gto.M(atom="H 0 0 0.8; H 0 0 -0.8", basis="3-21G", unit="Bohr")
+    # mf = scf.RHF(mol)
+    # ene = mf.kernel()
+    # dm_scf = mf.make_rdm1()
     # ao = numint.eval_ao(mol, grids[:, 0, :].numpy())
-    # dens1 = numint.eval_rho(mol, ao, dm[1].numpy())
-    # dens2 = numint.eval_rho(mol, ao, dm[2].numpy())
-    # dens3 = numint.eval_rho(mol, ao, dm[3].numpy())
+    # dens1 = numint.eval_rho(mol, ao, dm_scf)
     # print(dens1)
-    # print(dens2)
-    # print(dens3)
     # raise RuntimeError
 
     dens = hamilton1.aodm2dens(dm, grids)  # (ngrid, nb)
     dens_true = torch.tensor([
         [0.0, 0.0, 0.0, 0.0, 0.0],
-        [3.25841833, 4.37242451, 8.11849071, 4.0871612, 6.25558526],
-        [6.51683666, 8.74484901, 16.23698143, 8.1743224, 12.51117051],
-        [0.87780038, 1.05290457, 2.14278122, 1.05290457, 2.14278122],
+        [0.18742819, 0.23469519, 0.30250292, 0.23469519, 0.30250292],
     ], dtype=dens.dtype).transpose(-2, -1)
     assert list(dens.shape) == [ngrid, nb]
     assert torch.allclose(dens, dens_true)
