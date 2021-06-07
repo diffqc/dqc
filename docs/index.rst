@@ -14,16 +14,17 @@ using PyTorch's autograd engine.
 
 DQC's example API:
 
-.. doctest:: python
+.. jupyter-execute::
 
-    >>> import torch
-    >>> import dqc
-    >>> atomzs, atomposs = dqc.parse_moldesc("H -1 0 0; H 1 0 0")
-    >>> atomposs = atomposs.requires_grad_()  # mark atomposs as differentiable
-    >>> mol = dqc.Mol((atomzs, atomposs), basis="3-21G")
-    >>> qc = dqc.HF(mol).run()
-    >>> ene = qc.energy()  # calculate the energy
-    >>> force = -torch.autograd.grad(ene, atomposs)[0]  # calculate the force
+    import torch
+    import dqc
+    atomzs, atomposs = dqc.parse_moldesc("H -1 0 0; H 1 0 0")
+    atomposs = atomposs.requires_grad_()  # mark atomposs as differentiable
+    mol = dqc.Mol((atomzs, atomposs), basis="3-21G")
+    qc = dqc.HF(mol).run()
+    ene = qc.energy()  # calculate the energy
+    force = -torch.autograd.grad(ene, atomposs)[0]  # calculate the force
+    print(force)
 
 .. toctree::
    :maxdepth: 1
@@ -49,6 +50,11 @@ DQC's example API:
    api/dqc_xc/index
    api/dqc_utils/index
 
+.. toctree::
+   :maxdepth: 2
+   :caption: Release notes
+
+   releasenotes/index
 
 Indices and tables
 ==================

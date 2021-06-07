@@ -37,13 +37,13 @@ As a demonstration, we will use Hartree-Fock calculation with 3-21G basis set.
 First, we need to import modules and set up variables that we will need for the
 calculations.
 
-.. doctest::
+.. jupyter-execute::
 
-    >>> import torch
-    >>> import dqc
-    >>> import xitorch.optimize  # for differentiable optimization
-    >>> dtype = torch.double
-    >>> basis = dqc.loadbasis("7:3-21G")
+    import torch
+    import dqc
+    import xitorch.optimize  # for differentiable optimization
+    dtype = torch.double
+    basis = dqc.loadbasis("7:3-21G")
 
 ``xitorch`` is a great library that provides differentiable functionals that
 we will use in this tutorial.
@@ -54,48 +54,45 @@ sure there is no discontinuity in the properties.
 Next, we need to define a function that calculates the energy given the distance
 :math:`s` and :math:`\lambda`.
 
-.. doctest::
+.. jupyter-execute::
 
-    >>> def get_energy(s, lmbda):
-    ...     atomzs = 7.0 + torch.tensor([1.0, -1.0], dtype=dtype) * lmbda
-    ...     atomposs = torch.tensor([[-0.5, 0, 0], [0.5, 0, 0]], dtype=dtype) * s
-    ...     mol = dqc.Mol((atomzs, atomposs), spin=0, basis=[basis, basis])
-    ...     qc = dqc.HF(mol).run()
-    ...     return qc.energy()
+    def get_energy(s, lmbda):
+        atomzs = 7.0 + torch.tensor([1.0, -1.0], dtype=dtype) * lmbda
+        atomposs = torch.tensor([[-0.5, 0, 0], [0.5, 0, 0]], dtype=dtype) * s
+        mol = dqc.Mol((atomzs, atomposs), spin=0, basis=[basis, basis])
+        qc = dqc.HF(mol).run()
+        return qc.energy()
 
 Once the function is defined, then we can calculate the equilibrium distance
 for :math:`\mathrm{N_2}` molecule.
 
-.. doctest::
+.. jupyter-execute::
 
-    >>> lmbda = torch.tensor(0.0, dtype=dtype).requires_grad_()
-    >>> s0_n2 = torch.tensor(2.04, dtype=dtype)  # initial guess of the distance
-    >>> smin_n2 = xitorch.optimize.minimize(
-    ...     get_energy, s0_n2, params=(lmbda,), method="gd", step=1e-2)
-    >>> print(smin_n2)
-    tensor(2.0460, dtype=torch.float64, grad_fn=<_RootFinderBackward>)
+    lmbda = torch.tensor(0.0, dtype=dtype).requires_grad_()
+    s0_n2 = torch.tensor(2.04, dtype=dtype)  # initial guess of the distance
+    smin_n2 = xitorch.optimize.minimize(
+        get_energy, s0_n2, params=(lmbda,), method="gd", step=1e-2)
+    print(smin_n2)
 
 ``xitorch.optimize.minimize`` finds the parameters ``s`` that minimizes the
 energy given the parameters ``lmbda``.
 The output of ``xitorch.optimize.minimize`` is now differentiable with respect
 to the parameter ``lmbda``.
 
-.. doctest::
+.. jupyter-execute::
 
-    >>> grad_lmbda = torch.autograd.grad(smin_n2, lmbda, create_graph=True)[0]
-    >>> grad2_lmbda = torch.autograd.grad(grad_lmbda, lmbda, create_graph=True)[0]
-    >>> print(grad_lmbda.detach(), grad2_lmbda.detach())
-    tensor(-2.0242e-10, dtype=torch.float64) tensor(0.1323, dtype=torch.float64)
+    grad_lmbda = torch.autograd.grad(smin_n2, lmbda, create_graph=True)[0]
+    grad2_lmbda = torch.autograd.grad(grad_lmbda, lmbda, create_graph=True)[0]
+    print(grad_lmbda.detach(), grad2_lmbda.detach())
 
 Now, we can estimate the equilibrium distance of :math:`\mathrm{CO}` and
 :math:`\mathrm{BF}`,
 
-.. doctest::
+.. jupyter-execute::
 
-    >>> smin_co = smin_n2 + grad_lmbda + 0.5 * grad2_lmbda
-    >>> smin_bf = smin_n2 + grad_lmbda * 2 + 0.5 * grad2_lmbda * 2 ** 2
-    >>> print(smin_co.detach(), smin_bf.detach())
-    tensor(2.1121, dtype=torch.float64) tensor(2.3106, dtype=torch.float64)
+    smin_co = smin_n2 + grad_lmbda + 0.5 * grad2_lmbda
+    smin_bf = smin_n2 + grad_lmbda * 2 + 0.5 * grad2_lmbda * 2 ** 2
+    print(smin_co.detach(), smin_bf.detach())
 
 For reference, the equilibrium distances for :math:`\mathrm{CO}` and
 :math:`\mathrm{BF}` by minimizing the energy are 2.1119 and 2.3103 Bohr,
