@@ -55,7 +55,6 @@ class HamiltonCGTO(BaseHamilton):
             raise RuntimeError(
                 f"Unknown ao parameterizer: {aoparamzer}. Available options are: {aoparam_opts}")
 
-
         # set up the density matrix
         self._dfoptions = df
         if df is None:

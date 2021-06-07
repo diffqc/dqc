@@ -19,8 +19,8 @@ absdir = lambda p: os.path.join(file_dir, p)
 with open("README.md", "r") as f:
     long_desc = f.read()
 
-link_pattern = re.compile(r"\(([\w\-/]+)\)")
-img_pattern  = re.compile(r"\(([\w\-/\.]+)\)")
+link_pattern = re.compile(r"\]\(([\w\-/]+)\)")
+img_pattern  = re.compile(r"\]\(([\w\-/\.]+)\)")
 link_repl = r"(%s\1)" % github_url
 img_repl  = r"(%s\1)" % raw_github_url
 long_desc = re.sub(link_pattern, link_repl, long_desc)
