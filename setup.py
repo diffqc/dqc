@@ -21,8 +21,8 @@ with open("README.md", "r") as f:
 
 link_pattern = re.compile(r"\]\(([\w\-/]+)\)")
 img_pattern  = re.compile(r"\]\(([\w\-/\.]+)\)")
-link_repl = r"(%s\1)" % github_url
-img_repl  = r"(%s\1)" % raw_github_url
+link_repl = r"](%s\1)" % github_url
+img_repl  = r"](%s\1)" % raw_github_url
 long_desc = re.sub(link_pattern, link_repl, long_desc)
 long_desc = re.sub(img_pattern, img_repl, long_desc)
 
