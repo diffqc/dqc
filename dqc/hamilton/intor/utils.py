@@ -1,10 +1,7 @@
-import os
-import sys
 import ctypes
 import ctypes.util
 import dqclibs
 import numpy as np
-from typing import Dict, Any, Callable
 
 # contains functions and constants that are used specifically for
 # dqc.hamilton.intor files (no dependance on other files in dqc.hamilton.intor
