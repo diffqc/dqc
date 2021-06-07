@@ -32,10 +32,6 @@ class Mol(BaseSystem):
     * basis: str, CGTOBasis, list of str, or CGTOBasis
         The string describing the gto basis. If it is a list, then it must have
         the same length as the number of atoms.
-    * orthogonalize_basis: bool
-        If True, orthogonalize the basis in the hamiltonian calculation.
-        If False, then use the raw basis, this might not work with over-complete
-        basis.
     * grid: int
         Describe the grid.
         If it is an integer, then it uses the default grid with specified level
@@ -63,6 +59,15 @@ class Mol(BaseSystem):
         The data type of tensors in this class.
     * device: torch.device
         The device on which the tensors in this class are stored.
+
+    * orthogonalize_basis: bool
+        (computational option)
+        If True, orthogonalize the basis in the hamiltonian calculation.
+        If False, then use the raw basis, this might not work with over-complete
+        basis.
+    * ao_parameterizer: str
+        (computational option)
+        Specifying the atomic orbital parameterizer.
     """
 
     def __init__(self,
@@ -70,6 +75,8 @@ class Mol(BaseSystem):
                  basis: BasisInpType,
                  *,
                  orthogonalize_basis: bool = True,
+                 ao_parameterizer: str = "qr",
+
                  grid: Union[int, str] = "sg3",
                  spin: Optional[ZType] = None,
                  charge: ZType = 0,
@@ -103,8 +110,10 @@ class Mol(BaseSystem):
         self._atombases = atombases
         self._hamilton = HamiltonCGTO(atombases, efield=self._preproc_efield,
                                       cache=self._cache.add_prefix("hamilton"),
-                                      orthozer=orthogonalize_basis)
+                                      orthozer=orthogonalize_basis,
+                                      aoparamzer=ao_parameterizer)
         self._orthogonalize_basis = orthogonalize_basis
+        self._aoparamzer = ao_parameterizer
         self._atompos = atompos  # (natoms, ndim)
         self._atomzs = atomzs  # (natoms,) int-type or dtype if floating point
         self._atomzs_int = atomzs_int  # (natoms,) int-type rounded from atomzs
@@ -186,7 +195,8 @@ class Mol(BaseSystem):
         df = DensityFitInfo(method=method, auxbases=atomauxbases)
         self._hamilton = HamiltonCGTO(self._atombases, df=df, efield=self._preproc_efield,
                                       cache=self._cache.add_prefix("hamilton"),
-                                      orthozer=self._orthogonalize_basis)
+                                      orthozer=self._orthogonalize_basis,
+                                      aoparamzer=self._aoparamzer)
         return self
 
     def get_hamiltonian(self) -> BaseHamilton:

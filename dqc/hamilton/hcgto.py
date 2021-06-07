@@ -1,4 +1,5 @@
-from typing import List, Optional, Union, overload, Tuple
+from typing import List, Optional, Union, overload, Tuple, Type
+import warnings
 import torch
 import xitorch as xt
 import dqc.hamilton.intor as intor
@@ -6,7 +7,7 @@ from dqc.df.base_df import BaseDF
 from dqc.df.dfmol import DFMol
 from dqc.hamilton.base_hamilton import BaseHamilton
 from dqc.hamilton.orbconverter import OrbitalOrthogonalizer, IdentityOrbConverter
-from dqc.hamilton.orbparams import QROrbParams
+from dqc.hamilton.orbparams import BaseOrbParams, QROrbParams, MatExpOrbParams
 from dqc.utils.datastruct import AtomCGTOBasis, ValGrad, SpinParam, DensityFitInfo
 from dqc.grid.base_grid import BaseGrid
 from dqc.xc.base_xc import BaseXC
@@ -28,7 +29,8 @@ class HamiltonCGTO(BaseHamilton):
                  df: Optional[DensityFitInfo] = None,
                  efield: Optional[Tuple[torch.Tensor, ...]] = None,
                  cache: Optional[Cache] = None,
-                 orthozer: bool = True) -> None:
+                 orthozer: bool = True,
+                 aoparamzer: str = "qr") -> None:
         self.atombases = atombases
         self.spherical = spherical
         self.libcint_wrapper = intor.LibcintWrapper(atombases, spherical)
@@ -43,7 +45,16 @@ class HamiltonCGTO(BaseHamilton):
             self._orthozer = IdentityOrbConverter(ovlp)
 
         # set up the orbital parameterized
-        self._orbparam = QROrbParams
+        if aoparamzer == "qr":
+            self._orbparam: Type[BaseOrbParams] = QROrbParams
+        elif aoparamzer == "matexp":
+            warnings.warn("Parametrization with matrix exponential is still at the experimental stage.")
+            self._orbparam = MatExpOrbParams
+        else:
+            aoparam_opts = ["qr", "matexp"]
+            raise RuntimeError(
+                f"Unknown ao parameterizer: {aoparamzer}. Available options are: {aoparam_opts}")
+
 
         # set up the density matrix
         self._dfoptions = df

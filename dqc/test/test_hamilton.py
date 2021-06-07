@@ -15,7 +15,10 @@ from pyscf.pbc.dft import numint as pbc_numint
 dtype = torch.float64
 cdtype = torch.complex128
 
-@pytest.fixture(params=[{"basis_ortho": False}, {"basis_ortho": True}])
+@pytest.fixture(params=[
+    {"basis_ortho": False, "ao_parameterizer": "qc"},
+    {"basis_ortho": True, "ao_parameterizer": "matexp"},
+])
 def system1(request):
     poss = torch.tensor([[0.0, 0.0, 0.8], [0.0, 0.0, -0.8]], dtype=dtype)
     moldesc = ([1, 1], poss)
@@ -162,8 +165,11 @@ def test_cgto_ao_params(system1):
     norb = len(orb_weights)
 
     # generating density matrix that fulfills the requirements
-    ao_params0 = torch.randn((nao, norb), dtype=dtype)
-    ao_coeffs0 = torch.tensor([], dtype=dtype)
+    dm0 = torch.randn((nao, nao), dtype=dtype)
+    dm0 = (dm0 + dm0.transpose(-2, -1).conj()) * 0.5
+    ao_params0, ao_coeffs0 = h.dm2ao_orb_params(dm0, norb=len(orb_weights))
+    # ao_params0 = torch.randn((nao, norb), dtype=dtype)
+    # ao_coeffs0 = torch.tensor([], dtype=dtype)
     dm = h.ao_orb_params2dm(ao_params0, ao_coeffs0, orb_weights)
 
     # regenerate dm
