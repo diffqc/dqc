@@ -1,4 +1,4 @@
-name: Build wheels
+name: Build & publish wheels
 
 on: [ push ]
 
@@ -8,126 +8,29 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-20.04, macOS-10.15]
+        os: ubuntu-latest
       fail-fast: false
-    env:
-      DQC_BUILD: 1
 
     steps:
       - name: Checkout repo and submodules
         uses: actions/checkout@v2
-        with:
-          submodules: recursive
 
-      # Used to host cibuildwheel
       - name: Set up Python
         uses: actions/setup-python@v2
 
-      - name: Install cython
-        run: |
-          python -m pip install Cython
-
-      - name: Install cibuildwheel
-        run: python -m pip install cibuildwheel==1.11.0
-
       - name: Build wheels
         run: |
-          python -m cibuildwheel --output-dir wheelhouse
-        env:
-          CIBW_MANYLINUX_X86_64_IMAGE: quay.io/pypa/manylinux2014_x86_64:2021-05-30-d4af1a5
-          CIBW_BEFORE_BUILD: python -m pip install cmake
-          CIBW_BEFORE_BUILD_LINUX: yum install -y openblas-devel.x86_64 gcc
-          CIBW_BEFORE_BUILD_MACOS: brew install openblas gcc
-          CIBW_ARCHS: x86_64
-          CIBW_BUILD: cp3*-*
-          CIBW_BUILD_VERBOSITY: 3
-          CIBW_ENVIRONMENT: "DQC_BUILD=1"
-          CIBW_REPAIR_WHEEL_COMMAND_LINUX: auditwheel -v repair -w {dest_dir} {wheel}
-          # CIBW_BEFORE_TEST: python -m pip install pytest
-          # CIBW_TEST_COMMAND: python {project}/dqc/test/test_ks.py
-
-      - uses: actions/upload-artifact@v2
-        with:
-          name: python-wheels
-          path: ./wheelhouse/*.whl
-
-  publish_test:
-    name: Publish to TestPyPI
-    needs: [build_wheels]
-    runs-on: ubuntu-latest
-    if: ${{ !(startsWith(github.ref, 'refs/tags')) }}
-
-    steps:
-      - name: Download Python wheels
-        uses: actions/download-artifact@v2
-        with:
-          name: python-wheels
-          path: dist/
+          python -m build
 
       - name: Publish distribution to Test PyPI
+        if: ${{ !(startsWith(github.ref, 'refs/tags')) }}
         uses: pypa/gh-action-pypi-publish@master
         with:
           password: ${{ secrets.TEST_PYPI_API_TOKEN }}
           repository_url: https://test.pypi.org/legacy/
 
-  test_published:
-    name: Test the wheels from TestPyPI
-    needs: [publish_test]
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-20.04, macOS-10.15]
-        python-version: [3.7, 3.8, 3.9]
-      fail-fast: false
-    env:
-      DQC_BUILD: 1
-    if: ${{ !(startsWith(github.ref, 'refs/tags')) }}
-
-    steps:
-      - name: Checkout repo and submodules
-        uses: actions/checkout@v2
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Get versioning
-        run: |
-          python dqc/_version.py
-          python -c "print('dqc==', end='')" > version.txt
-          python dqc/_version.py >> version.txt
-
-      - name: Install test requirements
-        run: |
-          python -m pip install -r test-requirements.txt
-
-      - name: Install from TestPyPI
-        run: |
-          python .github/workflows/wheels_install_test_pypi.py
-
-      - name: Run a single test
-        # not using pytest because pytest imports dqc from the local directory
-        run: |
-          cd dqc/test/
-          python -c "import dqc; print(dqc.__file__)"
-          python test_ks.py
-          cd ../../
-
-  publish:
-    name: Publish to PyPI
-    needs: [build_wheels]
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags')
-
-    steps:
-      - name: Download Python wheels
-        uses: actions/download-artifact@v2
-        with:
-          name: python-wheels
-          path: dist/
-
       - name: Publish distribution to PyPI
+        if: startsWith(github.ref, 'refs/tags')
         uses: pypa/gh-action-pypi-publish@master
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
