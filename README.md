@@ -13,7 +13,7 @@ Installation, tutorials, and documentations can be found at: https://dqc.readthe
 ## Applications
 
 Here is a list of applications made easy by DQC.
-If you want your applications listed here, please contact us at firman.kasim@gmail.com
+If you want your applications listed here, please contact us by opening an issue
 or make a pull request.
 
 <!-- start of readme_appgen.py -->
