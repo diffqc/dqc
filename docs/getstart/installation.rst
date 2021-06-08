@@ -9,8 +9,13 @@ Requirements
 Installation
 ------------
 
-As we have no released version, only source installation is possible.
-To do this, type in your terminal:
+Installation can be done as simple as typing in the terminal the line below:
+
+.. code-block::
+
+    python -m pip install dqc
+
+To install the nightly version, you can type:
 
 .. code-block::
 
