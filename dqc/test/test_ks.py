@@ -170,7 +170,8 @@ def test_rks_grad_vext(xc, atomzs, dist, vext_p):
 
     def get_energy(vext_params):
         vext = rgrid_norm * rgrid_norm * vext_params  # (ngrid,)
-        qc = KS(mol, xc=xc, vext=vext, restricted=True).run()
+        mol = Mol((atomzs, poss), basis="3-21G", dtype=dtype, grid=3, vext=vext)
+        qc = KS(mol, xc=xc, restricted=True).run()
         ene = qc.energy()
         return ene
 

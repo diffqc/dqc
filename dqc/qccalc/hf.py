@@ -17,11 +17,6 @@ class HF(SCF_QCCalc):
     ---------
     system: BaseSystem
         The system to be calculated.
-    xc: str
-        The exchange-correlation potential and energy to be used.
-    vext: torch.Tensor or None
-        The external potential applied to the system. It must have the shape of
-        ``(*BV, system.get_grid().shape[-2])``
     restricted: bool or None
         If True, performing restricted Kohn-Sham DFT. If False, it performs
         the unrestricted Kohn-Sham DFT.

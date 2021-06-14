@@ -23,9 +23,6 @@ class KS(SCF_QCCalc):
     xc: str, BaseXC, or None
         The exchange-correlation potential and energy to be used. It can accept
         ``None`` as an input to represent no xc potential involved.
-    vext: torch.Tensor or None
-        The external potential applied to the system. It must have the shape of
-        ``(*BV, system.get_grid().shape[-2])``
     restricted: bool or None
         If True, performing restricted Kohn-Sham DFT. If False, it performs
         the unrestricted Kohn-Sham DFT.
@@ -38,11 +35,10 @@ class KS(SCF_QCCalc):
     """
 
     def __init__(self, system: BaseSystem, xc: Union[str, BaseXC, None],
-                 vext: Optional[torch.Tensor] = None,
                  restricted: Optional[bool] = None,
                  variational: bool = False):
 
-        engine = _KSEngine(system, xc, vext)
+        engine = _KSEngine(system, xc)
         super().__init__(engine, variational)
 
 class _KSEngine(BaseSCFEngine):
@@ -57,7 +53,6 @@ class _KSEngine(BaseSCFEngine):
     self-consistent iteration is performed.
     """
     def __init__(self, system: BaseSystem, xc: Union[str, BaseXC, None],
-                 vext: Optional[torch.Tensor] = None,
                  restricted: Optional[bool] = None):
 
         # get the xc object
@@ -89,9 +84,6 @@ class _KSEngine(BaseSCFEngine):
 
         # set up the vext linear operator
         self.knvext_linop = self.hamilton.get_kinnucl()  # kinetic, nuclear, and external potential
-        if vext is not None:
-            assert vext.shape[-1] == system.get_grid().get_rgrid().shape[-2]
-            self.knvext_linop = self.knvext_linop + self.hamilton.get_vext(vext)
 
     def get_system(self) -> BaseSystem:
         return self._system
