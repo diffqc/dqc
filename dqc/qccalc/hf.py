@@ -47,13 +47,19 @@ class _HFEngine(BaseSCFEngine):
     and the calculation of the post-calculation properties.
     """
     def __init__(self, system: BaseSystem,
-                 restricted: Optional[bool] = None):
+                 restricted: Optional[bool] = None,
+                 build_grid_if_necessary: bool = False):
 
         # decide if this is restricted or not
         if restricted is None:
             self._polarized = bool(system.spin != 0)
         else:
             self._polarized = not restricted
+
+        # construct the grid if the system requires it
+        if build_grid_if_necessary and system.requires_grid():
+            system.setup_grid()
+            system.get_hamiltonian().setup_grid(system.get_grid())
 
         # build the basis
         self._hamilton = system.get_hamiltonian().build()

@@ -234,6 +234,9 @@ class Sol(BaseSystem):
             raise RuntimeError("Please run mol.setup_grid() first before calling get_grid()")
         return self._grid
 
+    def requires_grid(self) -> bool:
+        return False
+
     def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
         pass
 

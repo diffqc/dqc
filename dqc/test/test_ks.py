@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import pytest
 import xitorch as xt
+from dqc.api.getxc import get_xc
 from dqc.qccalc.ks import KS
 from dqc.system.mol import Mol
 from dqc.system.sol import Sol
@@ -255,6 +256,41 @@ def test_no_xc(atomzs, dist, restricted):
         ene2 = qc2.energy()
 
         assert torch.allclose(ene1, ene2)
+
+@pytest.mark.parametrize(
+    "atomzs,dist",
+    [atomzs_poss[0]]
+)
+def test_vext(atomzs, dist):
+    # check if the external potential gives the correct density profile
+    # (energy is different because the energy of xc is not integral of potentials
+    # times density)
+
+    def get_dens(qc):
+        dm = qc.aodm()
+        rgrid = mol.get_grid().get_rgrid()
+        dens = mol.get_hamiltonian().aodm2dens(dm, rgrid)
+        return dens
+
+    with xt.enable_debug():
+        poss = torch.tensor([[-0.5, 0.0, 0.0], [0.5, 0.0, 0.0]], dtype=dtype) * dist
+        mol = Mol((atomzs, poss), basis="3-21G", dtype=dtype)
+        xc = get_xc("lda_x")
+        qc = KS(mol, xc=xc).run()
+
+        # get the density profile
+        dens = get_dens(qc)
+        ldax_pot = xc.get_vxc(ValGrad(value=dens)).value
+        # ldax_pot2 = -0.7385587663820223 * (4.0 / 3) * dens ** (1.0 / 3)
+        # assert torch.allclose(ldax_pot, ldax_pot2)
+
+        # calculate the energy with the external potential
+        mol2 = Mol((atomzs, poss), basis="3-21G", dtype=dtype, vext=ldax_pot)
+        qc2 = KS(mol2, xc=None).run()
+        dens2 = get_dens(qc2)
+
+        # make sure the densities agree
+        assert torch.allclose(dens, dens2)
 
 ############### Unrestricted Kohn-Sham ###############
 u_atomzs_spins = [

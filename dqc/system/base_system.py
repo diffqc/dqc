@@ -69,6 +69,14 @@ class BaseSystem(xt.EditableModule):
         pass
 
     @abstractmethod
+    def requires_grid(self) -> bool:
+        """
+        True if the system needs the grid to be constructed. Otherwise, returns
+        False
+        """
+        pass
+
+    @abstractmethod
     def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
         pass
 

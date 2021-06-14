@@ -28,6 +28,7 @@ class HamiltonCGTO(BaseHamilton):
     def __init__(self, atombases: List[AtomCGTOBasis], spherical: bool = True,
                  df: Optional[DensityFitInfo] = None,
                  efield: Optional[Tuple[torch.Tensor, ...]] = None,
+                 vext: Optional[torch.Tensor] = None,
                  cache: Optional[Cache] = None,
                  orthozer: bool = True,
                  aoparamzer: str = "qr") -> None:
@@ -63,6 +64,7 @@ class HamiltonCGTO(BaseHamilton):
             self._df = DFMol(df, wrapper=self.libcint_wrapper, orthozer=self._orthozer)
 
         self._efield = efield
+        self._vext = vext
         self.is_grid_set = False
         self.is_ao_set = False
         self.is_grad_ao_set = False
@@ -137,6 +139,11 @@ class HamiltonCGTO(BaseHamilton):
             self.olp_mat = self._orthozer.convert2(self.olp_mat)  # (nao2, nao2)
             self.kinnucl_mat = self._orthozer.convert2(self.kinnucl_mat)
             self.nucl_mat = self._orthozer.convert2(self.nucl_mat)
+
+            # external potential
+            if self._vext is not None:
+                vext_mat = self.get_vext(self._vext).fullmatrix()
+                self.kinnucl_mat = self.kinnucl_mat + vext_mat
 
             logger.log("Setting up the Hamiltonian done")
 

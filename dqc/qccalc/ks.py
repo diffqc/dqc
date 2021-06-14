@@ -60,9 +60,6 @@ class _KSEngine(BaseSCFEngine):
                  vext: Optional[torch.Tensor] = None,
                  restricted: Optional[bool] = None):
 
-        self.hf_engine = _HFEngine(system, restricted=restricted)
-        self._polarized = self.hf_engine.polarized
-
         # get the xc object
         if isinstance(xc, str):
             self.xc: Optional[BaseXC] = get_xc(xc)
@@ -71,14 +68,19 @@ class _KSEngine(BaseSCFEngine):
         else:
             self.xc = xc
 
-        system = self.hf_engine.get_system()
+        # system = self.hf_engine.get_system()
         self._system = system
 
         # build and setup basis and grid
-        system.setup_grid()
         self.hamilton = system.get_hamiltonian()
-        if self.xc is not None:
+        if self.xc is not None or system.requires_grid():
+            system.setup_grid()
             self.hamilton.setup_grid(system.get_grid(), self.xc)
+
+        # get the HF engine and build the hamiltonian
+        # no need to rebuild the grid because it has been constructed
+        self.hf_engine = _HFEngine(system, restricted=restricted, build_grid_if_necessary=False)
+        self._polarized = self.hf_engine.polarized
 
         # get the orbital info
         self.orb_weight = system.get_orbweight(polarized=self._polarized)  # (norb,)

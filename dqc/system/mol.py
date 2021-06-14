@@ -46,6 +46,9 @@ class Mol(BaseSystem):
     * orb_weights: SpinParam[torch.Tensor] or None
         Specifiying the orbital occupancy (or weights) directly. If specified,
         ``spin`` and ``charge`` arguments are ignored.
+    * vext: tensor or None
+        The tensor describing the external potential given in the grid.
+        The grid position can be obtained by ``Mol().get_grid().get_rgrid()``.
     * efield: tensor, tuple of tensor, or None
         Uniform electric field of the system. If a tensor, then it is assumed
         to be a constant electric field with the energy is
@@ -82,6 +85,7 @@ class Mol(BaseSystem):
                  charge: ZType = 0,
                  orb_weights: Optional[SpinParam[torch.Tensor]] = None,
                  efield: Union[torch.Tensor, Tuple[torch.Tensor, ...], None] = None,
+                 vext: Optional[torch.Tensor] = None,
                  dtype: torch.dtype = torch.float64,
                  device: torch.device = torch.device('cpu'),
                  ):
@@ -90,6 +94,7 @@ class Mol(BaseSystem):
         self._grid_inp = grid
         self._basis_inp = basis
         self._grid: Optional[BaseGrid] = None
+        self._vext = vext
 
         # make efield a tuple
         self._efield = _normalize_efield(efield)
@@ -109,6 +114,7 @@ class Mol(BaseSystem):
                      for (atz, bas, atpos) in zip(atomzs, allbases, atompos)]
         self._atombases = atombases
         self._hamilton = HamiltonCGTO(atombases, efield=self._preproc_efield,
+                                      vext=self._vext,
                                       cache=self._cache.add_prefix("hamilton"),
                                       orthozer=orthogonalize_basis,
                                       aoparamzer=ao_parameterizer)
@@ -194,6 +200,7 @@ class Mol(BaseSystem):
         # change the hamiltonian to have density fit
         df = DensityFitInfo(method=method, auxbases=atomauxbases)
         self._hamilton = HamiltonCGTO(self._atombases, df=df, efield=self._preproc_efield,
+                                      vext=self._vext,
                                       cache=self._cache.add_prefix("hamilton"),
                                       orthozer=self._orthogonalize_basis,
                                       aoparamzer=self._aoparamzer)
@@ -273,6 +280,10 @@ class Mol(BaseSystem):
         if self._grid is None:
             raise RuntimeError("Please run mol.setup_grid() first before calling get_grid()")
         return self._grid
+
+    def requires_grid(self) -> bool:
+        req_grid = self._vext is not None
+        return req_grid
 
     def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
         if methodname == "get_nuclei_energy":
