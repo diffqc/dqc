@@ -24,3 +24,24 @@ or make a pull request.
 | Basis optimization | [![github](docs/data/readme_icons/github.svg)](https://github.com/diffqc/dqc-apps/tree/main/01-basis-opt) |  |
 | Alchemical perturbation | [![github](docs/data/readme_icons/github.svg)](https://github.com/diffqc/dqc-apps/tree/main/04-alchemical-perturbation) |  |
 <!-- end of readme_appgen.py -->
+
+## Citations
+
+If you are using DQC for your publication, please kindly cite the following
+
+    @article{PhysRevLett.127.126403,
+      title = {Learning the Exchange-Correlation Functional from Nature with Fully Differentiable Density Functional Theory},
+      author = {Kasim, M. F. and Vinko, S. M.},
+      journal = {Phys. Rev. Lett.},
+      volume = {127},
+      issue = {12},
+      pages = {126403},
+      numpages = {7},
+      year = {2021},
+      month = {Sep},
+      publisher = {American Physical Society},
+      doi = {10.1103/PhysRevLett.127.126403},
+      url = {https://link.aps.org/doi/10.1103/PhysRevLett.127.126403}
+    }
+
+If you want to read the paper in arxiv, you can find it [here](https://arxiv.org/abs/2102.04229).
