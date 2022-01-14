@@ -85,7 +85,7 @@ class BaseXC(xt.EditableModule):
                     dedk_u = dedk_u if dedk_u is not None else torch.zeros_like(dedn_u)
                     dedl_d = dedl_d if dedl_d is not None else torch.zeros_like(dedn_d)
                     dedk_d = dedk_d if dedk_d is not None else torch.zeros_like(dedn_d)
-                        
+
                     return SpinParam(
                         u=ValGrad(value=dedn_u, grad=dedg_u, lapl=dedl_u, kin=dedk_u),
                         d=ValGrad(value=dedn_d, grad=dedg_d, lapl=dedl_d, kin=dedk_d))
@@ -111,10 +111,10 @@ class BaseXC(xt.EditableModule):
 
                 elif self.family == 4:  # MGGA
                     dedn, dedg, dedl, dedk = torch.autograd.grad(
-                        edensity, (densinfo.value, densinfo.grad, densinfo.lapl, densinfo.kin), 
+                        edensity, (densinfo.value, densinfo.grad, densinfo.lapl, densinfo.kin),
                         create_graph=grad_enabled, grad_outputs=grad_outputs,
                         allow_unused=True)
-                    
+
                     # mgga might only use one of either lapl or kin, so we need to change the deriv manually to 0s
                     dedl = dedl if dedl is not None else torch.zeros_like(dedn)
                     dedk = dedk if dedk is not None else torch.zeros_like(dedn)
