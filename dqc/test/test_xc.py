@@ -1,3 +1,4 @@
+from typing import Union
 import torch
 import numpy as np
 import pytest
@@ -309,11 +310,26 @@ class PseudoPBE(CustomXC):
             ed = self.get_edensityxc(densinfo.d * 2)
             return 0.5 * (eu + ed)
 
+class PseudoSCAN(CustomXC):
+    @property
+    def family(self) -> int:
+        return 4  # MGGA
+    
+    def get_edensityxc(self, densinfo: Union[ValGrad, SpinParam[ValGrad]]) -> torch.Tensor:
+        if isinstance(densinfo, ValGrad):  # unpolarized case
+            return scan_e_true(densinfo.value, densinfo.grad, densinfo.lapl, densinfo.kin)
+
+        else:  # polarized case
+            eu = self.get_edensityxc(densinfo.u * 2)
+            ed = self.get_edensityxc(densinfo.d * 2)
+            return 0.5 * (eu + ed)
+
 @pytest.mark.parametrize(
     "xccls,libxcname",
     [
         (PseudoLDA, "lda_x"),
         (PseudoPBE, "gga_x_pbe"),
+        (PseudoSCAN, "mgga_x_scan"),
     ]
 )
 def test_xc_default_vxc(xccls, libxcname):
@@ -327,13 +343,15 @@ def test_xc_default_vxc(xccls, libxcname):
     n = 100
     rho_u = torch.rand((n,), dtype=dtype)
     rho_d = torch.rand((n,), dtype=dtype)
-    rho_tot = rho_u + rho_d
     gradn_u = torch.rand((3, n), dtype=dtype) * 0
     gradn_d = torch.rand((3, n), dtype=dtype) * 0
-    gradn_tot = gradn_u + gradn_d
+    lapl_u = torch.rand((n,), dtype=dtype) * 0
+    lapl_d = torch.rand((n,), dtype=dtype) * 0
+    kin_u = 0.3 * (3 * np.pi * np.pi * rho_u) ** (2. / 3) * rho_u
+    kin_d = 0.3 * (3 * np.pi * np.pi * rho_d) ** (2. / 3) * rho_d
 
-    densinfo_u = ValGrad(value=rho_u, grad=gradn_u)
-    densinfo_d = ValGrad(value=rho_d, grad=gradn_d)
+    densinfo_u = ValGrad(value=rho_u, grad=gradn_u, lapl=lapl_u, kin=kin_u)
+    densinfo_d = ValGrad(value=rho_d, grad=gradn_d, lapl=lapl_d, kin=kin_d)
     densinfo_tot = densinfo_u + densinfo_d
     densinfo = SpinParam(u=densinfo_u, d=densinfo_d)
 
@@ -341,10 +359,13 @@ def test_xc_default_vxc(xccls, libxcname):
         assert torch.allclose(vg1.value, vg2.value)
         assert (vg1.grad is None) == (vg2.grad is None)
         assert (vg1.lapl is None) == (vg2.lapl is None)
+        assert (vg1.kin is None) == (vg2.kin is None)
         if vg1.grad is not None:
             assert torch.allclose(vg1.grad, vg2.grad)
         if vg1.lapl is not None:
             assert torch.allclose(vg1.lapl, vg2.lapl)
+        if vg1.kin is not None:
+            assert torch.allclose(vg1.kin, vg2.kin)
 
     # check if the energy is the same (implementation check)
     xc_edens_unpol = xc.get_edensityxc(densinfo_tot)
@@ -405,7 +426,7 @@ def pbe_e_true(rho, gradn):
 
 def scan_e_true(rho, gradn, lapl, tau):
     kf = (3 * np.pi * np.pi * rho) ** (1. / 3)
-    norm_gradn = torch.norm(gradn, dim=-2)
+    norm_gradn = safenorm(gradn, dim=-2)
     s = norm_gradn / (2 * rho * kf)
     tau_w = norm_gradn ** 2 / (8 * rho)
     tau_unif = 0.3 * kf ** 2 * rho

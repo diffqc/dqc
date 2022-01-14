@@ -13,7 +13,7 @@ class BaseXC(xt.EditableModule):
     @abstractproperty
     def family(self) -> int:
         """
-        Returns 1 for LDA, 2 for GGA, and 3 for Meta-GGA.
+        Returns 1 for LDA, 2 for GGA, and 4 for Meta-GGA.
         """
         pass
 
@@ -74,9 +74,26 @@ class BaseXC(xt.EditableModule):
                         u=ValGrad(value=dedn_u, grad=dedg_u),
                         d=ValGrad(value=dedn_d, grad=dedg_d))
 
+                elif self.family == 4:
+                    params = (densinfo.u.value, densinfo.d.value, densinfo.u.grad, densinfo.d.grad,
+                              densinfo.u.lapl, densinfo.d.lapl, densinfo.u.kin, densinfo.d.kin)
+                    dedn_u, dedn_d, dedg_u, dedg_d, dedl_u, dedl_d, dedk_u, dedk_d = torch.autograd.grad(
+                        edensity, params, create_graph=grad_enabled, grad_outputs=grad_outputs, allow_unused=True)
+
+                    # mgga might only use one of either lapl or kin, so we need to change the deriv manually to 0s
+                    dedl_u = dedl_u if dedl_u is not None else torch.zeros_like(dedn_u)
+                    dedk_u = dedk_u if dedk_u is not None else torch.zeros_like(dedn_u)
+                    dedl_d = dedl_d if dedl_d is not None else torch.zeros_like(dedn_d)
+                    dedk_d = dedk_d if dedk_d is not None else torch.zeros_like(dedn_d)
+                        
+                    return SpinParam(
+                        u=ValGrad(value=dedn_u, grad=dedg_u, lapl=dedl_u, kin=dedk_u),
+                        d=ValGrad(value=dedn_d, grad=dedg_d, lapl=dedl_d, kin=dedk_d))
+
                 else:
                     raise NotImplementedError(
                         "Default polarized vxc for family %s is not implemented" % self.family)
+
             else:  # unpolarized case
                 if self.family == 1:  # LDA
                     dedn, = torch.autograd.grad(
@@ -91,6 +108,18 @@ class BaseXC(xt.EditableModule):
                         grad_outputs=grad_outputs)
 
                     return ValGrad(value=dedn, grad=dedg)
+
+                elif self.family == 4:  # MGGA
+                    dedn, dedg, dedl, dedk = torch.autograd.grad(
+                        edensity, (densinfo.value, densinfo.grad, densinfo.lapl, densinfo.kin), 
+                        create_graph=grad_enabled, grad_outputs=grad_outputs,
+                        allow_unused=True)
+                    
+                    # mgga might only use one of either lapl or kin, so we need to change the deriv manually to 0s
+                    dedl = dedl if dedl is not None else torch.zeros_like(dedn)
+                    dedk = dedk if dedk is not None else torch.zeros_like(dedn)
+
+                    return ValGrad(value=dedn, grad=dedg, lapl=dedl, kin=dedk)
 
                 else:
                     raise NotImplementedError("Default vxc for family %d is not implemented" % self.family)
@@ -130,7 +159,9 @@ class BaseXC(xt.EditableModule):
             if self.family >= 3:  # MGGA
                 assert densinfo.u.lapl is not None
                 assert densinfo.d.lapl is not None
-                params.extend([densinfo.u.lapl, densinfo.d.lapl])
+                assert densinfo.u.kin is not None
+                assert densinfo.d.kin is not None
+                params.extend([densinfo.u.lapl, densinfo.d.lapl, densinfo.u.kin, densinfo.d.kin])
         else:
             params = [densinfo.value]
             if self.family >= 2:
@@ -138,7 +169,8 @@ class BaseXC(xt.EditableModule):
                 params.append(densinfo.grad)
             if self.family >= 3:
                 assert densinfo.lapl is not None
-                params.append(densinfo.lapl)
+                assert densinfo.kin is not None
+                params.extend([densinfo.lapl, densinfo.kin])
 
         try:
             # set the params to require grad

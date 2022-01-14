@@ -370,7 +370,7 @@ class HamiltonCGTO(BaseHamilton):
     ################ misc ################
     def _dm2densinfo(self, dm: torch.Tensor) -> ValGrad:
         # dm: (*BD, nao, nao), Hermitian
-        # family: 1 for LDA, 2 for GGA, 3 for MGGA
+        # family: 1 for LDA, 2 for GGA, 4 for MGGA
         # self.basis: (ngrid, nao)
         # self.grad_basis: (ndim, ngrid, nao)
 
