@@ -47,13 +47,13 @@
     "api": {
       "SpinParam": "",
       "ValGrad": "",
-      "length_to": "",
-      "time_to": "",
-      "freq_to": "",
-      "ir_ints_to": "",
-      "raman_ints_to": "",
-      "edipole_to": "",
-      "equadrupole_to": ""
+      "convert_length": "",
+      "convert_time": "",
+      "convert_freq": "",
+      "convert_ir_ints": "",
+      "convert_raman_ints": "",
+      "convert_edipole": "",
+      "convert_equadrupole": ""
     }
   }
 }

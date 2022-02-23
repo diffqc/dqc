@@ -8,8 +8,9 @@ import xitorch.optimize
 from dqc.qccalc.base_qccalc import BaseQCCalc
 from dqc.utils.misc import memoize_method
 from dqc.utils.datastruct import SpinParam
-from dqc.utils.units import length_to, freq_to, edipole_to, equadrupole_to, ir_ints_to, \
-                            raman_ints_to
+from dqc.utils.units import convert_length, convert_freq, convert_edipole, \
+                            convert_equadrupole, convert_ir_ints, \
+                            convert_raman_ints
 
 __all__ = ["hessian_pos", "vibration", "edipole", "equadrupole", "is_orb_min",
            "lowest_eival_orb_hessian", "ir_spectrum", "raman_spectrum"]
@@ -35,7 +36,7 @@ def hessian_pos(qc: BaseQCCalc, unit: Optional[str] = None) -> torch.Tensor:
         of the energy with respect to the atomic position
     """
     hess = _hessian_pos(qc)
-    hess = length_to(hess, unit)
+    hess = convert_freq(hess, to_unit=unit)
     return hess
 
 def vibration(qc: BaseQCCalc, freq_unit: Optional[str] = "cm^-1",
@@ -64,8 +65,8 @@ def vibration(qc: BaseQCCalc, freq_unit: Optional[str] = "cm^-1",
         to each axis sorted from the largest frequency to smallest frequency.
     """
     freq, mode = _vibration(qc)
-    freq = freq_to(freq, freq_unit)
-    mode = length_to(mode, length_unit)
+    freq = convert_freq(freq, to_unit=freq_unit)
+    mode = convert_length(mode, to_unit=length_unit)
     return freq, mode
 
 def ir_spectrum(qc: BaseQCCalc, freq_unit: Optional[str] = "cm^-1",
@@ -93,8 +94,8 @@ def ir_spectrum(qc: BaseQCCalc, freq_unit: Optional[str] = "cm^-1",
         tensor is the IR intensity with the same order as the frequency.
     """
     freq, ir_ints = _ir_spectrum(qc)
-    freq = freq_to(freq, freq_unit)
-    ir_ints = ir_ints_to(ir_ints, ints_unit)
+    freq = convert_freq(freq, to_unit=freq_unit)
+    ir_ints = convert_ir_ints(ir_ints, to_unit=ints_unit)
     return freq, ir_ints
 
 def raman_spectrum(qc: BaseQCCalc, freq_unit: Optional[str] = "cm^-1",
@@ -121,8 +122,8 @@ def raman_spectrum(qc: BaseQCCalc, freq_unit: Optional[str] = "cm^-1",
         tensor is the IR intensity with the same order as the frequency.
     """
     freq, raman_ints = _raman_spectrum(qc)
-    freq = freq_to(freq, freq_unit)
-    raman_ints = raman_ints_to(raman_ints, ints_unit)
+    freq = convert_freq(freq, to_unit=freq_unit)
+    raman_ints = convert_raman_ints(raman_ints, to_unit=ints_unit)
     return freq, raman_ints
 
 def edipole(qc: BaseQCCalc, unit: Optional[str] = "Debye") -> torch.Tensor:
@@ -144,7 +145,7 @@ def edipole(qc: BaseQCCalc, unit: Optional[str] = "Debye") -> torch.Tensor:
         Tensor representing the dipole moment in atomic unit with shape ``(ndim,)``
     """
     edip = _edipole(qc)
-    edip = edipole_to(edip, unit)
+    edip = convert_edipole(edip, to_unit=unit)
     return edip
 
 def equadrupole(qc: BaseQCCalc, unit: Optional[str] = "Debye*Angst") -> torch.Tensor:
@@ -165,7 +166,7 @@ def equadrupole(qc: BaseQCCalc, unit: Optional[str] = "Debye*Angst") -> torch.Te
         Tensor representing the quadrupole moment in atomic unit in ``(ndim, ndim)``
     """
     equad = _equadrupole(qc)
-    equad = equadrupole_to(equad, unit)
+    equad = convert_equadrupole(equad, to_unit=unit)
     return equad
 
 @memoize_method

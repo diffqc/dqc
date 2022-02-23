@@ -1,8 +1,24 @@
 import gc
 import torch
-from typing import Callable
+from typing import Callable, Optional, List, Union
 
-__all__ = ["assert_no_memleak_tensor"]
+__all__ = ["assert_fail", "assert_no_memleak_tensor"]
+
+def assert_fail(fcn: Callable, err: Exception = Exception, contains: Optional[Union[str, List[str]]] = None):
+    try:
+        fcn()
+    except err as e:
+        if isinstance(contains, str):
+            assert contains in str(e), f"The error message must contain '{contains}'. Got {str(e)} instead."
+        elif isinstance(contains, list) or isinstance(contains, tuple):
+            for c in contains:
+                assert c in str(e), f"The error message must contain '{c}'. Got {str(e)} instead."
+        return
+    except Exception as e:
+        assert False, f"Expected {err} to be raised, got {type(e)} instead:\n{e}"
+        return
+
+    assert False, f"Expected {err} to be raised"
 
 # memory test functions
 def assert_no_memleak_tensor(fcn: Callable, strict: bool = True, gccollect: bool = False):

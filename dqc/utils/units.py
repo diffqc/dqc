@@ -4,8 +4,8 @@ import torch
 # This file contains various physical constants and functions to convert units
 # from the atomic units
 
-__all__ = ["length_to", "time_to", "freq_to", "ir_ints_to", "raman_ints_to",
-           "edipole_to", "equadrupole_to"]
+__all__ = ["convert_length", "convert_time", "convert_freq", "convert_ir_ints",
+           "convert_raman_ints", "convert_edipole", "convert_equadrupole"]
 
 # 1 atomic unit in SI
 LENGTH = 5.29177210903e-11  # m
@@ -81,61 +81,97 @@ _equadrupole_converter = {
 
 def _avail_keys(converter: Dict[str, float]) -> str:
     # returns the available keys in a string of list of string
-    return str(list(_length_converter.keys()))
+    return str(list(converter.keys()))
 
 def _add_docstr_to(phys: str, converter: Dict[str, float]) -> Callable:
     # automatically add docstring for converter functions
 
     def decorator(callable: Callable):
         callable.__doc__ = f"""
-            Convert the {phys} from atomic unit to the given unit.
-            Available units are (case-insensitive): {_avail_keys(converter)}
+            Convert the {phys} from a unit to another unit.
+            Available units are (case-insensitive): ``{_avail_keys(converter)}``
+
+            Arguments
+            ---------
+            a: torch.Tensor
+                The tensor to be converter.
+            from_unit: str or None
+                The unit of ``a``. If ``None``, it is assumed to be in atomic unit.
+            to_unit: str or None
+                The unit for ``a`` to be converted to. If ``None``, it is assumed
+                to be converted to the atomic unit.
+
+            Returns
+            -------
+            torch.Tensor
+                The tensor in the new unit.
         """
         return callable
     return decorator
 
 @_add_docstr_to("time", _time_converter)
-def time_to(a: PhysVarType, unit: UnitType) -> PhysVarType:
+def convert_time(a: PhysVarType, from_unit: UnitType = None,
+                 to_unit: UnitType = None) -> PhysVarType:
     # convert unit time from atomic unit to the given unit
-    return _converter_to(a, unit, _time_converter)
+    return _converter(a, from_unit, to_unit, _time_converter)
 
 @_add_docstr_to("frequency", _freq_converter)
-def freq_to(a: PhysVarType, unit: UnitType) -> PhysVarType:
+def convert_freq(a: PhysVarType, from_unit: UnitType = None,
+                 to_unit: UnitType = None) -> PhysVarType:
     # convert unit frequency from atomic unit to the given unit
-    return _converter_to(a, unit, _freq_converter)
+    return _converter(a, from_unit, to_unit, _freq_converter)
 
 @_add_docstr_to("IR intensity", _ir_ints_converter)
-def ir_ints_to(a: PhysVarType, unit: UnitType) -> PhysVarType:
+def convert_ir_ints(a: PhysVarType, from_unit: UnitType = None,
+                    to_unit: UnitType = None) -> PhysVarType:
     # convert unit IR intensity from atomic unit to the given unit
-    return _converter_to(a, unit, _ir_ints_converter)
+    return _converter(a, from_unit, to_unit, _ir_ints_converter)
 
 @_add_docstr_to("Raman intensity", _raman_ints_converter)
-def raman_ints_to(a: PhysVarType, unit: UnitType) -> PhysVarType:
+def convert_raman_ints(a: PhysVarType, from_unit: UnitType = None,
+                       to_unit: UnitType = None) -> PhysVarType:
     # convert unit IR intensity from atomic unit to the given unit
-    return _converter_to(a, unit, _raman_ints_converter)
+    return _converter(a, from_unit, to_unit, _raman_ints_converter)
 
 @_add_docstr_to("length", _length_converter)
-def length_to(a: PhysVarType, unit: UnitType) -> PhysVarType:
+def convert_length(a: PhysVarType, from_unit: UnitType = None,
+                   to_unit: UnitType = None) -> PhysVarType:
     # convert unit length from atomic unit to the given unit
-    return _converter_to(a, unit, _length_converter)
+    return _converter(a, from_unit, to_unit, _length_converter)
 
 @_add_docstr_to("electric dipole", _edipole_converter)
-def edipole_to(a: PhysVarType, unit: UnitType) -> PhysVarType:
+def convert_edipole(a: PhysVarType, from_unit: UnitType = None,
+                    to_unit: UnitType = None) -> PhysVarType:
     # convert unit electric dipole from atomic unit to the given unit
-    return _converter_to(a, unit, _edipole_converter)
+    return _converter(a, from_unit, to_unit, _edipole_converter)
 
 @_add_docstr_to("electric quadrupole", _equadrupole_converter)
-def equadrupole_to(a: PhysVarType, unit: UnitType) -> PhysVarType:
+def convert_equadrupole(a: PhysVarType, from_unit: UnitType = None,
+                        to_unit: UnitType = None) -> PhysVarType:
     # convert unit electric dipole from atomic unit to the given unit
-    return _converter_to(a, unit, _equadrupole_converter)
+    return _converter(a, from_unit, to_unit, _equadrupole_converter)
 
-def _converter_to(a: PhysVarType, unit: UnitType, converter: Dict[str, float]) -> PhysVarType:
-    # converter from the atomic unit
-    if unit is None:
+def _converter(a: PhysVarType, from_unit: UnitType, to_unit: UnitType,
+               converter: Dict[str, float]) -> PhysVarType:
+    # converter from a unit to another unit
+    from_unit = _preproc_unit(from_unit)
+    to_unit = _preproc_unit(to_unit)
+    if from_unit == to_unit:
         return a
-    u = unit.lower()
-    try:
-        return a * converter[u]
-    except KeyError:
+    if from_unit is not None:
+        a = a / _get_converter_value(converter, from_unit)
+    if to_unit is not None:
+        a = a * _get_converter_value(converter, to_unit)
+    return a
+
+def _get_converter_value(converter: Dict[str, float], unit: UnitType) -> float:
+    if unit not in converter:
         avail_units = _avail_keys(converter)
         raise ValueError(f"Unknown unit: {unit}. Available units are: {avail_units}")
+    return converter[unit]
+
+def _preproc_unit(unit: UnitType):
+    if unit is None:
+        return unit
+    else:
+        return ''.join(unit.lower().split())
