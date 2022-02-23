@@ -40,13 +40,20 @@
       "CustomXC": ""
     }
   },
-  "Data structures (dqc.utils)": {
+  "Utilities (dqc.utils)": {
     "module": "dqc.utils",
     "prefix": "dqc.utils",
-    "desc": "Data structures",
+    "desc": "Data structures & unit converter",
     "api": {
       "SpinParam": "",
-      "ValGrad": ""
+      "ValGrad": "",
+      "length_to": "",
+      "time_to": "",
+      "freq_to": "",
+      "ir_ints_to": "",
+      "raman_ints_to": "",
+      "edipole_to": "",
+      "equadrupole_to": ""
     }
   }
 }
