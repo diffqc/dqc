@@ -92,6 +92,22 @@ def ir_spectrum(qc: BaseQCCalc, freq_unit: Optional[str] = "cm^-1",
         Tuple of tensors where the first tensor is the frequency in the given unit
         with shape ``(nfreqs,)`` sorted from the largest to smallest, and the second
         tensor is the IR intensity with the same order as the frequency.
+
+    Example
+    -------
+
+    .. code-block:: python
+
+        import torch
+        import dqc
+
+        dtype = torch.float64
+        moldesc = "O 0 0 0.2156; H 0 1.4749 -0.8625; H 0 -1.4749 -0.8625"  # in Bohr
+        efield = torch.zeros(3, dtype=dtype).requires_grad_()  # efield must be specified
+        mol = dqc.Mol(moldesc=moldesc, basis="3-21G", dtype=dtype, efield=(efield,))
+        qc = dqc.HF(mol).run()
+        ir_freq, ir_ints = dqc.ir_spectrum(qc, freq_unit="cm^-1")
+
     """
     freq, ir_ints = _ir_spectrum(qc)
     freq = convert_freq(freq, to_unit=freq_unit)
@@ -120,6 +136,22 @@ def raman_spectrum(qc: BaseQCCalc, freq_unit: Optional[str] = "cm^-1",
         Tuple of tensors where the first tensor is the frequency in the given unit
         with shape ``(nfreqs,)`` sorted from the largest to smallest, and the second
         tensor is the IR intensity with the same order as the frequency.
+
+
+    Example
+    -------
+
+    .. code-block:: python
+
+        import torch
+        import dqc
+
+        dtype = torch.float64
+        moldesc = "O 0 0 0.2156; H 0 1.4749 -0.8625; H 0 -1.4749 -0.8625"  # in Bohr
+        efield = torch.zeros(3, dtype=dtype).requires_grad_()  # efield must be specified
+        mol = dqc.Mol(moldesc=moldesc, basis="3-21G", dtype=dtype, efield=(efield,))
+        qc = dqc.HF(mol).run()
+        raman_freq, raman_ints = dqc.raman_spectrum(qc, freq_unit="cm^-1", ints_unit="angst^4/amu")
     """
     freq, raman_ints = _raman_spectrum(qc)
     freq = convert_freq(freq, to_unit=freq_unit)
@@ -143,6 +175,22 @@ def edipole(qc: BaseQCCalc, unit: Optional[str] = "Debye") -> torch.Tensor:
     -------
     torch.Tensor
         Tensor representing the dipole moment in atomic unit with shape ``(ndim,)``
+
+    Example
+    -------
+
+    .. code-block:: python
+
+        import torch
+        import dqc
+
+        dtype = torch.float64
+        moldesc = "O 0 0 0.2156; H 0 1.4749 -0.8625; H 0 -1.4749 -0.8625"  # in Bohr
+        efield = torch.zeros(3, dtype=dtype).requires_grad_()  # efield must be specified
+        mol = dqc.Mol(moldesc=moldesc, basis="3-21G", dtype=dtype, efield=(efield,))
+        qc = dqc.HF(mol).run()
+        dip_moment = dqc.edipole(qc, unit="debye")
+
     """
     edip = _edipole(qc)
     edip = convert_edipole(edip, to_unit=unit)
@@ -164,6 +212,22 @@ def equadrupole(qc: BaseQCCalc, unit: Optional[str] = "Debye*Angst") -> torch.Te
     -------
     torch.Tensor
         Tensor representing the quadrupole moment in atomic unit in ``(ndim, ndim)``
+
+    Example
+    -------
+
+    .. code-block:: python
+
+        import torch
+        import dqc
+
+        dtype = torch.float64
+        moldesc = "O 0 0 0.2156; H 0 1.4749 -0.8625; H 0 -1.4749 -0.8625"  # in Bohr
+        efield = torch.zeros(3, dtype=dtype).requires_grad_()  # efield must be specified
+        grad_efield = torch.zeros((3, 3), dtype=dtype).requires_grad_()  # grad_efield must be specified
+        mol = dqc.Mol(moldesc=moldesc, basis="3-21G", dtype=dtype, efield=(efield, grad_efield))
+        qc = dqc.HF(mol).run()
+        equad = dqc.equadrupole(qc)
     """
     equad = _equadrupole(qc)
     equad = convert_equadrupole(equad, to_unit=unit)
