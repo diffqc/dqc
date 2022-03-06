@@ -127,6 +127,18 @@ def test_mol_cache():
     if os.path.exists(cache_fname):
         os.remove(cache_fname)
 
+def test_mol_copy():
+    # test if copy is computed correctly
+    moldesc = "H 0 0 0; H 1 0 0"
+    mol = Mol(moldesc, basis="3-21G")
+
+    mol_copy = mol.make_copy()
+    assert torch.allclose(mol_copy.atompos, mol.atompos)
+
+    new_pos = torch.tensor([[0.0, 0.0, 0.01], [1.01, 0.0, 0.0]], dtype=dtype)
+    mol_copy_2 = mol.make_copy(moldesc=(mol.atomzs, new_pos))
+    assert torch.allclose(mol_copy_2.atompos, new_pos)
+
 def test_sol_cache():
 
     # test if cache is stored correctly
@@ -167,6 +179,19 @@ def test_sol_cache():
 
     j2c1 = h1.df.j2c
     assert torch.allclose(j2c, j2c1)
+
+def test_sol_copy():
+    # test if copy is computed correctly
+    soldesc = "H 0 0 0"
+    a = torch.tensor([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]], dtype=dtype) * 3
+    sol = Sol(soldesc, alattice=a, basis="3-21G")
+
+    sol_copy = sol.make_copy()
+    assert torch.allclose(sol_copy.atompos, sol.atompos)
+
+    new_pos = torch.tensor([[0.0, 0.0, 0.01]], dtype=dtype)
+    sol_copy_2 = sol.make_copy(soldesc=(sol.atomzs, new_pos))
+    assert torch.allclose(sol_copy_2.atompos, new_pos)
 
 ##################### pbc #####################
 def test_mol_pbc_nuclei_energy():

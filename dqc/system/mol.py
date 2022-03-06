@@ -294,6 +294,27 @@ class Mol(BaseSystem):
         else:
             raise KeyError("Unknown methodname: %s" % methodname)
 
+    def make_copy(self, **kwargs) -> "Mol":
+        # create dictionary of all parameters
+        parameters = {
+            'moldesc': (self.atomzs, self.atompos),
+            'basis': self._basis_inp,
+            'orthogonalize_basis': self._orthogonalize_basis,
+            'ao_parameterizer': self._aoparamzer,
+            'grid': self._grid_inp,
+            'spin': self._spin,
+            'charge': self._charge,
+            'orb_weights': None,
+            'efield': self._efield,
+            'vext': self._vext,
+            'dtype': self._dtype,
+            'device': self._device
+        }
+        # update dictionary with provided kwargs 
+        parameters.update(kwargs)
+        # create new system
+        return Mol(**parameters)
+
     ################### properties ###################
     @property
     def atompos(self) -> torch.Tensor:

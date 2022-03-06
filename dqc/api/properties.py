@@ -13,7 +13,8 @@ from dqc.utils.units import convert_length, convert_freq, convert_edipole, \
                             convert_raman_ints
 
 __all__ = ["hessian_pos", "vibration", "edipole", "equadrupole", "is_orb_min",
-           "lowest_eival_orb_hessian", "ir_spectrum", "raman_spectrum"]
+           "lowest_eival_orb_hessian", "ir_spectrum", "raman_spectrum",
+           "optimal_geometry"]
 
 # This file contains functions to calculate the perturbation properties of systems.
 
@@ -317,6 +318,28 @@ def is_orb_min(qc: BaseQCCalc, threshold: float = -1e-3) -> bool:
     eival = lowest_eival_orb_hessian(qc)
     return bool(torch.all(eival > threshold))
 
+def optimal_geometry(qc: BaseQCCalc, length_unit: Optional[str] = None) -> torch.Tensor:
+    """
+    Returns the Hessian of energy with respect to atomic positions.
+
+    Arguments
+    ---------
+    qc: BaseQCCalc
+        Quantum Chemistry calculation that has run.
+
+    length_unit: str or None
+        The returned unit. If ``None``, returns in atomic unit.
+
+    Returns
+    -------
+    torch.Tensor
+        Tensor with shape ``(natoms, ndim)`` represents the position
+        of atoms at the optimal geometry.
+    """
+    atompos = _optimal_geometry(qc)
+    atompos = convert_length(atompos, to_unit=length_unit)
+    return atompos
+
 @memoize_method
 def _hessian_pos(qc: BaseQCCalc) -> torch.Tensor:
     # calculate the hessian in atomic unit
@@ -459,6 +482,28 @@ def _equadrupole(qc: BaseQCCalc) -> torch.Tensor:
     ion_quadrupole = torch.einsum("ad,ae,a->de", atompos, atompos, atomzs)
 
     return quadrupole + ion_quadrupole
+
+@memoize_method
+def _optimal_geometry(qc: BaseQCCalc) -> torch.Tensor:
+    # calculate the optimal geometry
+    system = qc.get_system()
+    atompos = system.atompos
+
+    # check if the atompos requires grad
+    _check_differentiability(atompos, "atom positions", "hessian")
+
+    # get the energy for a given geometry
+    def _get_energy(atompos: torch.Tensor) -> torch.Tensor:
+        new_system = system.make_copy(moldesc=(system.atomzs, atompos))
+        new_qc = qc.__class__(new_system).run()
+        ene = new_qc.energy()  # calculate the energy
+        return ene
+
+    # get the minimal enery position
+    minpos = xitorch.optimize.minimize(_get_energy, atompos, method="gd", maxiter=200,
+                                    step=1e-2)
+
+    return minpos
 
 ########### helper functions ###########
 

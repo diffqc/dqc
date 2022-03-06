@@ -80,6 +80,14 @@ class BaseSystem(xt.EditableModule):
     def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
         pass
 
+    @abstractmethod
+    def make_copy(self, **kwargs) -> BaseSystem:
+        """
+        Returns a copy of the system identical to the orginal expect for new
+        parameters set in the kwargs.
+        """
+        pass
+
     ####################### system properties #######################
     @abstractproperty
     def atompos(self) -> torch.Tensor:
