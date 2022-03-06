@@ -320,7 +320,7 @@ def is_orb_min(qc: BaseQCCalc, threshold: float = -1e-3) -> bool:
 
 def optimal_geometry(qc: BaseQCCalc, length_unit: Optional[str] = None) -> torch.Tensor:
     """
-    Returns the Hessian of energy with respect to atomic positions.
+    Compute the optimal atomic positions of the system.
 
     Arguments
     ---------
