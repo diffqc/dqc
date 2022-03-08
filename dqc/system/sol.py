@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import Optional, Tuple, Union, List, Dict
 import torch
 import numpy as np
@@ -242,7 +243,16 @@ class Sol(BaseSystem):
     def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
         pass
 
-    def make_copy(self, **kwargs) -> "Sol":
+    def make_copy(self, **kwargs) -> Sol:
+        """
+        Returns a copy of the system identical to the orginal expect for new
+        parameters set in the kwargs.
+
+        Arguments
+        ---------
+        kwargs
+            Must be the same kwargs as Sol.
+        """
         # create dictionary of all parameters
         parameters = {
             'soldesc': (self.atomzs, self.atompos),

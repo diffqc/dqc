@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import List, Union, Optional, Tuple, Dict
 import warnings
 import torch
@@ -294,7 +295,16 @@ class Mol(BaseSystem):
         else:
             raise KeyError("Unknown methodname: %s" % methodname)
 
-    def make_copy(self, **kwargs) -> "Mol":
+    def make_copy(self, **kwargs) -> Mol:
+        """
+        Returns a copy of the system identical to the orginal expect for new
+        parameters set in the kwargs.
+
+        Arguments
+        ---------
+        kwargs
+            Must be the same kwargs as Mol.
+        """
         # create dictionary of all parameters
         parameters = {
             'moldesc': (self.atomzs, self.atompos),

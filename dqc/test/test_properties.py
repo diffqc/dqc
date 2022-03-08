@@ -449,13 +449,18 @@ def test_optimal_geometry(h2o_qc):
 
     # create a new h2o with poor initial geometry
     h2o_init = torch.tensor([
-        [0.0, 0.0, 0.215],
+        [0.0, 0.0, 0.214],
         [0.0, 1.475, -0.863],
         [0.0, -1.475, -0.863],
     ], dtype=dtype).requires_grad_()
    
+    # use bond length to assess optimal geometry as they are rotation invariant
+    def bond_length(h2o):
+        # Get the bond lengths of an h20 molecule
+        return torch.stack([(h2o[0] - h2o[1]).norm(), (h2o[0] - h2o[2]).norm()])
+
     # check starting geometry is not optimal
-    assert not torch.allclose(h2o_init, pyscf_h2o_opt, rtol=2e-4)
+    assert not torch.allclose(bond_length(h2o_init), bond_length(pyscf_h2o_opt), rtol=2e-4)
     
     # optimize geometry
     system = h2o_qc.get_system()
@@ -463,4 +468,4 @@ def test_optimal_geometry(h2o_qc):
     new_qc = h2o_qc.__class__(new_system).run()
     h2o_opt = optimal_geometry(new_qc)
 
-    assert torch.allclose(h2o_opt, pyscf_h2o_opt, rtol=2e-4)
+    assert torch.allclose(bond_length(h2o_opt), bond_length(pyscf_h2o_opt), rtol=2e-4)

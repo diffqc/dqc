@@ -348,7 +348,7 @@ def _hessian_pos(qc: BaseQCCalc) -> torch.Tensor:
     atompos = system.atompos
 
     # check if the atompos requires grad
-    _check_differentiability(atompos, "atom positions", "hessian")
+    _check_differentiability(atompos, "atom positions", "optimal geometry")
 
     # calculate the jacobian
     jac_e_pos = _jac(ene, atompos, create_graph=True)  # (natoms * ndim)
@@ -500,8 +500,8 @@ def _optimal_geometry(qc: BaseQCCalc) -> torch.Tensor:
         return ene
 
     # get the minimal enery position
-    minpos = xitorch.optimize.minimize(_get_energy, atompos, method="gd", maxiter=200,
-                                    step=1e-2)
+    minpos = xitorch.optimize.minimize(_get_energy, atompos, method="gd", maxiter=200, 
+                                       step=1e-2)
 
     return minpos
 
