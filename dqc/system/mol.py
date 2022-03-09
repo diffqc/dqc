@@ -297,12 +297,12 @@ class Mol(BaseSystem):
 
     def make_copy(self, **kwargs) -> Mol:
         """
-        Returns a copy of the system identical to the orginal expect for new
+        Returns a copy of the system identical to the orginal except for new
         parameters set in the kwargs.
 
         Arguments
         ---------
-        kwargs
+        **kwargs
             Must be the same kwargs as Mol.
         """
         # create dictionary of all parameters

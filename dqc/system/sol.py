@@ -245,12 +245,12 @@ class Sol(BaseSystem):
 
     def make_copy(self, **kwargs) -> Sol:
         """
-        Returns a copy of the system identical to the orginal expect for new
+        Returns a copy of the system identical to the orginal except for new
         parameters set in the kwargs.
 
         Arguments
         ---------
-        kwargs
+        **kwargs
             Must be the same kwargs as Sol.
         """
         # create dictionary of all parameters
