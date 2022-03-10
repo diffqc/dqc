@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import List, Union, Optional, Tuple, Dict
 import warnings
 import torch
@@ -293,6 +294,36 @@ class Mol(BaseSystem):
             return params
         else:
             raise KeyError("Unknown methodname: %s" % methodname)
+
+    def make_copy(self, **kwargs) -> Mol:
+        """
+        Returns a copy of the system identical to the orginal except for new
+        parameters set in the kwargs.
+
+        Arguments
+        ---------
+        **kwargs
+            Must be the same kwargs as Mol.
+        """
+        # create dictionary of all parameters
+        parameters = {
+            'moldesc': (self.atomzs, self.atompos),
+            'basis': self._basis_inp,
+            'orthogonalize_basis': self._orthogonalize_basis,
+            'ao_parameterizer': self._aoparamzer,
+            'grid': self._grid_inp,
+            'spin': self._spin,
+            'charge': self._charge,
+            'orb_weights': None,
+            'efield': self._efield,
+            'vext': self._vext,
+            'dtype': self._dtype,
+            'device': self._device
+        }
+        # update dictionary with provided kwargs 
+        parameters.update(kwargs)
+        # create new system
+        return Mol(**parameters)
 
     ################### properties ###################
     @property

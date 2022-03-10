@@ -5,7 +5,7 @@ import pytest
 import psutil
 from dqc.api.properties import hessian_pos, vibration, edipole, equadrupole, \
                                ir_spectrum, raman_spectrum, is_orb_min, \
-                               lowest_eival_orb_hessian
+                               lowest_eival_orb_hessian, optimal_geometry
 from dqc.system.mol import Mol
 from dqc.qccalc.hf import HF
 from dqc.xc.base_xc import BaseXC
@@ -441,3 +441,31 @@ def test_properties_gradcheck(check_type):
         # raman spectra intensities
         torch.autograd.gradgradcheck(get_jac_ene, (atomposs.detach(), efield, grad_efield.detach()),
                                      atol=3e-4)
+
+def test_optimal_geometry(h2o_qc):
+    # test if the optimal geometry of h2o similar to pyscf
+    # from CCCBDB (calculated geometry for H2O)
+    pyscf_h2o_opt = h2o_qc.get_system().atompos
+
+    # create a new h2o with poor initial geometry
+    h2o_init = torch.tensor([
+        [0.0, 0.0, 0.214],
+        [0.0, 1.475, -0.863],
+        [0.0, -1.475, -0.863],
+    ], dtype=dtype).requires_grad_()
+   
+    # use bond length to assess optimal geometry as they are rotation invariant
+    def bond_length(h2o):
+        # Get the bond lengths of an h20 molecule
+        return torch.stack([(h2o[0] - h2o[1]).norm(), (h2o[0] - h2o[2]).norm()])
+
+    # check starting geometry is not optimal
+    assert not torch.allclose(bond_length(h2o_init), bond_length(pyscf_h2o_opt), rtol=2e-4)
+    
+    # optimize geometry
+    system = h2o_qc.get_system()
+    new_system = system.make_copy(moldesc=(system.atomzs, system.atompos))
+    new_qc = h2o_qc.__class__(new_system).run()
+    h2o_opt = optimal_geometry(new_qc)
+
+    assert torch.allclose(bond_length(h2o_opt), bond_length(pyscf_h2o_opt), rtol=2e-4)

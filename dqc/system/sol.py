@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import Optional, Tuple, Union, List, Dict
 import torch
 import numpy as np
@@ -68,6 +69,7 @@ class Sol(BaseSystem):
         self._dtype = dtype
         self._device = device
         self._grid_inp = grid
+        self._basis_inp = basis
         self._grid: Optional[BaseGrid] = None
         charge = 0  # we can't have charged solids for now
 
@@ -99,7 +101,8 @@ class Sol(BaseSystem):
         self._orb_weights = _orb_weights
         self._orb_weights_u = _orb_weights_u
         self._orb_weights_d = _orb_weights_d
-        self._lattice = Lattice(alattice)
+        self._alattice_inp = alattice
+        self._lattice = Lattice(self._alattice_inp)
         self._lattsum_opt = PBCIntOption.get_default(lattsum_opt)
 
     def densityfit(self, method: Optional[str] = None,
@@ -239,6 +242,32 @@ class Sol(BaseSystem):
 
     def getparamnames(self, methodname: str, prefix: str = "") -> List[str]:
         pass
+
+    def make_copy(self, **kwargs) -> Sol:
+        """
+        Returns a copy of the system identical to the orginal except for new
+        parameters set in the kwargs.
+
+        Arguments
+        ---------
+        **kwargs
+            Must be the same kwargs as Sol.
+        """
+        # create dictionary of all parameters
+        parameters = {
+            'soldesc': (self.atomzs, self.atompos),
+            'alattice': self._alattice_inp,
+            'basis': self._basis_inp,
+            'grid': self._grid_inp,
+            'spin': self._spin,
+            'lattsum_opt': self._lattsum_opt,
+            'dtype': self._dtype,
+            'device': self._device
+        }
+        # update dictionary with provided kwargs 
+        parameters.update(kwargs)
+        # create new system
+        return Sol(**parameters)
 
     ################### properties ###################
     @property
