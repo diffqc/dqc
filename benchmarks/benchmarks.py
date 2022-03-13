@@ -19,75 +19,75 @@ moldesc_c4h5n = """N 0.0000 0.0000 2.1199; H 0.0000 0.0000 4.0021; C 0.0000 2.11
 molecules = {'H2O': moldesc_h2o, 'C4H5N': moldesc_c4h5n}
 molecule_names = ['H2O', 'C4H5N']
 
-# define the systems for benchmarking
-systems = ['HF', 'LDA']
+# define the qccalcs for benchmarking
+qccalcs = ['HF', 'LDA']
 
 
 class TimeCalcDQC:
     """
     Benchmark calculations for dqc with cc-pvdz
     """
-    params = (molecule_names, systems)
-    param_names = ['molecule', 'system']
+    params = (molecule_names, qccalcs)
+    param_names = ['molecule', 'qccalc']
 
     def setup(self, molecule_name, _):
         moldesc = molecules[molecule_name]
         self.m = dqc.Mol(moldesc, basis="cc-pvdz", grid=4, efield=efield)
 
-    def time_calc(self, _, system):
-        if system == 'HF':
+    def time_qccalc(self, _, qccalc):
+        if qccalc == 'HF':
             # Hartree-Fock
             self.qc = dqc.HF(self.m).run()
-        elif system == 'LDA':
+        elif qccalc == 'LDA':
             # LDA
             self.qc = dqc.KS(self.m, xc="lda_x+lda_c_pw").run()
         else:
-            raise ValueError(f'Unrecognized system {system}, must be one of {systems}')
+            raise ValueError(f'Unrecognized qccalc {qccalc}, must be one of {qccalcs}')
 
 
 class TimeCalcPySCF:
     """
     Benchmark engery calculations for PySCF with cc-pvdz
     """
-    params = (molecule_names, systems)
-    param_names = ['molecule', 'system']
+    params = (molecule_names, qccalcs)
+    param_names = ['molecule', 'qccalc']
 
     def setup(self, molecule_name, _):
         moldesc = molecules[molecule_name]
         self.m = pyscf.gto.M(atom=moldesc, basis="cc-pvdz", unit="Bohr")
 
-    def time_calc(self, _, system):
-        if system == 'HF':
+    def time_qccalc(self, _, qccalc):
+        if qccalc == 'HF':
             # Hartree-Fock
             pyscf.scf.RHF(self.m).kernel()
-        elif system == 'LDA':
+        elif qccalc == 'LDA':
             # LDA
             mf = pyscf.dft.RKS(self.m, xc="lda_x+lda_c_pw")
             mf.grids.level = 4
             mf.kernel()
         else:
-            raise ValueError(f'Unrecognized system {system}, must be one of {systems}')
+            raise ValueError(f'Unrecognized qccalc {qccalc}, must be one of {qccalcs}')
 
 
 class TimePropertiesDQC:
     """
     Benchmark property calculations for dqc with cc-pvdz
     """
-    params = (molecule_names, systems)
-    param_names = ['molecule', 'system']
+    params = (molecule_names, qccalcs)
+    param_names = ['molecule', 'qccalc']
 
-    def setup(self, molecule_name, system):
+    def setup(self, molecule_name, qccalc):
         moldesc = molecules[molecule_name]
         self.m = dqc.Mol(moldesc, basis="cc-pvdz", grid=4, efield=efield)
 
-        if system == 'HF':
+        if qccalc == 'HF':
             # Hartree-Fock
             self.qc = dqc.HF(self.m).run()
-        elif system == 'LDA':
+        elif qccalc == 'LDA':
             # LDA
             self.qc = dqc.KS(self.m, xc="lda_x+lda_c_pw").run()
         else:
-            raise ValueError(f'Unrecognized system {system}, must be one of {systems}')
+            raise ValueError(f'Unrecognized qccalc {qccalc}, must be one of {qccalcs}')
 
     def time_energy(self, _, __):
         # calculate energy
