@@ -37,10 +37,10 @@ class TimeCalcDQC:
     def time_calc(self, _, system):
         if system == 'HF':
             # Hartree-Fock
-            self.sys = dqc.HF(self.m).run()
+            self.qc = dqc.HF(self.m).run()
         elif system == 'LDA':
             # LDA
-            self.sys = dqc.KS(self.m, xc="lda_x+lda_c_pw").run()
+            self.qc = dqc.KS(self.m, xc="lda_x+lda_c_pw").run()
         else:
             raise ValueError(f'Unrecognized system {system}, must be one of {systems}')
 
@@ -82,28 +82,28 @@ class TimePropertiesDQC:
 
         if system == 'HF':
             # Hartree-Fock
-            self.sys = dqc.HF(self.m).run()
+            self.qc = dqc.HF(self.m).run()
         elif system == 'LDA':
             # LDA
-            self.sys = dqc.KS(self.m, xc="lda_x+lda_c_pw").run()
+            self.qc = dqc.KS(self.m, xc="lda_x+lda_c_pw").run()
         else:
             raise ValueError(f'Unrecognized system {system}, must be one of {systems}')
 
     def time_energy(self, _, __):
         # calculate energy
-        self.sys.energy()
+        self.qc.energy()
 
     def time_ir_spectrum(self, _, __):
         # calculate ir spectrum
         self.m.atompos.requires_grad_()
-        dqc.ir_spectrum(self.sys, freq_unit='cm^-1')
+        dqc.ir_spectrum(self.qc, freq_unit='cm^-1')
 
     def time_optimal_geometry(self, _, __):
         # calculate optimal geometry
         self.m.atompos.requires_grad_()
-        dqc.optimal_geometry(self.sys)
+        dqc.optimal_geometry(self.qc)
 
     def time_vibration(self, _, __):
         # calculate vibrational frequency
         self.m.atompos.requires_grad_()
-        dqc.vibration(self.sys, freq_unit='cm^-1')
+        dqc.vibration(self.qc, freq_unit='cm^-1')
